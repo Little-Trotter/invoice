@@ -1,0 +1,66 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+# ktlint-Gate (PO 29.08.2026): intellij_idea-Stil statt ktlint_official — der Repo-Stil folgt
+# den offiziellen Kotlin-Conventions (IntelliJ-Formatter), nicht ktlints aggressiveren
+# Wrapping-/Signatur-Regeln; Bestand bleibt unformatiert, Neues läuft gegen das Gate.
+ktlint_code_style = intellij_idea
+# Kodifizierte Repo-Convention: reine Layout-/Wrapping-Meinungen sind AUS (der gewachsene,
+# IntelliJ-formatierte Bestand folgt ihnen nicht; Umformatieren wäre nur Churn und würde die
+# detekt-Baseline erneut re-keyen). AN bleiben ktlints Hygiene-Regeln (no-wildcard-imports,
+# no-unused-imports, no-consecutive-blank-lines, no-semi, modifier-order, …) — genau die
+# Smells, die Agenten-Code von Anfang an vermeiden soll. detekt bleibt das Smell-Gate.
+ktlint_standard_indent = disabled
+ktlint_standard_wrapping = disabled
+ktlint_standard_argument-list-wrapping = disabled
+ktlint_standard_parameter-list-wrapping = disabled
+ktlint_standard_statement-wrapping = disabled
+ktlint_standard_binary-expression-wrapping = disabled
+ktlint_standard_condition-wrapping = disabled
+ktlint_standard_multiline-expression-wrapping = disabled
+ktlint_standard_chain-method-continuation = disabled
+ktlint_standard_function-signature = disabled
+ktlint_standard_class-signature = disabled
+ktlint_standard_function-literal = disabled
+ktlint_standard_function-expression-body = disabled
+ktlint_standard_max-line-length = disabled
+ktlint_standard_trailing-comma-on-call-site = disabled
+ktlint_standard_trailing-comma-on-declaration-site = disabled
+ktlint_standard_import-ordering = disabled
+ktlint_standard_blank-line-before-declaration = disabled
+ktlint_standard_no-empty-first-line-in-class-body = disabled
+ktlint_standard_string-template-indent = disabled
+ktlint_standard_multiline-if-else = disabled
+ktlint_standard_if-else-wrapping = disabled
+ktlint_standard_comment-wrapping = disabled
+ktlint_standard_value-argument-comment = disabled
+ktlint_standard_value-parameter-comment = disabled
+ktlint_standard_annotation = disabled
+ktlint_standard_spacing-between-declarations-with-comments = disabled
+ktlint_standard_spacing-between-declarations-with-annotations = disabled
+# Datei-Header- und Sektions-KDocs sind bewusstes Doku-Idiom dieses Repos (ktlints
+# kdoc-Platzierungsregel würde sie verbieten; Inhalte sind wertvoll und bleiben).
+ktlint_standard_kdoc = disabled
+# Zwei bewusste Repo-Idiome (Teil der Convention, kein Verstoß):
+# Spalten-Ausrichtung in Map-/Payload-Literalen („"id"   to jobId") und kompakte when-Blöcke.
+ktlint_standard_no-multi-spaces = disabled
+ktlint_standard_blank-line-between-when-conditions = disabled
+
+[**/src/test/**.kt]
+# Test-Idiom: Stern-Imports für Assertion-/Mockito-DSLs sind zulässig (93 Bestandsstellen);
+# in main gilt no-wildcard-imports uneingeschränkt.
+ktlint_standard_no-wildcard-imports = disabled
+
+[*.{java,xml,properties,yaml,yml}]
+indent_style = space
+indent_size = 2
+

@@ -1,0 +1,53 @@
+[[adr-011]]
+= ADR-011: Flyway Baseline Edited In Place Until a Live Instance Exists
+
+== Status
+Accepted, 2026-09-16
+
+== Context
+Flyway migrations are normally append-only: every schema change is a new versioned file, because a
+migration already applied against a live database can never be safely edited afterward. But while no
+live/production instance of Little Trotter X-Invoice exists yet, treating every schema iteration
+during active greenfield development as a permanent, unchangeable migration produces a long chain of
+throwaway `V3`, `V4`, ... files that exist only to correct the previous one, adding noise without
+adding safety.
+
+== Decision
+The PO reaffirmed this rule on 2026-09-16. The two baseline files, `V1__baseline_schema.sql` (DDL)
+and `V2__baseline_seed.sql` (seed data), are edited directly in place for as long as no live
+instance exists. A schema change during this phase is a diff to `V1`/`V2`, not a new `V3`. The
+directory hygiene test enforces exactly these two files. Mail projections, feature settings,
+currency-aware statistics, maintenance ownership and travel-time rate state are defined directly in
+V1. V2 contains the final catalogue names, feature defaults and supplied PDF template; it does not
+patch previous seed values. The incremental workflow of <<adr-017,ADR-017>> is deferred until
+upgrades are needed. This rule ends the moment a real deployment's data must survive an upgrade — at
+that point, the direct-edit rule stops applying and normal append-only Flyway versioning takes over.
+During greenfield development, baseline edits require a fresh disposable database because Flyway
+detects changed checksums. This is not authorization to reset an existing instance: tests provision
+isolated empty databases and use only fixtures from the single synthetic `datagen` default when
+business data is needed.
+
+== Consequences
+
+=== Positive
+* No accumulation of migration files whose entire content is "undo the mistake from two commits
+  ago" during a phase where no data durability is at stake yet.
+* The schema and seed data stay legible as a single current-state file each, rather than
+  requiring a reader to replay a chain of increments to understand the current shape.
+
+=== Negative
+* Every baseline edit invalidates locally applied migration checksums, requiring a development
+  database volume recreate — a manual step that is easy to forget and shows up as a confusing
+  Flyway checksum-mismatch error if missed.
+* The rule only works because no live instance exists; it is not a general Flyway pattern and
+  must not be copied into a context with real data.
+
+=== Mitigation
+* The rule is explicitly time-boxed ("until a live instance exists") rather than a permanent
+  project convention, so it cannot be mistaken for standard practice once a real deployment
+  exists.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/resources/db/migration/ddl/V1__baseline_schema.sql`,
+`kotlin-invoice/src/main/resources/db/migration/seed/V2__baseline_seed.sql`._

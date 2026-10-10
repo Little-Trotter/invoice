@@ -1,0 +1,42 @@
+# Maven build output
+/target/
+**/target/
+
+# IntelliJ / IDE files
+/.idea/
+*.iml
+*.ipr
+*.iws
+/.settings/
+.classpath
+.project
+
+# Build artifacts
+*.jar
+*.war
+*.ear
+*.class
+
+# Kotlin / Gradle build dirs
+/build/
+/out/
+
+# Generated sources
+/generated-sources/
+**/generated-sources/
+generated/
+**/classes/
+**/kotlin-classes/
+**/kotlin-build/
+
+# Protobuf / protoc generated
+/generated-sources/protobuf/
+**/generated-sources/protobuf/
+
+# Snapshot artifacts
+**/*-SNAPSHOT.*
+**/*-SNAPSHOT.jar
+
+# OS
+.DS_Store
+Thumbs.db

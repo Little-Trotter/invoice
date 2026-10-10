@@ -1,0 +1,79 @@
+[[adr-021]]
+= ADR-021: Business Trip as One Invoice Position
+
+== Status
+Accepted
+
+== Context
+A business trip used to leave no trace on an invoice as a thing: hotel, taxi and mileage were flat
+`InvoiceItem` positions with free text, per-diem days a separate category with their own table, and
+neither the PDF nor the e-invoice XML knew a trip existed — the invoice recipient saw a pile of the
+invoice issuer's own cost items instead of the one service they bought (called a *Workshop* under
+the service-company wording, <<adr-022,ADR-022>>). Grouping this into one recipient-facing position
+also has to survive a storno and a Reverse-Charge invoice, and export to EN 16931/CII without
+turning back into a second, per-expense line item — which would reopen the per-line VAT-category
+questions <<adr-003,ADR-003>> already closed at invoice level.
+
+== Decision
+A business trip is one `InvoiceItem` of category `TRIP` (`InvoiceItemCategory`, persisted code `5`,
+appended after the three deleted travel categories so an old row is never misread) with two owned
+child collections, cascaded and deleted with the item, never their own repository: `TripExpense`
+(`trip_expense`, one row per hotel/transport/mileage/taxi/other line) and `TravelExpenseEntry`
+(`travel_expense_entry`, per-diem days). Quantity/unit are forced to `1`/`FLAT_RATE`; an optional
+`tripFixedNetPrice` replaces the computed sum on the invoice, its delta to `calculatedTripNet()`
+shown only in the trip's own Excel export, never on the invoice. Tax is never chosen on the trip:
+it inherits the invoice's main-service rate (`TravelExpenseTaxInheritance`, § 10 UStG
+Nebenleistung), the same single-rate-per-invoice guard <<adr-003,ADR-003>> relies on.
+`calculatedTripNet()` sums expense net amounts plus per-diem claimable amounts; on a storno
+(`InvoiceTypeCode.CORRECTED_INVOICE`, type code `384`) the per-diem share is *subtracted* instead,
+because a per-diem day's claimable amount is never negative — `negateForStorno()` negates the fixed
+price and every expense's unit price but leaves per-diem rows untouched.
+
+For EN 16931/CII export, one trip is exactly one BG-25 line: BT-153/BT-154 (title/purpose) come
+from the item's description fields, BG-26 (period) from its service period, quantity is the forced
+`1`. A "detailed" trip additionally carries a BT-127 line note summarizing the expenses (truncated
+at 1000 characters, "… siehe Anlage") and the trip workbook (<<adr-018,ADR-018>>) as a BG-24
+attachment (`TypeCode 916`, XLSX MIME) — both absent from the grouped rendering. The workbook is
+rendered once, at job-publish time, and exchanged through Valkey (`lt:tripwb:{sha256}`), the same
+envelope/payload-exchange principle <<adr-008,ADR-008>> applies to the invoice template; `kotlin-xpdf`
+resolves and SHA-verifies it, degrading to no attachment rather than failing the job on a miss. The
+Mustang/CII engine route carries the note and attachment; the Factur-X engine route does not yet —
+planned, not built.
+
+=== Alternatives Considered
+* *One BG-25 line per expense* (the ZUGFeRD E22-style shape). Rejected as the default: it
+  decomposes the one purchased service back into its cost components on the wire and reopens the
+  per-line VAT-category question <<adr-003,ADR-003>> already settled; kept as a possible future
+  opt-in on explicit invoice-recipient demand, not built.
+* *Keeping the three deleted categories as independent positions*, grouped only in the UI.
+  Rejected: the domain model would still let an expense or per-diem day exist outside any trip,
+  a fact the business never wants to represent.
+
+== Consequences
+
+=== Positive
+* The invoice recipient's invoice shows one purchased service, matching what was actually sold, with
+  tax structurally guaranteed to agree with the invoice's main service (<<adr-003,ADR-003>>).
+* Owned, repository-less children mean storno copying, cascade deletion and the read-only-once-
+  issued guard reduce to the existing `InvoiceItem`-level rules, not a second lifecycle.
+
+=== Negative
+* The storno per-diem subtraction is an asymmetry a maintainer must know explicitly (everything
+  else negates, per-diem days do not), and the document size budget (<<adr-014,ADR-014>>) does not
+  yet count the trip workbook attachment.
+* A "detailed" trip renders differently depending on export engine: Factur-X lacks the note and
+  attachment Mustang/CII already carries.
+
+=== Mitigation
+* The asymmetry is documented at its source (`InvoiceItem.calculatedTripNet`) and exercised by both
+  the CII and PDF storno tests; extending the budget and closing the Factur-X gap are named
+  follow-ups, not silent omissions.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/shared/InvoiceItemCategory.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/invoice/` (`InvoiceItem`, `TripExpense`,
+`TravelExpenseTaxInheritance`), `.../domain/reference/TravelExpenseEntry.kt`,
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/TripExportDto.kt`,
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/mustang/MustangTransactionBuilder.kt`,
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/infrastructure/messaging/JobConsumer.kt`._

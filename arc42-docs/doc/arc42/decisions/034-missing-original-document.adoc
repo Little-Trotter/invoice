@@ -1,0 +1,66 @@
+[[adr-034]]
+= ADR-034: Missing or Invalid Original Document
+
+== Status
+Accepted, 2026-10-01
+
+== Context
+An issued invoice has exactly one document of record: the PDF of its latest completed issued
+generation job, stored under a per-job key with its SHA-256 in `invoice_document`. That object can
+be gone or altered (storage loss, an operator error, a race between two jobs). The application is
+not a document archive: there is no bucket versioning, no retention and no archive package that
+counts as an independent copy. The only independent, byte-identical copy that may exist is the
+attachment the mail component sent, kept in its own journal bucket. Users still need a valid
+document on every access, and the audit trail must show what was served in place of the original.
+
+== Decision
+Access to the document of record is resolved deterministically, without a confirmation step:
+
+. The stored object is read and hashed. A matching hash serves the original. A missing object and
+  a hash mismatch are the same case, "no valid original"; a mismatching file is never served.
+  An I/O error of the store is neither: the access fails with "storage unavailable" and nothing is
+  regenerated.
+. If the invoice was never sent by mail, the document is regenerated through the normal job
+  pipeline. The result carries no tag. This includes an invoice in status `SENT` that was handed
+  over outside the mail component: only the mail component's SENT result counts as "sent".
+. If the invoice was sent, a byte-identical copy is restored first: another object of the same
+  invoice in the document store, then the attachment held by the mail component (asked over the
+  existing integration endpoint by invoice number and hash). The first copy whose hash equals the
+  recorded one is written back under the original key.
+. Only when nothing can be restored is a sent invoice re-rendered. That result is a
+  _reproduction_: tagged on the document row (`reproduced`, `reproduced_at`,
+  `reproduction_of_sha256`), shown as a tag in the UI and never dispatched — the mail path, the
+  attachment hand-over and the UI action reject it server-side.
+
+"Sent" is the invoice's own projection of the mail component's SENT result; the invoice side never
+reads the mail journal. The row of a lost original moves to the generation status `LOST`, so the
+pipeline's "completed documents only" filters exclude it and the completion of the replacement
+job knows which hash it replaces.
+
+Every step is journalled through the existing trigger-only audit journal. A transaction-local
+setting `app.audit_context` lets the application add reason, source, hashes and job id to the
+`detail` column as `_context`; the value is part of the entry hash. Row-less events (a rejected
+dispatch, a restore of an already valid row) bump the row's version so the trigger fires.
+
+The explicit "restore document" action is limited to the permission `DOCUMENT_REPRODUCE`
+(roles `INVOICING` and `ADMIN`); the automatic path on access needs no further permission.
+
+== Consequences
+* No warning dialog and no cancel-and-reissue choice in this flow; cancellation stays an
+  independent action.
+* Regeneration is asynchronous: the access answers "being regenerated" with the job id, the job
+  list shows the result.
+* The mail-journal source exists only for invoices sent through the mail component; without it a
+  sent invoice with a lost original always becomes a reproduction.
+* The document bytes carry no mark; the tag lives in the database and the UI only (and in the
+  audit journal entry `DOCUMENT_REPRODUCED`).
+* A regenerated document of an invoice never sent by mail is not marked anywhere except by the
+  audit journal entry `DOCUMENT_REGENERATED`. A voided invoice is treated like a sent one.
+* Because the application is not an archive, the operator's own archive remains the authoritative
+  copy of what was sent (<<adr-035,ADR-035>>).
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/invoice/DocumentReproductionPolicy.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/InvoiceDocumentRecoveryService.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/InvoiceDocumentRecoveryTransactions.kt`._

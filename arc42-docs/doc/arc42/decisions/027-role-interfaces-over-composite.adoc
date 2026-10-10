@@ -1,0 +1,112 @@
+[[adr-027]]
+= ADR-027: Dedicated Input Ports per Use Case, No Composite Interfaces
+
+== Status
+Accepted, implemented
+
+== Context
+The Vaadin UI and the inbound adapters need a boundary into the application layer. One way to
+provide it is a *composite interface*: an empty or near-empty interface that bundles several
+sub-interfaces through inheritance and is then injected everywhere, often under a `*Facade` name.
+The name misleads — nothing is simplified, the type is only a collection point — and the shape
+is a *fat interface* (an Interface Segregation Principle violation):
+
+* every caller depends on every method of the bundle, not only on the ones it calls, so a change
+  to an unrelated use case touches its compile and test surface;
+* tests mock the whole bundle, which hides which use case a view really exercises;
+* the single implementing class accumulates every use case and can only stay within the
+  complexity thresholds (detekt `TooManyFunctions`, `LongParameterList`) through helper bundles
+  that exist for no domain reason;
+* the query side and the command side blur, so the command/DTO boundary of
+  <<adr-025,ADR-025>> has no precise surface to check.
+
+This decision amends <<adr-025,ADR-025>>: the command entry points that ADR names are the
+`*UseCase` input ports described here.
+
+== Decision
+* The UI and inbound adapters depend only on *input ports*: role interfaces cut per use case,
+  in `de.littletrotter.application.<context>.port.inbound` (`port.inbound`, not `port.in`, since
+  `in` is a Kotlin keyword). Each caller injects exactly the ports it uses.
+* Two port kinds, distinguished by name:
+** `*QueryPort` — reads, e.g. `InvoiceListQueryPort`, `InvoiceDetailQueryPort`,
+  `InvoiceStatisticsQueryPort`, `RecipientQueryPort`. A query port is never a
+  `CommandEntryPoint`.
+** `*UseCase` — writes, e.g. `CreateInvoiceUseCase`, `EditInvoiceHeaderUseCase`,
+  `EditInvoiceItemsUseCase`, `ChangeInvoiceStatusUseCase`, `ManageRecipientUseCase`. Every use
+  case port extends `CommandEntryPoint` and is therefore subject to the command-boundary rules
+  of <<adr-025,ADR-025>>.
+* Reference data follows the same cut per catalogue: `<Catalogue>QueryPort` plus
+  `Manage<Catalogue>UseCase` in `application.reference.port.inbound` (e.g. `TaxRateQueryPort` /
+  `ManageTaxRateUseCase`; languages are read-only and have only `LanguageQueryPort`).
+* Each port has one implementing class in the application layer, named after the use case
+  (`InvoiceListQueries`, `EditInvoiceHeader`, `TaxRateQueries`, `ManageTaxRate`); write
+  authorization (`@RequiresPermission`) sits on the use-case implementation.
+* No composite interfaces: no interface combines two or more of the application's own
+  interfaces, and no input port extends another input port. No type carries a `*Facade` name.
+* A port declares at most 12 methods (overloads count individually; guideline ≤ 8). The cut
+  follows caller clusters, not single methods, so ports stay cohesive without degenerating into
+  one-method interfaces.
+* Port signatures use DTOs and value types only; entities stay behind the port.
+* A large view does not compensate for many ports with a parameter object. It is split into
+  injected sub-components that each take only their own ports — `InvoiceDetailView` is composed
+  of `InvoiceCockpitHero`, `InvoiceDetailTabs` and `InvoiceEntryPane`, which in turn delegate to
+  beans such as `InvoiceEntryHeaderFields`, `InvoiceEntryPartyCard`, `InvoiceEntryDatesSection`,
+  `InvoiceEntrySaveFlow`, `InvoiceEinvoiceEntryTab`, `EinvoiceGuidedSteps`,
+  `InvoiceOverviewPanel`, `InvoiceItemsTab` and `InvoiceReceiptsTab`.
+* The mail dispatch component (`kotlin-email`, <<adr-015,ADR-015>>) follows the same cut in its
+  own `de.littletrotter.email.service.application.port.inbound` package: `*QueryPort`/`*UseCase`
+  per use case, no composite interfaces. Since the component depends only on `kotlin-shared` and
+  stays self-contained, it declares its own `CommandEntryPoint` marker there rather than importing
+  the one `kotlin-invoice` uses. A port's command and read-model carrier types (e.g.
+  `ComposeMailCommand`, `MailTemplateView`, `MailJournalEntryView`) live next to the port itself in
+  `port.inbound` rather than in the implementing `application.<usecase>` package, so that package
+  never has to import back out of its own port — keeping the two packages free of an import cycle.
+
+== Enforcement
+`InputPortArchitectureTest` (ArchUnit) checks, against production code and against deliberately
+violating test-only specimens:
+
+* no input port extends another input port;
+* no interface in `de.littletrotter` combines two or more of the application's own interfaces;
+* an input port declares at most 12 methods;
+* a `*QueryPort` is never a `CommandEntryPoint`, a `*UseCase` always is, and nothing else lives
+  in a `port.inbound` package (so a `*Facade` there fails the naming rule);
+* production contains input ports at all, so the rules are not vacuous.
+
+`CommandBoundaryArchitectureTest` applies the command/DTO rules of <<adr-025,ADR-025>> to every
+`CommandEntryPoint`, i.e. to every `*UseCase` port.
+
+`EmailInputPortArchitectureTest` checks the same shape for `kotlin-email`'s own
+`port.inbound` package, plus two adapter rules that mirror the invoicing side: no adapter
+(`service.adapter..`) depends on a concrete `@ApplicationScoped` application service instead of
+going through an input port, and no adapter outside `service.adapter.persistence` depends on
+`email.core.repository..` directly.
+
+== Consequences
+
+=== Positive
+* A caller's constructor states exactly which use cases it depends on; unused methods are not
+  reachable, and changes to unrelated use cases do not ripple into it.
+* Unit and Karibu tests mock only the ports of the component under test; E2E suites inject the
+  concrete port and exercise the real pipeline.
+* Implementations stay small and cohesive, within the detekt thresholds without helper bundles.
+* The query/command split is visible in the type name and checked by ArchUnit, giving the
+  command boundary a precise surface.
+
+=== Negative
+* More, smaller types: dozens of port interfaces with one implementation each, and views with
+  several injected ports or sub-components.
+* The port cut is a design decision per use case; a cut that is too fine produces one-method
+  interfaces, a cut that is too coarse drifts back towards a fat interface.
+
+=== Mitigation
+* The 12-method cap and the no-composite rule bound the coarse side; cutting by caller cluster
+  bounds the fine side.
+* New role interfaces are created directly as `*QueryPort`/`*UseCase` in `port.inbound`, so the
+  naming rule catches any other shape at build time.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/command/CommandContracts.kt`,
+`kotlin-invoice/src/test/kotlin/de/littletrotter/arch/InputPortArchitectureTest.kt`,
+`kotlin-invoice/src/test/kotlin/de/littletrotter/arch/CommandBoundaryArchitectureTest.kt`._

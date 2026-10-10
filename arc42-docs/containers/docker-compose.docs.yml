@@ -1,0 +1,17 @@
+# Documentation serving only — the build itself runs in Dagger (see ../Makefile's `build`
+# target and ci/main.go's DocsGate), not here. This compose file just serves the resulting
+# html/ read-only over HTTP.
+
+name: arc42-docs
+
+services:
+  nginx:
+    image: nginx:1.31-alpine
+    ports:
+      - "${PORT:-9325}:80"
+    volumes:
+      # The builder empties html/ instead of deleting it, so a running nginx keeps
+      # serving the directory after a rebuild (a bind mount pins the inode).
+      - ../html:/srv/docs:ro
+      - ./nginx-docs.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped

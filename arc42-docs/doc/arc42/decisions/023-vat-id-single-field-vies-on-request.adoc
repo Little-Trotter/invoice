@@ -1,0 +1,93 @@
+[[adr-023]]
+= ADR-023: VAT id Is One Field, VIES Is Queried Only on Request
+
+== Status
+Accepted
+
+== Context
+A VAT ID (German: USt-IdNr.) is, in every EU-recognized format, one string: a two-character country
+prefix followed by a number whose shape varies per country. Splitting it into two input fields — a
+country selector plus a number field — is not the industry standard and pushes a decision onto the
+Office Manager (which country?) that the id itself already answers; it also invites a second failure
+mode where the selected country and the typed prefix silently disagree. Keeping it as one field,
+however, means the software has to demonstrate it actually understood the value instead of treating
+it as an opaque string — otherwise an invoice recipient's own observation ("the VIES check does not
+separate the country code from the rest") reads as broken software rather than an unclear field.
+
+The EU VIES REST API is the other half of the problem: its terms of use forbid bulk or automatic
+queries, so any design that calls it eagerly (on save, on blur, on a scheduled sweep) is a
+compliance risk regardless of how well-intentioned the automation is. VIES's own failure modes are
+also easy to misread: it answers `isValid: false` not only for a genuinely invalid id but also for
+`MS_UNAVAILABLE`, `TIMEOUT`, `IP_BLOCKED` and half a dozen other `userError` codes that mean "VIES
+could not answer", not "the id is wrong" — collapsing all of them onto one boolean produces exactly
+the false "invalid" reports this decision closes.
+
+== Decision
+A VAT ID stays one text field (`VatIdField`) everywhere it is entered — invoice recipient, invoice
+issuer profile, additional invoice issuer VAT registration — backed by one validator
+(`VatIdValidator`) that recognises the two-character prefix, auto-completes it from the linked
+address country on digit-only input (alpha-2, except Greece's `EL`), and validates the full format
+against a per-country regex table on blur. The separation the id contains is shown, not structural:
+a suffix names the recognised country, and a country-specific placeholder replaces a generic
+example.
+
+Verification against EU VIES is a second, independent action, available only for an invoice
+recipient's VAT ID, and only on an explicit button click ("VIES prüfen") — never on save, never on
+blur, never scheduled. `ViesHttpClient` reads not only VIES's `isValid` flag but also its
+`userError`, `name` and `address` fields, and resolves to one of three outcomes: `VERIFIED` (id
+registered; the returned trader name/address are displayed and offered, once, as a prefill for the
+verification note — never stored in their own columns, since VIES's answer can change and this
+project keeps no system of record for a foreign registry's data), `FAILED` (`userError: INVALID` —
+VIES actively says the id is not registered), and `UNREACHABLE` (every other case, `userError` or
+none: VIES itself, the network, or a malformed response — carrying the reason for display, but never
+treated as a statement about the id). Only `VERIFIED` and `FAILED` change
+`Recipient.vatIdVerificationStatus`/`vatIdVerifiedAt`; `UNREACHABLE` never does.
+
+=== Alternatives considered
+* *Two fields (country selector + number).* Rejected: not the industry-standard shape for a VAT
+  id, and it moves a decision onto the user that the id itself already encodes; it also permits a
+  selector/prefix disagreement the current one-field design cannot produce.
+* *Query VIES automatically (on save or on a schedule).* Rejected outright: the VIES terms of use
+  forbid bulk/automatic queries, and an unreachable VIES has nothing to do with whether the id is
+  actually valid — the ID would flip status on outages that have nothing to do with the invoice
+  recipient.
+* *Store the VIES-returned trader name/address in their own columns.* Rejected: this project keeps
+  no system of record for VIES's own registry data, and a stored copy would silently go stale the
+  moment VIES's answer changes; displaying it once and offering it as an editable note prefill
+  carries the same information without a schema commitment.
+
+== Consequences
+
+=== Positive
+* One validator behind three entry points means the format rule can never drift between invoice
+  recipient, invoice issuer profile, and invoice issuer VAT registration — a defect fixed once is
+  fixed everywhere.
+* `UNREACHABLE` as its own outcome, distinct from `FAILED`, means an outage at VIES's end can never
+  be misreported as "this id is invalid" again — the specific defect that prompted this decision.
+* No VIES payload gets its own column, so there is no new schema surface and no stale-copy problem
+  to maintain.
+
+=== Negative
+* `VatIdVerificationStatus` now carries three meaningfully different states
+  (`VERIFIED`/`FAILED`/unset) instead of a simple boolean, which every reader of the field (UI
+  badge, export, report) must handle explicitly rather than defaulting to "not verified = false".
+* The verification note is a free-text prefill, not a structured record — a future need to query
+  "which invoice recipients were verified with this exact trader name" would require parsing it back
+  out.
+
+=== Mitigation
+* The three-state status is exhaustively handled at its one rendering site (the invoice recipient's
+  tax tab); a `when` over the sealed `VatIdVerificationResult` fails to compile if a fourth branch
+  is ever added without being handled.
+* The note stays free text on purpose (see Alternatives above); a structured need, if it ever
+  arises, is a new, explicit column — not a retrofit of this one.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/value/VatIdValidator.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/ui/component/VatIdField.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/infrastructure/vies/ViesHttpClient.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/masterdata/VatIdVerification.kt`
+(`VatIdVerificationPort`, `VatIdVerificationResult`),
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/masterdata/Recipient.kt`
+(`vatId`, `vatIdVerificationStatus`, `vatIdVerifiedAt`, `vatIdVerificationNote`)._

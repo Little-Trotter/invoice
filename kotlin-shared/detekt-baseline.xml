@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LoopWithTooManyJumpStatements:MoneyArchitectureTest.kt$MoneyArchitectureTest$for</ID>
+    <ID>ReturnCount:MavenPluginDedupTest.kt$MavenPluginDedupTest$private fun pluginManagementArtifactIds(pomFile: File): List&lt;String&gt;</ID>
+    <ID>TooGenericExceptionThrown:DocumentStoreTest.kt$DocumentStoreTest.&lt;no name provided&gt;$throw RuntimeException("cannot delete")</ID>
+    <ID>TooGenericExceptionThrown:DocumentStoreTest.kt$DocumentStoreTest.&lt;no name provided&gt;$throw RuntimeException("not found")</ID>
+    <ID>TooGenericExceptionThrown:DocumentStoreTest.kt$DocumentStoreTest.TestDocumentStore$throw RuntimeException("not found")</ID>
+  </CurrentIssues>
+</SmellBaseline>

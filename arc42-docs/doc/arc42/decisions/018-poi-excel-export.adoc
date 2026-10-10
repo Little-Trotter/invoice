@@ -1,0 +1,54 @@
+[[adr-018]]
+= ADR-018: Apache POI for the Excel Export, Not a Hand-Rolled or Commercial Alternative
+
+== Status
+Accepted
+
+== Context
+The invoice export lets an accountant or auditor pull every invoice header, position and
+change-journal entry into a spreadsheet and recalculate the totals independently. That sets
+three requirements for the generator: the file must be a genuine `.xlsx` that opens without a
+repair dialog; money cells must stay numeric so the spreadsheet can sum them; and an export of
+tens of thousands of rows must not be held in memory. Only `kotlin-invoice` needs the export;
+`kotlin-xpdf` builds to a native image and must not gain a JVM-only dependency.
+
+== Decision
+Apache POI (`poi-ooxml`, Apache-2.0, pinned in the root `pom.xml`) is the export's only
+document-generation dependency, used from one package in `kotlin-invoice`. Files are written
+with POI's streaming workbook (bounded row window, temp files compressed, disposed in a
+`finally`), and every cell style is created once per workbook, because POI caps the number of
+styles per workbook. The full `poi-ooxml` artifact is used, not the lite variant, because the
+control-column highlighting needs conditional formatting. The workbook's palette mirrors the
+application's design tokens; the header fill is Material Blue 700 rather than the accent blue
+to keep a 5.4:1 contrast against white text, and a test guards that ratio.
+
+=== Alternatives Considered
+* *Hand-written SpreadsheetML.* Avoids the dependency, but shared strings, styles and package
+  relationships written by hand are exactly the class of subtle file-format bug the export cannot
+  afford, and every value guard POI provides would have to be reimplemented.
+* *CSV renamed to `.xls`.* Not a spreadsheet: no sheets, cell types, conditional formatting or
+  frozen header. The positions-only CSV export stays deliberately narrow for that reason.
+* *A commercial library.* Adds license cost and a closed-source dependency to a project that
+  otherwise runs on Apache-2.0/MIT-class licenses; rejected on that basis alone.
+
+== Consequences
+
+=== Positive
+* Every exported file is verified in tests by reading it back with POI, proof that it opens.
+* The streaming writer keeps memory bounded regardless of export size.
+* Apache-2.0 like the rest of the dependencies; no `NOTICE` entry needed.
+
+=== Negative
+* `xmlbeans` and `commons-compress` come along transitively and are not small; they land in the
+  `kotlin-invoice` image.
+* `log4j-api` (API only, never `log4j-core`, so no Log4Shell exposure) is a second logging
+  facade in the module and is routed to the Quarkus log manager.
+
+=== Mitigation
+* Confined to `kotlin-invoice`; `kotlin-xpdf` does not and must not depend on POI.
+* The dependency, its transitives and the pinning are explained next to `${poi.version}` in
+  `pom.xml`, so a version bump needs no archaeology.
+
+'''
+_Architecture Decision Record — source: `pom.xml` (`${poi.version}`),
+`kotlin-invoice/src/main/kotlin/de/littletrotter/infrastructure/export/workbook/`._

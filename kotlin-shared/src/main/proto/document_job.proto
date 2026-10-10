@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package de.littletrotter.shared.proto;
+option java_package = "de.littletrotter.shared.proto";
+option java_multiple_files = true;
+option java_outer_classname = "DocumentJobProto";
+
+message Money {
+  string amount = 1;
+}
+
+message InvoiceNumber {
+  string value = 1;
+}
+
+message Receipt {
+  string file_name = 1;
+  string object_key = 2;
+}
+
+message InvoiceItem {
+  string position_id = 1;
+  string description = 2;
+  string quantity = 3;
+  Money unit_price_net = 4;
+  string tax_rate = 5;
+  Money net_amount = 6;
+  Money vat_amount = 7;
+  repeated Receipt receipts = 8;
+}
+
+message Party {
+  string name = 1;
+  string street = 2;
+  string postal_code = 3;
+  string city = 4;
+  string country = 5;
+  string vat_id = 6;
+  string iban = 7;
+  string bic = 8;
+  string tax_number = 9;
+}
+
+message Invoice {
+  int64 id = 1;
+  InvoiceNumber invoice_number = 2;
+  string invoice_date = 3;
+  string service_period_from = 4;
+  string service_period_to = 5;
+  string due_date = 6;
+  int32 payment_terms_days = 7;
+  Party sender_profile = 8;
+  Party recipient = 9;
+  repeated InvoiceItem items = 10;
+  Money net_amount = 11;
+  Money vat_amount = 12;
+  Money gross_amount = 13;
+}
+
+message DocumentJobRequest {
+  string id = 1;
+  JobType type = 2;
+  Invoice invoice = 3;
+  string correlation_id = 4;
+}
+
+message JobResult {
+  string id = 1;
+  JobStatus status = 2;
+  map<string, string> result_refs = 3;
+  string kosit_report = 4;
+  string correlation_id = 5;
+}
+
+enum JobType {
+  JOB_TYPE_UNSPECIFIED = 0;
+  PDF_EXPORT = 1;
+  XML_EXPORT = 2;
+}
+
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0;
+  COMPLETED = 1;
+  FAILED = 2;
+}

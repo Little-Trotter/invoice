@@ -1,0 +1,43 @@
+[[adr-026]]
+= ADR-026: Catalogue Categories and X-Rechnung Units
+
+== Status
+Accepted
+
+== Context
+
+The sellable catalogue (`Article`) needed a way to constrain which X-Rechnung unit codes make
+sense for a given kind of position, without introducing a second, redundant "type" column next to
+the existing `InvoiceItemCategory`.
+
+== Decision
+
+The sellable catalogue is exposed as three category views: Material, Einheitspreis, and
+Dienstleistung (Arbeitsstunden). A business trip (`TRIP`) is an invoice position, not a catalogue
+item, and is therefore excluded from the catalogue views. Category-specific units are kept in the
+X-Rechnung vocabulary: material allows Stück, Meter, Quadratmeter, Kubikmeter, Kilometer, Liter,
+Kilogramm, Anfahrt, Gramm, and laufender Meter; unit price allows Quadratmeter, Meter, laufender
+Meter, Kubikmeter, Hektar, and Pauschale; service allows Stunde, Tag, Pauschale, and Anfahrt. The
+active category makes an additional type column redundant. A catalogue position referenced by an
+invoice is protected from deletion.
+
+== Alternatives Considered
+
+* *A separate `type` column alongside `category`:* rejected — the category already determines which
+  units are valid, so a second column would only ever duplicate that information or drift from it.
+* *One unrestricted unit list for every category:* rejected — it would let a material position pick
+  a service-only unit (e.g. "Stunde") and vice versa, an invalid combination the X-Rechnung
+  vocabulary does not actually support for that category.
+
+== Consequences
+
+* Generated demo data and UI selection rules share one explicit unit contract and cannot create
+  catalogue rows that the invoice form cannot represent.
+* A catalogue position's category is fixed once units are chosen from its list; changing category
+  later requires re-validating the unit.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/shared/InvoiceItemCategory.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/shared/InvoiceItemUnit.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/masterdata/Article.kt`._

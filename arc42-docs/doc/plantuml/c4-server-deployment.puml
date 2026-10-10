@@ -1,0 +1,89 @@
+@startuml c4-server-deployment
+
+!include <C4/C4_Deployment>
+
+' Arrow style (PO 2026-10-02): straight arrows first — right-angled (`ortho`), then straight
+' segments (`polyline`); a smoother form only where neither stays readable. Here `ortho` puts
+' relation labels on boundary frames and titles, and `polyline` bends most cross-boundary
+' relations into kinks, so this view uses `splines`.
+skinparam linetype splines
+skinparam roundCorner 0
+skinparam defaultFontName "Roboto Condensed, Arial Narrow, sans-serif-condensed, sans-serif"
+skinparam defaultFontSize 12
+
+' PO decision 2026-09-12: replaces the generic Structurizr "one Docker host" deployment export
+' with the real Ubuntu-server topology (verified against little-trotter-admin-tools,
+' 2026-09-12): PostgreSQL, RustFS and Caddy run NATIVELY (systemd), shared by every instance on
+' the box; Authentik and monitoring are shared Docker services outside every instance; the
+' little-trotter-invoice/job-worker/kotlin-xpdf/NATS/Valkey quintet is Docker Compose, one
+' project per instance (prod|dev|demo) — drawn once, since the three projects are structurally
+' identical. Hand-authored layout (no autoLayout): one aggregated Rel per cross-node dependency,
+' DevOps/browser path at the top, backup target to the right of the native services. Palette matches
+' doc/plantuml/c4-styling.puml.inc and doc/c4/workspace.dsl.
+
+LAYOUT_TOP_DOWN()
+
+UpdateElementStyle("person", $bgColor="#5F6368", $fontColor="#ffffff", $borderColor="#4C4F53")
+UpdateElementStyle("external_system", $bgColor="#9AA0A6", $fontColor="#202124", $borderColor="#74787C")
+UpdateElementStyle("container", $bgColor="#3C88EB", $fontColor="#202124", $borderColor="#2D66B0")
+UpdateElementStyle("container_db", $bgColor="#1662C5", $fontColor="#ffffff", $borderColor="#1456AE")
+UpdateElementStyle("container_queue", $bgColor="#1250A2", $fontColor="#ffffff", $borderColor="#0E3C7A")
+
+UpdateBoundaryStyle($bgColor="#ffffff", $fontColor="#5F6368", $borderColor="#5F6368")
+
+Person(devops, "DevOps", "Browses, deploys, restores")
+
+Deployment_Node(server, "Ubuntu server", "one shared host per environment") {
+
+  Deployment_Node(systemd, "systemd (native)", "shared by every instance, no port offset") {
+    Container(caddy, "Caddy", "Caddy [native]", "Shared reverse proxy, one vhost per instance")
+    ContainerDb(postgres, "PostgreSQL", "PostgreSQL 18 [native]", "One cluster; one database + role-trio per instance")
+    ContainerDb(rustfs, "RustFS", "S3 API [native]", "One instance; one bucket per instance")
+
+    Lay_R(caddy, postgres)
+    Lay_R(postgres, rustfs)
+  }
+
+  Deployment_Node(docker, "Docker") {
+
+    Deployment_Node(sharedSvc, "Shared services", "adopted or own containers") {
+      Container(authentik, "Authentik", "OIDC provider [Docker]", "Identity provider: Office Manager login for every instance; also forward-auth for the admin site")
+      Container(monitoring, "Prometheus + Grafana", "admin-tools/monitoring [Docker]", "Metrics and dashboards")
+
+      Lay_R(authentik, monitoring)
+    }
+
+    Deployment_Node(instance, "compose project little-trotter-<instance>", "×3: prod +0, dev +10000, demo +20000 (own subnet each)") {
+      Container(app, "little-trotter-invoice", "Kotlin, Quarkus, Vaadin Flow", "Web app: master data, invoices, receipts")
+      Container(worker, "little-trotter-job-worker", "Kotlin, Quarkus", "Driven by the app's job table: re-publishes stuck jobs")
+      Container(xpdf, "kotlin-xpdf", "Kotlin, Quarkus", "Renders and validates PDF/A-3b, XML")
+      ContainerQueue(nats, "NATS JetStream", "NATS [Docker]", "Job and result queues")
+      ContainerDb(valkey, "Valkey", "Redis protocol [Docker]", "Cache and text payloads")
+
+      Lay_R(app, worker)
+      Lay_R(worker, xpdf)
+      Lay_R(xpdf, nats)
+      Lay_R(nats, valkey)
+    }
+
+    Lay_D(sharedSvc, instance)
+  }
+
+  Lay_D(systemd, docker)
+}
+
+System_Ext(backupTarget, "Backup / archive storage", "local dir + optional external SSD (prod); filled by a cron job: pg_dump + object sync")
+Lay_D(devops, server)
+Lay_R(server, backupTarget)
+
+Rel_D(devops, systemd, "Browses / deploys via Caddy", "HTTPS")
+Rel(caddy, app, "Proxies", "HTTPS,\nloopback port")
+Rel(caddy, authentik, "Admin site: forward-auth", ":8444, metrics")
+Rel_U(app, authentik, "Authenticates the Office Manager", "OIDC, authorization code")
+Rel_D(instance, systemd, "Persists,\nstores", "JDBC 5432,\nS3 9010")
+Rel_U(monitoring, instance, "Scrapes metrics", "HTTP")
+Rel_R(systemd, backupTarget, "Backs up")
+
+SHOW_LEGEND()
+
+@enduml

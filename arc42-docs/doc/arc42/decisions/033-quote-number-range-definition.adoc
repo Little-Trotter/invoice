@@ -1,0 +1,84 @@
+[[adr-033]]
+= ADR-033: Quote Number Range — Definition Central, Counter Decentral
+
+== Status
+Accepted (2026-10-06)
+
+== Context
+Quote numbers used to be a fixed format (`AN-{year}-{sequence}`) inside the optional quote module
+(`kotlin-quote`), while every other number is configured as a number range in the reference data.
+Two constraints shape where a quote number range can live. The quote module is an optional package
+(reactor profile `with-quote`, `QUOTE_ENABLED=false` by default), and as a self-contained system it
+is the only writer of the database schema `quote`. A gapless quote number must also be drawn in the
+same transaction as the status change that assigns it, so that a rollback releases the number
+again; a synchronous call into the invoicing module would break exactly that.
+
+The quote settings (validity in days, machine-readable XML format) raised the same placement
+question for their persistence and, separately, their user interface.
+
+== Decision
+*Definition central, counter decentral.*
+
+. The definition of the quote number (prefix, date part, counter width, reset cycle) is reference
+data of the invoicing module: a number range with the new subject `QUOTE`, delivered as
+`QUOTE_DEFAULT` with the pattern `AN-JJJJ-NNNN`, which reproduces the former fixed format exactly.
+The counter stays in the quote module: `quote.quote_number_range`, one row per
+`(range_code, period_key)`. The gapless draw runs inside the status-changing transaction of
+"submit for review"; only the quote application writes schema `quote`.
+. The definition reaches the quote module over the existing master-data replica (NATS events
+`masterdata.>` plus the snapshot), restricted to the subject `QUOTE`. No second channel exists; the
+snapshot resync covers fresh installations and late consumers. The quote module reads the replica
+table `number_range_replica`.
+. The shared formatting types `DatePart`, `ResetCycle`, `NumberPattern` and
+`NumberFormatter.compose` / `periodKey` live in `kotlin-shared`, the only code both modules may
+share. The ordinal converters for persistence stay in the invoicing module; the order of the enum
+entries is unchanged.
+. A `QUOTE` range permits only the prefix sources `NONE` and `FIXED`, scope `GLOBAL` and
+continuity `GAPLESS`. Issuer-dependent prefixes would need context the quote module does not have.
+. The revision suffix `-R{n}` stays with the quote module as part of the lifecycle; it is not part
+of the definition. Parsing a quote number only separates this suffix and assumes no format.
+. The quote settings stay in `quote.quote_setting`; they cannot move into the reference data,
+because the module is optional and owns its schema. Only the user interface moves: a card "Angebot"
+in the system settings page, shown only when the quote module is deployed, writing changes
+immediately without a save button.
+. The card has no runtime toggle. Its status chip shows the deployment fact (`QUOTE_ENABLED`), not
+a switchable state.
+
+If the replica holds no active default quote range (for example directly after a fresh start,
+before the snapshot resync has run), "submit for review" is rejected with HTTP 409 and a hint to
+A never-replicated instance requests a master data snapshot at startup, so the state ends once the invoicing app has answered.
+the number ranges tab of the reference data; the quote stays a draft. The state is transient.
+
+== Alternatives Considered
+Synchronous call into the invoicing module for each number::
+Rejected: the draw could no longer share the status-changing transaction, so a rollback would burn
+a number, and the self-contained-system rule against cross-module database or synchronous
+dependencies would be violated.
+
+Counter and definition both in the quote module::
+Rejected: the number would stay a special case outside the reference data and could not be
+configured like the other ranges.
+
+Quote settings as reference data::
+Rejected: with the module not deployed, a reference datum would be an orphan, and the quote module
+would depend on writes into a foreign schema or a second replication path.
+
+Runtime toggle for the quote card::
+Rejected: hiding quotes has no demonstrated benefit, creates a second source of truth next to
+`QUOTE_ENABLED` and would leave running quotes (validity, acceptance events, takeover into
+invoices) silently active but invisible.
+
+== Consequences
+
+=== Positive
+* Quote numbers are configured in one place with the other number ranges; the delivered default
+changes no existing number, template placeholder, mail or document.
+* Gapless allocation keeps its transactional guarantee; the replica needs no additional channel.
+* Formatting logic exists once, in `kotlin-shared`.
+
+=== Negative
+* The invoicing module and the quote module must be deployed with compatible versions of the
+master-data contract; the `numberrange` entity type is part of that contract.
+* Until the replica is filled, quotes cannot be submitted for review.
+* A change of the definition applies to the next draw; an unchanged `code` continues its counter,
+a new `code` starts a new counter.

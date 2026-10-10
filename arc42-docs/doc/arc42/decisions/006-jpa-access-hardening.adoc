@@ -1,0 +1,52 @@
+[[adr-006]]
+= ADR-006: JPA Access Pattern Hardening (LIKE Escaping, Stable Pagination, Explicit Fetches)
+
+== Status
+Accepted, implemented
+
+== Context
+A code review of the Panache repository layer found four JPA access patterns worth fixing,
+ranked by severity: (1) the invoice overview's `LIKE` filters built raw `%text%` patterns without
+`ESCAPE`, so a literal `_`/`%` in a search term matched unintended rows — a correctness bug, not
+a security issue, since values were always bound as parameters; (2) several paginated queries had
+no `ORDER BY`, or an ambiguous one (date only, no id tiebreaker), so PostgreSQL could return
+duplicate or missing rows across pages; (3) `findByIdWithItems` did not actually fetch
+`items` despite its name, leaving every one of eleven call sites to rely on lazy loading inside
+an open transaction; (4) recipient address loading forced initialization per row
+(`addresses.size`), producing up to 61 SELECTs for a 60-row page.
+
+== Decision
+* Every `LIKE` clause (production and native SQL) uses a shared `likePattern()` helper plus an
+  explicit `ESCAPE '\'` clause; a regression test pins the fixed filter behavior, and a guard test
+  scans production Kotlin for a `LIKE :param` occurrence without a matching `ESCAPE` on the same
+  line.
+* Every paginated query gets `id` as an explicit tiebreaker (or a full `ORDER BY` where none
+  existed), verified by a test with two rows sharing a sort key across a page boundary.
+* `findByIdWithItems` performs a `LEFT JOIN FETCH i.items` (with `SELECT DISTINCT`, the same
+  shape `findInvoiceByItemId` uses), so the method name is true and none of the eleven call sites
+  needs to change.
+* Recipient address loading keeps the force-init loop, which defines *when* addresses load,
+  because Quarkus's Hibernate ORM extension defaults `fetch.batch-size` to 16 — measured to keep
+  a 40-recipient page under 10 JDBC statements rather than the 61 a per-row load would need; a
+  config regression test pins the setting.
+
+== Consequences
+
+=== Positive
+* Search results and pagination are provably correct under a repeatable test, not just
+  "usually right in practice."
+* The measured batch-fetch behavior shows the N+1 problem is bounded, so no two-stage-loading
+  refactor is needed.
+
+=== Negative
+* The `LIKE`/`ESCAPE` guard test is a lightweight source scan, not a full static-analysis rule —
+  it can be defeated by an unusual formatting of the offending line.
+
+=== Mitigation
+* None further planned; the guard test is judged sufficient given the small number of query
+  call sites in this codebase.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/infrastructure/persistence/PanacheInvoiceRepository.kt`,
+`BasePanacheRepository.kt` (`likePattern`), `PanacheRecipientRepository.kt`._

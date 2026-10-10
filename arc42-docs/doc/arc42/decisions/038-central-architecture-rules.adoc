@@ -1,0 +1,42 @@
+[[adr-038]]
+= ADR-038: Central Architecture Rules
+
+== Status
+Accepted, 2026-10-09
+
+== Context
+The single time source (<<adr-029,ADR-029>>) was enforced by eight copies of one ArchUnit test,
+one per module, each with its own violating specimens. The copies drifted: the rule that calendar
+days are read in German time existed in two modules only. Copying the next cross-cutting rule
+(input ports, suppressions) would repeat the problem.
+
+== Decision
+* *One module, `kotlin-architecture-rules`*: parameterised ArchUnit rules in package
+  `de.littletrotter.architecture.rules`, first the time rules (`TimeRules`) and the import of a
+  module's production classes (`ProductionClasses`, which also leaves out a sibling's packaged
+  test fixtures).
+* *Test scope only*: modules depend on it with `<scope>test</scope>`; the root POM's enforcer rule
+  fails the build for any other scope, so ArchUnit never reaches a deployable.
+* *No knowledge of modules or domain*: the module depends on ArchUnit and the Kotlin standard
+  library only, not on `kotlin-shared`. Classes it refers to (`ClockTimeSource`, `GermanTime`) are
+  matched by fully qualified name. Each module passes its own package roots and the classes it
+  allows (its time source producer).
+* *Self-tested*: every rule is checked in the module against negative specimens (each forbidden
+  form must be reported) and positive specimens (look-alike calls must not be), so a rule cannot
+  pass by matching nothing. Module gates keep only the call and, where present, a check that the
+  import is not empty.
+* *Mail component*: its dependency rule (only `kotlin-mail-contract`, `kotlin-edge-identity`,
+  `kotlin-shared`) concerns production dependencies; a test-scope rule library does not touch the
+  component's independence.
+* *Incremental*: further cross-cutting rules move here in their own changes.
+
+== Consequences
+* A rule changes in one place and applies to every module at once; the German business-day rule
+  now holds in all modules, and `email-core` and `email-service` have their own time gate.
+* The image builds copy the module like every other reactor module.
+* Rule texts in failure reports are identical across modules.
+
+_Architecture Decision Record — source:
+`kotlin-architecture-rules/src/main/kotlin/de/littletrotter/architecture/rules/TimeRules.kt`,
+`kotlin-architecture-rules/src/main/kotlin/de/littletrotter/architecture/rules/ProductionClasses.kt`,
+`pom.xml` (enforcer execution `architecture-rules-test-scope-only`)._

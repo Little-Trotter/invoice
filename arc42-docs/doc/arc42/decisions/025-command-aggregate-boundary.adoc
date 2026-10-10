@@ -1,0 +1,99 @@
+[[adr-025]]
+= ADR-025: Invoice Aggregate Encapsulation and the Command/DTO Boundary
+
+== Status
+Accepted, implemented
+
+== Context
+The <<_persistence,Persistence>> concept (Chapter 8) names two structural gaps an `Invoice`
+aggregate must not have: a public `status` `var` any caller could assign directly, bypassing
+`InvoiceStateMachine`, and `items`/`documents`/`partySnapshots` collections exposed as
+`MutableList`, so any caller holding a loaded `Invoice` could alias and mutate them without going
+through a domain method. It also requires the six rules of the command/DTO boundary to exist as
+enforced ArchUnit checks rather than only as a written convention that the write entry points
+`InvoiceItemCommand`, `TripCommand` and `UpdateInvoiceHeaderCommand` happen to follow.
+
+Two constraints shaped the fix. First, `Invoice` is a Hibernate entity read via field access (the
+`@Id` sits on a field); any encapsulation had to keep working with that, not switch to
+constructor-only immutability the ORM cannot hydrate into. Second, a handful of legitimate
+call sites construct an `Invoice` already in a non-`DRAFT` status at birth — a storno document
+(`InvoiceStornoService.createCreditNote`, born `CANCELLED`) and synthetic demo/test data
+(`DevDataFixtures`) — and must keep doing so without replaying a full lifecycle.
+
+<<adr-027,ADR-027>> amends this decision: the command entry points are the `*UseCase` input ports,
+one per use case; no composite interface or `*Facade` type exists.
+
+== Decision
+* `Invoice.status` keeps its JPA annotations but gets `private set`; the only way to change it on
+  an existing instance is `transitionTo` (already the class's own state-machine-checked method). A
+  new `Invoice.withInitialStatus(status)` companion factory is the single, explicit,
+  construction-time-only door around the private setter, used by the two legitimate born-non-DRAFT
+  call sites above.
+* `items`, `documents` and `partySnapshots` are declared as `List<T>` instead of `MutableList<T>`.
+  This is a compile-time-only change — Kotlin's `List`/`MutableList` split erases to the same
+  `java.util.List` at the bytecode level, so Hibernate's field-access hydration is unaffected — but
+  it removes every external caller's ability to call `.add()`/`.remove()`/`.clear()` on the
+  collection or reassign it wholesale. `addItem`/`removeItem`/`applyPartySnapshots` are the only
+  mutation path, casting to `MutableList` internally. `applyPartySnapshots` performs an
+  unconditional `clear()` rather than a `PartyRole`-filtered `removeAll`: the collection only ever
+  holds the two `PartyRole` values, so a filter's "neither" branch would be structurally dead.
+* `documents`/`llmAnalyses`/`receipts` are read-only or left mutable per case: `documents` has
+  the read-only shape above because nothing legitimately adds to it from the owning side (a
+  generation result is persisted directly through `InvoiceDocumentRepository`); `receipts` and
+  `llmAnalyses` are explicitly **not** locked down — they match the
+  <<_persistence,Persistence>> concept's named exemption for master-data/child-entity screens not
+  yet migrated (the remaining Receipt usages are separate migration slices), recorded here as the
+  open follow-up.
+* Three marker interfaces (`de.littletrotter.application.command`: `Command`, `CommandResult`,
+  `CommandEntryPoint`) give `CommandBoundaryArchitectureTest` a concrete boundary to scan, since
+  commands share their package with plain application services and a class-name suffix alone is not
+  a reliable signal (a warning the <<_persistence,Persistence>> concept already gives).
+  `InvoiceItemCommand`, `TripCommand`, `TripExpenseCommand`, `PerDiemEntryCommand` and
+  `UpdateInvoiceHeaderCommand` implement `Command`; `InvoiceDetailDto` and `ModelReport` implement
+  `CommandResult`; every `*UseCase` input port (<<adr-027,ADR-027>>) extends `CommandEntryPoint`.
+* The six rules (command purity, no entity leak, no direct UI mutation, immutable commands,
+  domain independent of commands, entry points in the application layer) are each one ArchUnit
+  rule with a positive check against production code and a negative check against a small,
+  deliberately violating test-only specimen (`..arch.specimen..`, `..domain.invoice.specimen..`,
+  `..ui.specimen..` packages, excluded from the production scan by virtue of being test sources,
+  carrying no business data).
+* The no-entity-leak check (no entity leak through a command entry point's signature) is satisfied
+  by projection: the invoice read entry point's `findLlmAnalyses` returns `ModelReport` values
+  (in `application.dto`) rather than the JPA entity `InvoiceLlmAnalysis`, and the UI call sites
+  receive the already-projected `ModelReport` list instead of mapping the entity themselves.
+* A CLASS-level jacoco execution (`check-aggregate-command-boundary-100`, modeled on the
+  existing `check-calculation-core-100`) requires LINE/BRANCH `COVEREDRATIO` 1.00 for `Invoice`,
+  `Invoice$Companion` and the five command classes above — a gate addition alongside the existing
+  bundle gate and `check-calculation-core-100`'s own `Invoice` rule, not a replacement for
+  either.
+
+== Consequences
+
+=== Positive
+* No ordinary caller — UI, an application service reaching for a shortcut, a future contributor —
+  can move `Invoice.status` or alias its collections around `InvoiceStateMachine`/`addItem`/
+  `removeItem`/`applyPartySnapshots`; the compiler enforces it, not a code-review
+  convention.
+* The six rules are checked rules with a proof they reject a violation, not only a description in
+  a decision document.
+* `ModelReport`'s move closes a genuine architecture gap rather than papering over the finding with
+  an ArchUnit exemption.
+
+=== Negative
+* Three marker interfaces and the `application.dto` type `ModelReport` add a small amount of
+  indirection for anyone reading `InvoiceItemCommand`/`InvoiceDetailDto`/`ModelReport` for the first
+  time.
+* `receipts`/`llmAnalyses` remain publicly mutable collections on `Invoice`; a reader of the entity
+  source sees inconsistent treatment across its five collections unless they also read this ADR or
+  the exemption in <<_persistence,Persistence>>.
+
+=== Mitigation
+* The receipts/llmAnalyses exemption is named explicitly here and in <<_persistence,Persistence>>,
+  with the migration slices they belong to (Receipt/TaxRate/Article/GenerationJob UI usages) already
+  tracked as open follow-ups rather than silently dropped.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/invoice/Invoice.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/command/CommandContracts.kt`,
+`kotlin-invoice/src/test/kotlin/de/littletrotter/arch/CommandBoundaryArchitectureTest.kt`._

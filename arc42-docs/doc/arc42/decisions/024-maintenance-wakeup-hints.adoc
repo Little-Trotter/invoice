@@ -1,0 +1,57 @@
+[[adr-024]]
+= ADR-024: Maintenance Wake-up Hints over Core NATS
+
+== Status
+Proposed
+
+== Context
+
+Maintenance work is represented by a PostgreSQL queue because requests must survive broker
+outages, process restarts, and offline demo-data loading. Waiting for a periodic database scan
+adds avoidable latency after an operator or loader queues work. A notification can provide a prompt
+wake-up, but making that notification durable would duplicate the database queue and create a
+second ordering and acknowledgement protocol.
+
+== Decision
+
+The application publishes a best-effort Core NATS notification after the transaction that inserted
+the maintenance request commits. The subject is
+`maintenance.v1.<instance>.requested`; the instance token matches `[A-Za-z0-9_-]+`. The version-1
+JSON envelope contains only a positive `requestId` and `version: 1`.
+
+The publisher is reached through an application port by an `AFTER_SUCCESS` observer and runs on
+the transaction-cleared executor. A consumer validates the envelope and asks the maintenance
+processor to schedule its serialized drain; it never performs database work on the NATS dispatch
+thread. Duplicate hints are harmless because PostgreSQL claims remain authoritative and drain
+requests are coalesced. Lost hints are handled by the worker's startup pass and five-minute
+recovery scan. A publish failure is logged and never causes the committed enqueue to fail.
+
+This hint uses Core NATS. <<adr-020,ADR-020>> remains the decision for the job/result JetStream
+backbone. No new JetStream stream or subject is added, because the existing app/xpdf stream
+reconcilers own that stream and could remove an unrelated subject.
+
+The default instance is `default`, suitable for the existing per-instance broker deployment.
+Deployments that share a broker must configure a unique instance token.
+
+== Alternatives Considered
+
+* *A second durable NATS stream:* rejected because it duplicates PostgreSQL durability and ordering,
+  and would require another acknowledgement/replay lifecycle.
+* *Only a periodic scan:* rejected because it adds unnecessary dispatch latency after a committed
+  maintenance request.
+* *Publishing before commit:* rejected because a rolled-back request could trigger work that has
+  no durable database record.
+
+== Consequences
+
+* PostgreSQL remains the sole source of truth for ordering, retries, and crash recovery.
+* NATS outages affect wake-up latency only; startup and periodic recovery remain available.
+* Duplicate notifications must be tolerated by the serialized drain path.
+* The five-minute recovery interval is configurable, with five minutes as the initial default.
+* Core NATS delivery and serialized drain behavior still require isolated PostgreSQL/NATS
+  integration verification before this decision can be accepted.
+
+'''
+_Architecture Decision Record — source: `kotlin-shared/.../MaintenanceWakeup.kt`,
+`kotlin-invoice/.../MaintenanceJobQueuedObserver.kt`,
+`kotlin-invoice/.../MaintenanceWakeupNatsAdapter.kt`._

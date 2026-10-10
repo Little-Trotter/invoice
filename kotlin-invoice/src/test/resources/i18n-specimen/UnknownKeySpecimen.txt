@@ -1,0 +1,14 @@
+package specimen
+
+class UnknownKeySpecimen {
+    fun labels() = listOf(
+        tr("app.save"),
+        tr("specimen.key.that.does.not.exist"),
+        tr(host, "specimen.dynamic.${kind}.label"),
+        tr("${prefixOnly}.value"),
+    )
+
+    private companion object {
+        const val SPECIMEN_MISSING_KEY = "specimen.constant.that.does.not.exist"
+    }
+}

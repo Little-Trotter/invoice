@@ -1,0 +1,36 @@
+[[adr-009]]
+= ADR-009: Editions Abolished — One Component, Not a Community/Commercial Split
+
+== Status
+Accepted, implemented
+
+== Context
+A planned community/private split would have required an edition mechanism: a feature gate, SPI
+extension points (`InvoiceFormModule`/`PartyFormExtension`), and a thin per-edition
+runnable/Dockerfile, with edition-bound identifiers threaded through the codebase. "Haflinger" is
+a release name, not a product-line identifier.
+
+== Decision
+The project is a single component with a single build artifact; it carries no edition mechanism,
+and the modules such a mechanism would gate live directly in `kotlin-invoice`. No
+`haflinger`-branded identifier exists in the code; i18n keys use the `invoiceModule.*` prefix.
+"Haflinger" appears only as a display-only release/version-name label in the System area.
+
+== Consequences
+
+=== Positive
+* One build, one deployment artifact, one set of tests — no edition-conditional branches to keep
+  in sync or accidentally diverge.
+* Removes an entire class of "which edition is this feature in" questions from code review.
+
+=== Negative
+* A genuinely restricted/limited build, if ever needed, has to be built from scratch rather than
+  resuming a paused mechanism.
+
+=== Mitigation
+* None needed; a future split, if ever required, is a new decision made on its own merits, not a
+  revival of the abolished mechanism.
+
+'''
+_Architecture Decision Record — source: `kotlin-invoice` i18n bundle key prefix
+`invoiceModule.*`._

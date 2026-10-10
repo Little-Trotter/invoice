@@ -1,0 +1,44 @@
+@startuml sequence-send-mail
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+participant "kotlin-email" as MailApp
+database "PostgreSQL\n<size:10>[Schema: mail]</size>" as DB
+queue "NATS JetStream\n<size:10>[Stream: mail.send]</size>" as MailQueue
+participant "SMTP Server\n<size:10>[Relay]</size>" as SMTP
+database "RustFS\n<size:10>[Object Store]</size>" as S3 <<storage>>
+
+OfficeManager -> WebApp: click "Rechnung per E-Mail senden"
+WebApp -> MailApp: POST /mail/api/compose (draft)
+MailApp --> WebApp: return drafted message
+
+OfficeManager -> WebApp: confirm send
+WebApp -> MailApp: POST /mail/api/send
+MailApp -> DB: persist mail_journal (status=QUEUED, archiveStatus=PENDING)
+MailApp -> MailQueue: publish mail.send.order
+MailApp --> WebApp: queued accepted
+WebApp --> OfficeManager: notification: queued
+
+MailQueue -> MailApp: consume mail.send.order
+MailApp -> SMTP: transmit MIME (.eml) via TLS
+SMTP --> MailApp: 250 OK (queued)
+MailApp -> DB: markTerminal(SENT)
+MailApp -> S3: store sent .eml
+
+opt Archive Copy configured
+  MailApp -> SMTP: transmit journal copy to archive address
+end
+
+== Deterministic Archive Packaging ==
+
+MailApp -> MailApp: buildAndStore(journalId)
+MailApp -> S3: read .eml & authored JSON
+MailApp -> MailApp: sign payloads (Ed25519)
+MailApp -> MailApp: build deterministic <journalId>.tar.gz\n(original/, signed/, manifest.json)
+MailApp -> S3: put archive.tar.gz
+MailApp -> DB: markArchived(ARCHIVED, s3Key, sha256)
+
+$SequenceStorageLegend()
+@enduml

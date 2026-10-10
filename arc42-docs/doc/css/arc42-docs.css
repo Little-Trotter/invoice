@@ -1,0 +1,291 @@
+/* ==========================================================================
+   Little Trotter X-Invoice — arc42 documentation stylesheet (A42-11)
+
+   This file is the single source for the docs' visual identity. There is no
+   CSS build pipeline in this repo (see scripts/build-docs.sh) — this file is
+   linked directly via :stylesheet: in the .adoc headers, and it imports the
+   shared styles from arc42-common.css (loaded locally as per CDN ban).
+
+   For shared rules (typography, layout, colors, dark mode, responsive design),
+   see arc42-common.css. This file links to it and may define page-specific
+   rules as needed (currently empty — all styling is in the common file).
+   ========================================================================== */
+
+@import url("arc42-common.css");
+
+/* ==========================================================================
+   Executive Brand Header Bar (Concept A)
+   Integrates the Little Trotter logo and corporate header seamlessly into
+   the top of the documentation pages without figure numbering artifacts.
+   ========================================================================== */
+
+.lt-brand-bar {
+  background: var(--lt-header-bg, #003366);
+  color: var(--lt-header-text, #ffffff);
+  border-bottom: 3px solid var(--lt-accent, #1A73E8);
+  margin: 0 calc(-1 * var(--content-pad, 2rem)) 2rem;
+  padding: 0.75rem var(--content-pad, 2rem);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.lt-brand-bar__inner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: var(--measure, 54rem);
+  margin: 0;
+}
+
+/* Blue PNG icon is self-contained — no white wrapper needed. */
+.lt-brand-bar__logo-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  padding: 0;
+  border-radius: 4px;
+  flex-shrink: 0;
+  text-decoration: none;
+  transition: transform 0.15s ease-in-out;
+}
+
+.lt-brand-bar__logo-link:hover {
+  transform: scale(1.03);
+}
+
+.lt-brand-bar__icon {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  display: block;
+  border-radius: 4px;
+}
+
+.lt-brand-bar__text {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.lt-brand-bar__title {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+}
+
+/* Subtitle is now a block element below title. */
+.lt-brand-bar__subtitle {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #c0d8f8;
+  letter-spacing: 0.04em;
+  margin-top: 0.1rem;
+}
+
+.lt-brand-bar__meta {
+  display: none;
+}
+
+.lt-brand-bar__badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.lt-brand-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.03em;
+}
+
+/* Developer Preview: amber — clearly not "shipped". */
+.lt-brand-badge--preview {
+  background: rgba(251, 188, 5, 0.2);
+  border-color: rgba(251, 188, 5, 0.5);
+  color: #FBBC05;
+}
+
+@media (max-width: 768px) {
+  .lt-brand-bar__badges {
+    display: none;
+  }
+  .lt-brand-bar__inner {
+    gap: 0.75rem;
+  }
+  .lt-brand-bar__icon {
+    width: 38px;
+    height: 38px;
+  }
+  .lt-brand-bar__title {
+    font-size: 0.95rem;
+  }
+}
+
+/* ==========================================================================
+   Single-header principle: the brand bar is the identity zone.
+   Override arc42-common.css so the AsciiDoctor document title is a compact
+   left-accented label — not a second full-width navy block.
+   ========================================================================== */
+#header > h1 {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 0 0.75rem 1rem;
+  border: none;
+  border-left: 4px solid var(--lt-accent, #1A73E8);
+  background: transparent;
+  color: var(--lt-text-primary);
+  font-size: 1.75rem;
+}
+
+/* ==========================================================================
+   Decision-guide roles (opt-in via AsciiDoc roles; unused roles cost nothing)
+   .lead       chapter takeaway: one size up, so a skimming reader gets the
+               conclusion of every chapter without reading the body
+   .kpi-tiles  key-figure row: three equal rectangles, the figure dominates
+   table.kpi   number tables: aligned digits, the 10-year column carries weight
+   .decision / .proscons  first column as row label
+   ========================================================================== */
+
+.paragraph.lead > p {
+  font-size: 1.1875rem;
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--lt-text-primary);
+  max-width: var(--measure);
+}
+
+.ulist.kpi-tiles > ul {
+  list-style: none;
+  margin: 1.5rem 0 2rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0;
+  border-top: var(--rule-strong) solid var(--lt-text-primary);
+}
+
+.ulist.kpi-tiles > ul > li {
+  margin: 0;
+  padding: 1rem 1.25rem 1.25rem 0;
+  border-bottom: 1px solid var(--lt-rule);
+  color: var(--lt-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.ulist.kpi-tiles > ul > li + li {
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--lt-rule);
+}
+
+.ulist.kpi-tiles > ul > li > p { margin: 0; }
+
+.ulist.kpi-tiles .kpi-value {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: clamp(1.25rem, 1.6vw, 1.5rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--lt-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Colour carries the model, never the verdict: one Material primary per tile. */
+.ulist.kpi-tiles > ul > li:nth-child(1) { box-shadow: inset 0 4px 0 var(--lt-accent); }
+.ulist.kpi-tiles > ul > li:nth-child(2) { box-shadow: inset 0 4px 0 var(--lt-warn); }
+.ulist.kpi-tiles > ul > li:nth-child(3) { box-shadow: inset 0 4px 0 var(--lt-error); }
+
+table.kpi td.tableblock,
+table.kpi th.tableblock { font-variant-numeric: tabular-nums; }
+
+table.kpi td.tableblock:first-child { font-weight: 600; }
+
+table.kpi td.tableblock:nth-child(3) {
+  font-weight: 700;
+  color: var(--lt-text-primary);
+}
+
+table.decision td.tableblock:first-child,
+table.proscons td.tableblock:first-child {
+  font-weight: 600;
+  color: var(--lt-text-primary);
+}
+
+table.decision td.tableblock:nth-child(2) { color: var(--lt-accent); font-weight: 600; }
+
+@media (max-width: 600px) {
+  .ulist.kpi-tiles > ul > li + li {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+/* A titled admonition (".Einordnung") reads as a heading of the box, not as body text. */
+.admonitionblock td.content > .title {
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lt-text-primary);
+}
+
+/* ==========================================================================
+   Formulas without a math engine (CDN ban rules out MathJax): variables in a
+   math serif italic, stacked fractions, a hairline rule left of the block.
+   ========================================================================== */
+
+.formula {
+  margin: 1rem 0 0.75rem;
+  padding: 0.75rem 1.25rem;
+  border-left: var(--rule-strong) solid var(--lt-text-primary);
+  background: var(--lt-surface-raised);
+  font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", Cambria, Georgia, serif;
+  font-size: 1.125rem;
+  line-height: 2.4;
+  color: var(--lt-text-primary);
+  font-variant-numeric: lining-nums;
+  overflow-x: auto;
+}
+
+.formula__row { white-space: nowrap; }
+
+.formula var,
+.formula-legend em { font-family: "Cambria Math", "STIX Two Math", Cambria, Georgia, serif; font-style: italic; }
+
+.formula sub { font-size: 0.65em; font-style: normal; }
+.formula sup { font-size: 0.65em; }
+
+.frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: center;
+  vertical-align: middle;
+  margin: 0 0.15em;
+  line-height: 1.25;
+}
+
+.frac > span { padding: 0 0.3em; }
+.frac > span:first-child { border-bottom: 1px solid currentColor; }
+
+.ulist.formula-legend > ul {
+  margin: 0 0 1.25rem;
+  padding-left: 1.25rem;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--lt-text-secondary);
+}
+
+.ulist.formula-legend li { margin: 0.125rem 0; }
+.ulist.formula-legend li > p { margin: 0; }

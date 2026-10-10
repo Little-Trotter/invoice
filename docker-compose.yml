@@ -1,0 +1,368 @@
+# Little Trotter X-Invoice — simple local stack.
+#
+# Usage:  make secrets   (once — writes .env)
+#         make dev       (docker compose up -d)
+#         make dev-down
+#
+# This is the PRODUCT stack: infrastructure from upstream images, the two app
+# images built straight from this repo. No TLS proxy, no monitoring, no
+# hardening overlays — all of that lives in the private workshop repo
+# (see README "Zwei Repositories").
+#
+# The app connects as the bootstrap superuser and migrates its own schema at
+# startup — the production role split (lt_migrator/lt_app) and the hardened
+# stack are the admin repo's business, not this eval/dev stack's.
+#
+# TODO (P8): switch the two build: services to published GHCR images once the
+# release pipeline pushes them; until then `make dev` builds locally.
+
+services:
+  postgres:
+    image: postgres:18
+    deploy:
+      resources:
+        limits:
+          # 2026-09-18 capacity review — previously unlimited, so a spike here could crowd
+          # out kotlin-xpdf's own memory-derived thread count below and reintroduce the
+          # OOM instability ST-A3 fixed there. Default sized for this stack's own stated
+          # minimum dev target (8 GB Raspberry Pi 5, whole stack incl. invoice/xpdf/
+          # job-worker); raise LT_POSTGRES_MEMORY_LIMIT on a bigger box, never remove the
+          # limit outright.
+          memory: ${LT_POSTGRES_MEMORY_LIMIT:-768M}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Postgres 18's image refuses data directly at the volume root
+      # (docker-library/postgres#1259); a subdirectory keeps the mount stable.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # Container-Härtung (PO 30.08.2026, ComposeHardeningTest): kein Prozess in
+    # diesem Stack darf durch setuid-Binaries Rechte hinzugewinnen.
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rustfs:
+    image: rustfs/rustfs:1.0.1
+    deploy:
+      resources:
+        limits:
+          # 2026-09-18 capacity review — see postgres' own comment above for why every
+          # previously-unlimited service here now has an explicit ceiling.
+          memory: ${LT_RUSTFS_MEMORY_LIMIT:-256M}
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+    command: ["/data"]
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      # 1.0.0-suffixed: 1.0.0 and rc.5's data dir format differ (verified upstream:
+      # compatibility was not guaranteed between rc and GA). A fresh volume name
+      # gives existing dev machines a clean start automatically; the old
+      # `rustfs-data-rc5` volume stays untouched (delete via
+      # `docker volume rm little-trotter-invoice_rustfs-data-rc5`).
+      - rustfs-data-v1:/data
+    # Container-Härtung (PO 30.08.2026, ComposeHardeningTest): kein Prozess in
+    # diesem Stack darf durch setuid-Binaries Rechte hinzugewinnen.
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nats:
+    image: nats:2.14.6-alpine
+    deploy:
+      resources:
+        limits:
+          # 2026-09-18 capacity review — see postgres' own comment above.
+          memory: ${LT_NATS_MEMORY_LIMIT:-128M}
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - nats-data:/data
+    # Container-Härtung (PO 30.08.2026, ComposeHardeningTest): kein Prozess in
+    # diesem Stack darf durch setuid-Binaries Rechte hinzugewinnen.
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:9.1.1-alpine
+    deploy:
+      resources:
+        limits:
+          # 2026-09-18 capacity review — the container-level ceiling, on top of
+          # `--maxmemory` below (Valkey's own data-set cap; this covers process/client
+          # overhead beyond that). See postgres' own comment above.
+          memory: ${LT_VALKEY_MEMORY_LIMIT:-384M}
+    command: valkey-server --requirepass ${VALKEY_PASSWORD} --maxmemory 256mb --maxmemory-policy volatile-lru
+    environment:
+      VALKEYCLI_AUTH: ${VALKEY_PASSWORD}
+    # Container-Härtung (PO 30.08.2026, ComposeHardeningTest): kein Prozess in
+    # diesem Stack darf durch setuid-Binaries Rechte hinzugewinnen.
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  little-trotter-invoice:
+    build:
+      context: .
+      dockerfile: kotlin-invoice/Dockerfile
+    deploy:
+      resources:
+        limits:
+          # ARC91-03 — LT_INVOICE_MEMORY_LIMIT is the hard ceiling -XX:+ExitOnOutOfMemoryError
+          # enforces below; INVOICE_GENERATION_BULKHEAD_MAX_CONCURRENT_CALLS (application.properties,
+          # default 20; %dev raises it to 40 for this dev-profile container / 2 on the job-worker
+          # below) is the knob that is meant to keep worst-case concurrent generation work under it
+          # instead of finding out the hard way. PO rule (2026-09-19): this container's limit must
+          # never be smaller than kotlin-xpdf's below — both default to 2880M here (pinned by
+          # ComposeMemorySizingTest). Recommended small-budget-server value stays 6. Sizing:
+          # MaxRAMPercentage=64 of 2880M leaves ~1.8G heap; budgeting ~100M peak transient allocation
+          # per concurrent DocumentJobDispatchGate.dispatch/workbook-export call (InvoiceDtoMapper.
+          # mapToDto or a POI workbook in memory) leaves 6 x 100M = 600M for that traffic plus
+          # ~500-600M of baseline Quarkus/Vaadin/Hibernate footprint, comfortably under the 1.8G
+          # ceiling. This is an arithmetic estimate, not a profiled measurement (no per-call heap
+          # sample exists yet for either code path) — tune it down further if a real burst still
+          # gets close to the limit.
+          memory: ${LT_INVOICE_MEMORY_LIMIT:-2880M}
+          pids: 512
+    environment:
+      TZ: Europe/Berlin
+      JAVA_TOOL_OPTIONS: ${LT_INVOICE_JAVA_TOOL_OPTIONS:--XX:+UseG1GC -XX:MaxRAMPercentage=64 -XX:InitialRAMPercentage=20 -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication -XX:+ExitOnOutOfMemoryError}
+      QUARKUS_PROFILE: dev
+      QUARKUS_SCHEDULER_ENABLED: "false"
+      QUARKUS_FLYWAY_MIGRATE_AT_START: "true"
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      QUARKUS_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # application.properties defaults Flyway to the RS-7 role lt_migrator, which the
+      # plain upstream postgres image never creates — this simple stack runs everything,
+      # Flyway included, as the bootstrap superuser (see the header comment).
+      QUARKUS_FLYWAY_USERNAME: ${POSTGRES_USER}
+      QUARKUS_FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
+      QUARKUS_S3_ENDPOINT_OVERRIDE: http://rustfs:9000
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      INVOICE_DOCUMENT_BUCKET: ${INVOICE_DOCUMENT_BUCKET}
+      INVOICE_STORAGE_BACKEND: s3
+      NATS_URL: nats://nats:4222
+      XPDF_URL: http://kotlin-xpdf:8081
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+      VALKEY_INVOICE_DB: 1
+      VALKEY_QUERY_CACHE_DB: 2
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - backups-data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    # Container-Härtung (PO 30.08.2026, ComposeHardeningTest): kein Prozess in
+    # diesem Stack darf durch setuid-Binaries Rechte hinzugewinnen.
+    security_opt:
+      - no-new-privileges:true
+    # Die eigenen Dienste brauchen keine einzige Linux-Capability: sie hören auf
+    # einem Port über 1024, schreiben nur in ihr eigenes Volume und wechseln keine
+    # Benutzerkennung. Das PID-Limit deckelt eine Fork-Schleife, bevor sie den
+    # Host-Kernel erreicht.
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/q/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  little-trotter-job-worker:
+    build:
+      context: .
+      dockerfile: kotlin-invoice/Dockerfile
+    deploy:
+      resources:
+        limits:
+          # 2026-09-18 capacity review — matches this container's own -Xmx256m below plus
+          # headroom for JVM/Quarkus overhead beyond the heap. See postgres' own comment
+          # above for why every previously-unlimited service here now has a ceiling.
+          memory: ${LT_JOB_WORKER_MEMORY_LIMIT:-384M}
+          pids: 512
+    environment:
+      TZ: Europe/Berlin
+      # ARC91-03 — this container only ever runs GenerationJobProcessor's scheduled republish
+      # (QUARKUS_SCHEDULER_ENABLED below), which calls the same DocumentJobDispatchGate
+      # bulkhead as the main app, but with a 256M heap instead of 2200M: the %worker profile
+      # override in application.properties (INVOICE_GENERATION_BULKHEAD_MAX_CONCURRENT_CALLS_WORKER,
+      # default 2) sizes the same knob for this container's much smaller headroom.
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
+      QUARKUS_PROFILE: worker
+      QUARKUS_SCHEDULER_ENABLED: "true"
+      QUARKUS_FLYWAY_MIGRATE_AT_START: "false"
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      QUARKUS_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      QUARKUS_S3_ENDPOINT_OVERRIDE: http://rustfs:9000
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      INVOICE_DOCUMENT_BUCKET: ${INVOICE_DOCUMENT_BUCKET}
+      INVOICE_STORAGE_BACKEND: s3
+      NATS_URL: nats://nats:4222
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+      VALKEY_INVOICE_DB: 1
+      VALKEY_QUERY_CACHE_DB: 2
+      AUTH_ENABLED: "false"
+    depends_on:
+      # Waits for the app so the schema is migrated exactly once (by the app).
+      little-trotter-invoice:
+        condition: service_healthy
+    # Container-Härtung (PO 30.08.2026, ComposeHardeningTest): kein Prozess in
+    # diesem Stack darf durch setuid-Binaries Rechte hinzugewinnen.
+    security_opt:
+      - no-new-privileges:true
+    # Die eigenen Dienste brauchen keine einzige Linux-Capability: sie hören auf
+    # einem Port über 1024, schreiben nur in ihr eigenes Volume und wechseln keine
+    # Benutzerkennung. Das PID-Limit deckelt eine Fork-Schleife, bevor sie den
+    # Host-Kernel erreicht.
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/q/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  kotlin-xpdf:
+    build:
+      context: .
+      dockerfile: kotlin-xpdf/Dockerfile
+    deploy:
+      resources:
+        limits:
+          # ST-A3 — one formula sizes both this container's heap and JOB_WORKER_THREADS (mirrors
+          # ARC91-03's LT_INVOICE_MEMORY_LIMIT comment on little-trotter-invoice above): the
+          # 2026-09-18 stress finding crashed at a fixed -Xmx512m/threads=4 inside a 768 MiB
+          # container limit, peaking at 755 MiB while EmbeddedKositValidator compiled the XRechnung
+          # scenario (Saxon/XSLT) at boot — every restart re-crashed the same way, because nothing
+          # else could become NATS-reachable until that compile finished (fixed by ST-A3 point 2:
+          # the compile is no longer @Startup-eager). MaxRAMPercentage=60 below scales the heap with
+          # LT_XPDF_MEMORY_LIMIT (not a fixed -Xmx absolute); JobConsumer.defaultWorkerThreads
+          # (kotlin-xpdf) reads this JVM's own Runtime.maxMemory() and derives JOB_WORKER_THREADS
+          # from the SAME "boot + threads × render" formula in code (BOOT_RESERVE_BYTES=500M for
+          # the KoSIT compile + JVM/Quarkus baseline, PER_THREAD_RENDER_BYTES=150M per concurrent
+          # Typst+Mustang+KoSIT-check run) — so the two knobs can never drift apart from
+          # being tuned independently. An arithmetic estimate (no per-call heap profile exists yet),
+          # not a profiled measurement — tune JOB_WORKER_THREADS/LT_XPDF_MEMORY_LIMIT explicitly if
+          # a real burst still gets close.
+          #
+          # Capacity review 2026-09-18 (PO feedback: a bulk e-invoice re-issue run went from ~5 min
+          # to hours after the 2-thread default above) — this default must still fit the PO-agreed
+          # dev budget (8 GB for the whole stack including postgres/rustfs/nats/valkey/job-worker
+          # above, ~0.5 GB left for the OS/Docker daemon). PO rule 2026-09-19: this container's
+          # limit must never exceed little-trotter-invoice's above (the invoice app is the stack's
+          # primary memory consumer), so both default to 2880M — deriving 7 bulk worker threads
+          # ((2880×0.6−500−150)/150: the 150M subtracted is the interactive lane's one thread,
+          # JobLane.DEFAULT_INTERACTIVE_THREADS, which renders alongside the bulk threads), with
+          # the dev-side dispatch bulkhead raised to 40. Total dev-stack footprint at every default
+          # in this file: ~7.5 GB of 8 GB. On a real 8 GB device (e.g. Raspberry Pi 5) drop BOTH
+          # to 2560M via .env (5 bulk threads, ~1 GB OS headroom); never xpdf above invoice.
+          # (ComposeMemorySizingTest pins both rules.)
+          #
+          # Demo/test/prod run their own separate, hardened stack (see this file's own header
+          # comment) — that stack's own compose/overlay should set larger values independently;
+          # PO-agreed values for a 10 GB demo/test/prod host (2026-09-19, supersedes the 2026-09-18
+          # 16 GB values): invoice 3072M, xpdf 2880M (→ 7 bulk threads, same formula, xpdf <= invoice),
+          # postgres 1536M, rustfs 384M, nats 192M, valkey 384M, job-worker 384M — ~8.6 GB total,
+          # ~1.4 GB left for the OS. Not set here, this file only covers the dev/eval stack.
+          memory: ${LT_XPDF_MEMORY_LIMIT:-2880M}
+          pids: 512
+    environment:
+      TZ: Europe/Berlin
+      # Fontconfig (Mustang/veraPDF font lookup) writes its cache under $XDG_CACHE_HOME;
+      # this container has no HOME with a writable default, so without this it logs "Fontconfig
+      # error: No writable cache directories" on every render. /tmp is writable and not read_only
+      # here, so no extra tmpfs mount is needed.
+      XDG_CACHE_HOME: /tmp
+      JAVA_TOOL_OPTIONS: ${LT_XPDF_JAVA_TOOL_OPTIONS:--XX:+UseG1GC -XX:MaxRAMPercentage=60 -XX:InitialRAMPercentage=25 -XX:+ExitOnOutOfMemoryError}
+      # ST-A3 — deliberately not listed here at all: JobConsumer.defaultWorkerThreads (kotlin-xpdf)
+      # derives its default from the heap ceiling above the moment JOB_WORKER_THREADS is unset, and
+      # an env var forwarded as an empty string (Compose's `${VAR:-}` still SETS the key, to "")
+      # would make readEnv() return "" instead of null and crash on `"".toInt()`. Set
+      # JOB_WORKER_THREADS explicitly in a real deployment's own env only to override the derived
+      # default; never add a passthrough line here. The same holds for JOB_INTERACTIVE_WORKER_THREADS
+      # (interactive lane, default 1, already reserved in the heap formula above).
+      S3_ENDPOINT: http://rustfs:9000
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      S3_BUCKET: ${INVOICE_DOCUMENT_BUCKET}
+      NATS_URL: nats://nats:4222
+      ARCHIVE_ED25519_PRIVATE_KEY: ${ARCHIVE_ED25519_PRIVATE_KEY}
+      ARCHIVE_ED25519_PUBLIC_KEY: ${ARCHIVE_ED25519_PUBLIC_KEY}
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+    depends_on:
+      rustfs:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    # Container-Härtung (PO 30.08.2026, ComposeHardeningTest): kein Prozess in
+    # diesem Stack darf durch setuid-Binaries Rechte hinzugewinnen.
+    security_opt:
+      - no-new-privileges:true
+    # Die eigenen Dienste brauchen keine einzige Linux-Capability: sie hören auf
+    # einem Port über 1024, schreiben nur in ihr eigenes Volume und wechseln keine
+    # Benutzerkennung. Das PID-Limit deckelt eine Fork-Schleife, bevor sie den
+    # Host-Kernel erreicht.
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres-data:
+  rustfs-data-v1:
+  nats-data:
+  backups-data:
