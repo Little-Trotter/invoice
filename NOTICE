@@ -1,0 +1,20 @@
+This project is licensed under the Apache License, Version 2.0.
+
+The overall concept, design, layout and core idea of this repository are provided with an attribution requirement under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+License details: https://creativecommons.org/licenses/by/4.0/
+ 
+When this concept or layout is reused in other applications or products, including commercial use, a clearly visible attribution to the original project must be maintained.
+  "Core idea derived from the LittleTrotter X-Rechnung project (https://github.com/little-trotter/invoice) under CC BY 4.0."
+
+---
+
+Bundled third-party fonts
+
+  Liberation Sans (Regular, Bold, Italic, Bold Italic)
+  Location: kotlin-xpdf/src/main/resources/fonts/
+  Copyright (c) Red Hat, Inc. — Liberation is a trademark of Red Hat, Inc.
+  Licensed under the SIL Open Font License, Version 1.1:
+  https://openfontlicense.org/
+
+  Embedded into generated invoice PDFs, which the SIL OFL permits (document
+  embedding is not "selling the fonts" under clause 1).

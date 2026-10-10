@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 2.0.18">
+<meta name="description" content="Projektübersicht, 30-Sekunden-Überblick, Architektur und lokaler Schnellstart mit Docker Compose">
+<meta name="author" content="Projektinitiator (https://github.com/eifel42[eifel42])">
+<title>Little Trotter X-Invoice — Übersicht &amp; Schnellstart</title>
+<link rel="stylesheet" href="css/arc42-docs.css">
+<!-- arc42 documentation — docinfo header -->
+<!-- No external runtime resources: generated output must not depend on CDNs. -->
+
+<!-- Meta tags for better mobile experience -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- App accent color (--lt-accent in styles.css); browsers auto-pick a
+     prefers-color-scheme variant of the same file, but there is no
+     dedicated dark theme-color here since the docs page itself always
+     paints its own dark background via CSS regardless. -->
+<meta name="theme-color" content="#1A73E8">
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const path = window.location.pathname;
+    const isIndex = path.endsWith('/index.html') || path === '/' || path === '';
+
+    if (isIndex || document.querySelector('.back-to-index')) {
+      return;
+    }
+
+    const pageTitle =
+      document.querySelector('#content h1, #header h1')?.textContent?.trim() ||
+      document.title.replace(/\s+-\s+.*$/, '').trim() ||
+      'Current page';
+
+    const link = document.createElement('a');
+    link.href = 'index.html';
+    link.className = 'back-to-index';
+    link.setAttribute('rel', 'home');
+    link.setAttribute('aria-label', `Back from ${pageTitle} to the documentation index`);
+    link.setAttribute('title', 'Back to documentation index');
+    link.innerHTML = `
+      <span class="back-to-index__icon" aria-hidden="true">
+        <span class="back-to-index__arrow">&larr;</span>
+      </span>
+      <span class="back-to-index__copy">
+        <span class="back-to-index__eyebrow">Documentation Hub</span>
+        <span class="back-to-index__title">Return to index</span>
+      </span>
+    `;
+    document.body.appendChild(link);
+
+    // Executive Brand Header Banner (A-Concept)
+    if (!document.querySelector('.lt-brand-bar')) {
+      const brandBar = document.createElement('div');
+      brandBar.className = 'lt-brand-bar';
+      brandBar.innerHTML = `
+        <div class="lt-brand-bar__inner">
+          <a href="index.html" class="lt-brand-bar__logo-link" title="Little Trotter Homepage">
+            <img src="images/little-trotter-head-icon.svg" alt="Little Trotter Horse Head Icon" class="lt-brand-bar__icon" />
+          </a>
+          <div class="lt-brand-bar__text">
+            <div class="lt-brand-bar__title">LITTLE TROTTER</div>
+            <div class="lt-brand-bar__subtitle">X-Invoice</div>
+          </div>
+          <div class="lt-brand-bar__badges">
+            <span class="lt-brand-badge">v0.9.10</span>
+            <span class="lt-brand-badge lt-brand-badge--preview">Developer Preview</span>
+          </div>
+        </div>
+      `;
+      const headerEl = document.getElementById('header') || document.body.firstChild;
+      if (headerEl && headerEl.parentNode) {
+        headerEl.parentNode.insertBefore(brandBar, headerEl);
+      } else {
+        document.body.insertBefore(brandBar, document.body.firstChild);
+      }
+    }
+  });
+</script>
+
+<!-- Focus styles -->
+<style>
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Improved focus styles for accessibility */
+  a:focus, button:focus, input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--lt-accent, #1A73E8);
+    outline-offset: 2px;
+  }
+
+  /* Dark mode: all variables are defined in arc42-docs.css / arc42-canvas.css
+     (loaded via :stylesheet:, always present on every page this file is
+     injected into) — this block just reads --lt-* custom properties, it
+     does not redefine them. */
+</style>
+
+<!-- Disclaimer footer injected on all arc42 pages -->
+<style>
+  #ltx-disclaimer {
+    margin-top: 3rem;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--lt-rule, #DADCE0);
+    font-size: 0.8rem;
+    color: var(--lt-text-secondary, #5F6368);
+    line-height: 1.6;
+  }
+  #ltx-disclaimer .disclaimer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-bottom: 6px;
+  }
+  #ltx-disclaimer .disclaimer-links a {
+    color: var(--lt-accent, #1A73E8);
+  }
+  #ltx-disclaimer .disclaimer-note {
+    color: var(--lt-text-disabled, #9AA0A6);
+    font-size: 0.75rem;
+  }
+  @media print {
+    #ltx-disclaimer { display: none; }
+  }
+</style>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const footer = document.createElement('div');
+    footer.id = 'ltx-disclaimer';
+    footer.innerHTML = `
+      <div class="disclaimer-links">
+        <a href="https://github.com/little-trotter" target="_blank" rel="noopener">&#169; 2026 little-trotter</a>
+        <a href="index.html">Documentation Index</a>
+      </div>
+      <p class="disclaimer-note">
+        Internal architecture documentation for Little Trotter X-Invoice.
+        AI-assisted documentation &middot; Synthetic test data (datagen) &middot; Not published outside the development team.
+      </p>
+    `;
+    document.body.appendChild(footer);
+  });
+</script>
+
+<!-- Click-to-zoom lightbox for arc42 diagrams (dependency-free) -->
+<style>
+  [hidden] {
+    display: none !important;
+  }
+
+  #content .imageblock img {
+    cursor: zoom-in;
+  }
+
+  .lt-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .88);
+    cursor: zoom-out;
+    touch-action: none;
+  }
+
+  /* Sized by script to fit 95vw x 95vh while keeping the aspect ratio: vector diagrams are
+     scaled up, raster images never beyond their natural size. No letterboxing, so the
+     white diagram background ends exactly where the image ends.
+     Zoom/pan is layered on top via a CSS transform (translate + scale) with
+     transform-origin at the top-left corner, so the script's math stays in one
+     coordinate space (see setZoom/clampPan below). */
+  .lt-lightbox__img {
+    display: block;
+    cursor: zoom-out;
+    background: #ffffff;
+    transform-origin: 0 0;
+    will-change: transform;
+    touch-action: none;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  .lt-lightbox__hint {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: .75rem;
+    margin: 0;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255, 255, 255, .75);
+    pointer-events: none;
+  }
+
+  .lt-lightbox__close {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, .12);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, .4);
+    font-size: 1.75rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .lt-lightbox__close:hover {
+    background: rgba(255, 255, 255, .24);
+  }
+  .lt-lightbox__close:focus {
+    outline: 3px solid var(--lt-accent, #1A73E8);
+    outline-offset: 2px;
+  }
+</style>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const images = document.querySelectorAll('#content .imageblock img');
+    if (!images.length) {
+      return;
+    }
+
+    let overlay = null;
+    let overlayImg = null;
+    let closeBtn = null;
+    let lastFocused = null;
+
+    // Zoom/pan state, shared by the single overlay instance. `scale` is relative
+    // to the fitted size from fitOverlayImage(); translate is in screen pixels
+    // and applies via `transform: translate(tx,ty) scale(scale)` with
+    // transform-origin 0 0 (see CSS), so the maths below stays in one space.
+    const MIN_SCALE = 1;
+    const MAX_SCALE = 8;
+    let scale = 1;
+    let tx = 0;
+    let ty = 0;
+    let baseRect = null; // overlayImg's layout rect while scale=1/tx=0/ty=0
+    const activePointers = new Map(); // pointerId -> {x, y}, for pan + pinch
+    let dragState = null; // single-pointer drag/click tracking
+    let pinchState = null; // two-pointer pinch-zoom tracking
+    let pendingClickTimer = null; // double-click disambiguation on the image
+
+    function isSvgSrc(src) {
+      return /\.svg(\?.*)?$/i.test(src || '');
+    }
+
+    function labelFor(img) {
+      const figureTitle = img.closest('.imageblock')?.querySelector('.title')?.textContent?.trim();
+      return figureTitle || img.getAttribute('alt') || 'Diagram';
+    }
+
+    function fitOverlayImage(allowUpscale) {
+      const naturalWidth = overlayImg.naturalWidth;
+      const naturalHeight = overlayImg.naturalHeight;
+      if (!naturalWidth || !naturalHeight) {
+        return;
+      }
+      let fitted = Math.min(
+        (window.innerWidth * 0.95) / naturalWidth,
+        (window.innerHeight * 0.95) / naturalHeight
+      );
+      if (!allowUpscale) {
+        fitted = Math.min(fitted, 1);
+      }
+      overlayImg.style.width = Math.round(naturalWidth * fitted) + 'px';
+      overlayImg.style.height = Math.round(naturalHeight * fitted) + 'px';
+    }
+
+    function applyTransform() {
+      overlayImg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    }
+
+    function resetTransform() {
+      scale = 1;
+      tx = 0;
+      ty = 0;
+      applyTransform();
+      overlayImg.style.cursor = '';
+    }
+
+    // Fit the image to the viewport and drop any zoom/pan, then remember its
+    // untransformed layout rect -- the fixed reference point for all zoom/pan math.
+    function refit(allowUpscale) {
+      fitOverlayImage(allowUpscale);
+      resetTransform();
+      baseRect = overlayImg.getBoundingClientRect();
+    }
+
+    // Keep at least 20% of the (scaled) image inside the viewport on each axis.
+    function clampPan() {
+      if (!baseRect) {
+        return;
+      }
+      const displayedWidth = baseRect.width * scale;
+      const displayedHeight = baseRect.height * scale;
+      const minVisibleX = displayedWidth * 0.2;
+      const minVisibleY = displayedHeight * 0.2;
+      const txMax = window.innerWidth - minVisibleX - baseRect.left;
+      const txMin = minVisibleX - displayedWidth - baseRect.left;
+      const tyMax = window.innerHeight - minVisibleY - baseRect.top;
+      const tyMin = minVisibleY - displayedHeight - baseRect.top;
+      tx = Math.min(txMax, Math.max(txMin, tx));
+      ty = Math.min(tyMax, Math.max(tyMin, ty));
+    }
+
+    // Zoom to `newScale`, keeping the content point under (clientX, clientY) fixed on screen.
+    function setZoom(newScale, clientX, clientY) {
+      if (!baseRect) {
+        return;
+      }
+      newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
+      if (newScale === scale) {
+        return;
+      }
+      const localX = (clientX - baseRect.left - tx) / scale;
+      const localY = (clientY - baseRect.top - ty) / scale;
+      tx += localX * (scale - newScale);
+      ty += localY * (scale - newScale);
+      scale = newScale;
+      clampPan();
+      applyTransform();
+      overlayImg.style.cursor = scale > 1 ? 'grab' : '';
+    }
+
+    function toggleZoom(clientX, clientY) {
+      if (scale > 1) {
+        resetTransform();
+      } else {
+        setZoom(2.5, clientX, clientY);
+      }
+    }
+
+    function distanceBetween(p1, p2) {
+      return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    }
+
+    function midpointBetween(p1, p2) {
+      return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    }
+
+    // A pointerup that never moved 4px is a "click". On the backdrop that always
+    // closes; on the image it closes only when not zoomed, with a short delay so
+    // a second click arriving in time is treated as a double-click (zoom toggle)
+    // instead.
+    function handleClick(clientX, clientY, onImage) {
+      if (!onImage) {
+        closeLightbox();
+        return;
+      }
+      if (pendingClickTimer) {
+        clearTimeout(pendingClickTimer);
+        pendingClickTimer = null;
+        toggleZoom(clientX, clientY);
+        return;
+      }
+      pendingClickTimer = setTimeout(() => {
+        pendingClickTimer = null;
+        if (scale <= 1) {
+          closeLightbox();
+        }
+      }, 300);
+    }
+
+    function onPointerDown(event) {
+      if (event.target === closeBtn) {
+        return; // the button handles its own click
+      }
+      event.preventDefault(); // no native image drag / text selection while panning
+      activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const onImage = event.target === overlayImg;
+
+      if (activePointers.size === 2) {
+        // Second finger: switch to pinch-zoom, drop any single-pointer drag.
+        dragState = null;
+        const pts = [...activePointers.values()];
+        const mid = midpointBetween(pts[0], pts[1]);
+        pinchState = {
+          dist: distanceBetween(pts[0], pts[1]),
+          scale0: scale,
+          localX: (mid.x - baseRect.left - tx) / scale,
+          localY: (mid.y - baseRect.top - ty) / scale
+        };
+        return;
+      }
+
+      if (activePointers.size === 1) {
+        overlayImg.setPointerCapture?.(event.pointerId);
+        dragState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startTx: tx,
+          startTy: ty,
+          moved: false,
+          onImage
+        };
+        if (scale > 1 && onImage) {
+          overlayImg.style.cursor = 'grabbing';
+        }
+      }
+    }
+
+    function onPointerMove(event) {
+      if (!activePointers.has(event.pointerId)) {
+        return;
+      }
+      activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      if (pinchState && activePointers.size === 2) {
+        const pts = [...activePointers.values()];
+        const newDist = distanceBetween(pts[0], pts[1]);
+        const mid = midpointBetween(pts[0], pts[1]);
+        scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinchState.scale0 * (newDist / pinchState.dist)));
+        tx = mid.x - baseRect.left - pinchState.localX * scale;
+        ty = mid.y - baseRect.top - pinchState.localY * scale;
+        clampPan();
+        applyTransform();
+        return;
+      }
+
+      if (dragState && event.pointerId === dragState.pointerId && activePointers.size === 1) {
+        const dx = event.clientX - dragState.startX;
+        const dy = event.clientY - dragState.startY;
+        if (Math.hypot(dx, dy) > 4) {
+          dragState.moved = true;
+        }
+        if (scale > 1 && dragState.onImage) {
+          tx = dragState.startTx + dx;
+          ty = dragState.startTy + dy;
+          clampPan();
+          applyTransform();
+        }
+      }
+    }
+
+    function onPointerUp(event) {
+      if (!activePointers.has(event.pointerId)) {
+        return;
+      }
+      activePointers.delete(event.pointerId);
+
+      if (pinchState) {
+        if (activePointers.size < 2) {
+          pinchState = null;
+        }
+        return;
+      }
+
+      if (dragState && event.pointerId === dragState.pointerId) {
+        overlayImg.style.cursor = scale > 1 ? 'grab' : '';
+        if (!dragState.moved) {
+          handleClick(event.clientX, event.clientY, dragState.onImage);
+        }
+        dragState = null;
+      }
+    }
+
+    function onPointerCancel(event) {
+      activePointers.delete(event.pointerId);
+      pinchState = null;
+      dragState = null;
+    }
+
+    function buildOverlay() {
+      overlay = document.createElement('div');
+      overlay.className = 'lt-lightbox';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.hidden = true;
+
+      overlayImg = document.createElement('img');
+      overlayImg.className = 'lt-lightbox__img';
+      overlayImg.draggable = false; // otherwise a mouse drag starts native image drag-and-drop
+      overlayImg.style.transform = 'translate(0px, 0px) scale(1)';
+
+      closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'lt-lightbox__close';
+      closeBtn.setAttribute('aria-label', 'Close enlarged image');
+      closeBtn.innerHTML = '&times;';
+
+      const hint = document.createElement('p');
+      hint.className = 'lt-lightbox__hint';
+      hint.setAttribute('aria-hidden', 'true');
+      hint.textContent = 'Scroll or pinch to zoom · drag to pan · 0 resets · Esc closes';
+
+      overlay.appendChild(overlayImg);
+      overlay.appendChild(closeBtn);
+      overlay.appendChild(hint);
+      document.body.appendChild(overlay);
+
+      overlayImg.addEventListener('load', () => refit(isSvgSrc(overlayImg.src)));
+      window.addEventListener('resize', () => {
+        if (!overlay.hidden) {
+          refit(isSvgSrc(overlayImg.src));
+        }
+      });
+
+      overlay.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const notches = -event.deltaY / 100;
+        setZoom(scale * Math.pow(1.1, notches), event.clientX, event.clientY);
+      }, { passive: false });
+
+      overlay.addEventListener('pointerdown', onPointerDown);
+      overlay.addEventListener('pointermove', onPointerMove);
+      overlay.addEventListener('pointerup', onPointerUp);
+      overlay.addEventListener('pointercancel', onPointerCancel);
+
+      closeBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        closeLightbox();
+      });
+      overlay.addEventListener('keydown', (event) => {
+        const panStep = 40;
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeLightbox();
+        } else if (event.key === 'Tab') {
+          // Only the close button is focusable inside the dialog: keep Tab there.
+          event.preventDefault();
+          closeBtn.focus();
+        } else if (event.key === '+' || event.key === '=') {
+          event.preventDefault();
+          setZoom(scale * 1.4, window.innerWidth / 2, window.innerHeight / 2);
+        } else if (event.key === '-' || event.key === '_') {
+          event.preventDefault();
+          setZoom(scale / 1.4, window.innerWidth / 2, window.innerHeight / 2);
+        } else if (event.key === '0') {
+          event.preventDefault();
+          resetTransform();
+        } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault();
+          if (event.key === 'ArrowUp') ty -= panStep;
+          else if (event.key === 'ArrowDown') ty += panStep;
+          else if (event.key === 'ArrowLeft') tx += panStep;
+          else tx -= panStep;
+          clampPan();
+          applyTransform();
+        }
+      });
+    }
+
+    function openLightbox(img) {
+      if (!overlay) {
+        buildOverlay();
+      }
+      lastFocused = document.activeElement;
+
+      const src = img.currentSrc || img.src;
+      overlay.setAttribute('aria-label', img.getAttribute('alt') || labelFor(img));
+      overlayImg.alt = img.getAttribute('alt') || '';
+      overlayImg.style.width = '';
+      overlayImg.style.height = '';
+      overlayImg.src = src;
+      refit(isSvgSrc(src));
+
+      overlay.hidden = false;
+      document.body.style.overflow = 'hidden';
+      closeBtn.focus();
+    }
+
+    function closeLightbox() {
+      if (!overlay || overlay.hidden) {
+        return;
+      }
+      overlay.hidden = true;
+      document.body.style.overflow = '';
+
+      if (pendingClickTimer) {
+        clearTimeout(pendingClickTimer);
+        pendingClickTimer = null;
+      }
+      dragState = null;
+      pinchState = null;
+      activePointers.clear();
+
+      if (lastFocused && typeof lastFocused.focus === 'function') {
+        lastFocused.focus();
+      }
+      lastFocused = null;
+    }
+
+    images.forEach((img) => {
+      img.setAttribute('tabindex', '0');
+      img.setAttribute('role', 'button');
+      img.setAttribute('aria-label', 'Enlarge: ' + labelFor(img));
+
+      img.addEventListener('click', () => openLightbox(img));
+      img.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openLightbox(img);
+        }
+      });
+    });
+  });
+</script>
+
+<!-- Collapsible Table of Contents (Accordion) -->
+<style>
+  .lt-toc-search {
+    margin: 0 0 0.75rem;
+    position: relative;
+  }
+  .lt-toc-search__input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    border: 1px solid var(--sidebar-border, #dadce0);
+    border-radius: 4px;
+    background: var(--bg-primary, #ffffff);
+    color: var(--lt-text-primary, #202124);
+    outline: none;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+  .lt-toc-search__input:focus {
+    border-color: var(--lt-accent, #1a73e8);
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+  }
+  .lt-toc-search__results {
+    display: none;
+    max-height: 280px;
+    overflow-y: auto;
+    margin: 4px 0 0;
+    padding: 4px 0;
+    list-style: none;
+    background: var(--bg-primary, #ffffff);
+    border: 1px solid var(--sidebar-border, #dadce0);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    font-size: 0.78rem;
+    z-index: 10;
+  }
+  .lt-toc-search__results li a {
+    display: block;
+    padding: 6px 10px;
+    color: var(--lt-text-primary, #202124);
+    text-decoration: none;
+    line-height: 1.3;
+  }
+  .lt-toc-search__results li a:hover,
+  .lt-toc-search__results li a:focus {
+    background: var(--lt-hover, #e8f0fe);
+    color: var(--lt-accent, #1a73e8);
+  }
+  .lt-search-match {
+    background: #fff3b0;
+    color: #202124;
+    padding: 1px 3px;
+    border-radius: 2px;
+  }
+
+  .lt-toc-controls {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed var(--sidebar-border, #dadce0);
+  }
+
+  .lt-toc-btn {
+    background: transparent;
+    border: 1px solid var(--sidebar-border, #dadce0);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    font-family: inherit;
+    font-weight: 500;
+    color: var(--lt-text-secondary, #5f6368);
+    cursor: pointer;
+    line-height: 1.2;
+    transition: all 0.15s ease-in-out;
+  }
+
+  .lt-toc-btn:hover,
+  .lt-toc-btn:focus-visible {
+    border-color: var(--lt-accent, #1a73e8);
+    color: var(--lt-accent, #1a73e8);
+    background-color: var(--lt-hover, #e8f0fe);
+    outline: none;
+  }
+
+  #toc li.has-children {
+    position: relative;
+  }
+
+  #toc li.has-children > a {
+    padding-right: 2.25rem;
+  }
+
+  .lt-toc-toggle {
+    position: absolute;
+    right: 0.25rem;
+    top: 0.25rem;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--lt-text-secondary, #5f6368);
+    cursor: pointer;
+    padding: 0;
+    z-index: 2;
+    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+  }
+
+  .lt-toc-toggle:hover,
+  .lt-toc-toggle:focus-visible {
+    background-color: var(--lt-hover, #e8f0fe);
+    color: var(--lt-accent, #1a73e8);
+    outline: none;
+  }
+
+  .lt-toc-toggle svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  #toc li.has-children > ul {
+    display: none;
+  }
+
+  #toc li.has-children.is-expanded > ul {
+    display: block;
+  }
+
+  #toc li.has-children.is-expanded > .lt-toc-toggle svg {
+    transform: rotate(90deg);
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toc = document.getElementById('toc');
+    if (!toc) return;
+
+    const toctitle = document.getElementById('toctitle');
+    const isDe = (document.documentElement.lang || 'en').startsWith('de');
+
+    if (toctitle) {
+      const searchBox = document.createElement('div');
+      searchBox.className = 'lt-toc-search';
+      searchBox.innerHTML = `
+        <input type="search" class="lt-toc-search__input" placeholder="${isDe ? 'In Dokumentation suchen…' : 'Search documentation…'}" aria-label="${isDe ? 'Dokumentation durchsuchen' : 'Search documentation'}">
+        <ul class="lt-toc-search__results" role="listbox"></ul>
+      `;
+      toctitle.after(searchBox);
+
+      const input = searchBox.querySelector('.lt-toc-search__input');
+      const resultsList = searchBox.querySelector('.lt-toc-search__results');
+
+      // Index section titles and paragraphs
+      let searchIndex = null;
+      function buildIndex() {
+        if (searchIndex) return searchIndex;
+        searchIndex = [];
+        const content = document.getElementById('content');
+        if (!content) return searchIndex;
+        const headings = content.querySelectorAll('h1, h2, h3, h4');
+        headings.forEach(h => {
+          const id = h.id || h.querySelector('a.link, a.anchor')?.getAttribute('href')?.replace('#', '');
+          if (id && h.textContent.trim()) {
+            searchIndex.push({
+              id: id,
+              title: h.textContent.replace(/^§*\s*[\d.]*\s*/, '').trim(),
+              tag: h.tagName.toLowerCase(),
+              text: (h.nextElementSibling?.textContent || '').substring(0, 160)
+            });
+          }
+        });
+        return searchIndex;
+      }
+
+      input.addEventListener('input', () => {
+        const query = input.value.trim().toLowerCase();
+        if (query.length < 2) {
+          resultsList.style.display = 'none';
+          resultsList.innerHTML = '';
+          return;
+        }
+        const index = buildIndex();
+        const matches = index.filter(item =>
+          item.title.toLowerCase().includes(query) || item.text.toLowerCase().includes(query)
+        ).slice(0, 8);
+
+        if (matches.length === 0) {
+          resultsList.innerHTML = `<li style="padding:6px 10px;color:var(--lt-text-secondary);">${isDe ? 'Keine Treffer' : 'No results found'}</li>`;
+          resultsList.style.display = 'block';
+          return;
+        }
+
+        resultsList.innerHTML = matches.map(m => `
+          <li>
+            <a href="#${m.id}">
+              <strong>${m.title}</strong>
+              <div style="font-size:0.7rem;color:var(--lt-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.text}</div>
+            </a>
+          </li>
+        `).join('');
+        resultsList.style.display = 'block';
+      });
+
+      resultsList.addEventListener('click', (e) => {
+        const link = e.target.closest('a');
+        if (link) {
+          resultsList.style.display = 'none';
+          input.value = '';
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!searchBox.contains(e.target)) {
+          resultsList.style.display = 'none';
+        }
+      });
+
+      // Quick shortcut '/' to focus search
+      document.addEventListener('keydown', (e) => {
+        if (e.key === '/' && document.activeElement !== input && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+          e.preventDefault();
+          input.focus();
+        }
+      });
+
+      const controls = document.createElement('div');
+      controls.className = 'lt-toc-controls';
+      controls.innerHTML = `
+        <button type="button" class="lt-toc-btn lt-toc-btn--expand" title="${isDe ? 'Alle Abschnitte aufklappen' : 'Expand all sections'}">${isDe ? 'Alle aufklappen' : 'Expand all'}</button>
+        <button type="button" class="lt-toc-btn lt-toc-btn--collapse" title="${isDe ? 'Alle Abschnitte einklappen' : 'Collapse all sections'}">${isDe ? 'Alle einklappen' : 'Collapse all'}</button>
+      `;
+      searchBox.after(controls);
+
+      controls.querySelector('.lt-toc-btn--expand').addEventListener('click', () => {
+        toc.querySelectorAll('li.has-children').forEach((li) => {
+          li.classList.add('is-expanded');
+          const btn = li.querySelector(':scope > .lt-toc-toggle');
+          if (btn) btn.setAttribute('aria-expanded', 'true');
+        });
+      });
+
+      controls.querySelector('.lt-toc-btn--collapse').addEventListener('click', () => {
+        toc.querySelectorAll('li.has-children').forEach((li) => {
+          li.classList.remove('is-expanded');
+          const btn = li.querySelector(':scope > .lt-toc-toggle');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+
+    const allLis = toc.querySelectorAll('li');
+    allLis.forEach((li) => {
+      const childUl = li.querySelector(':scope > ul');
+      const link = li.querySelector(':scope > a');
+      if (!childUl || !link) return;
+
+      li.classList.add('has-children');
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'lt-toc-toggle';
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-label', isDe ? 'Unterpunkte umschalten' : 'Toggle sub-sections');
+      toggle.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>`;
+
+      link.after(toggle);
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const expanded = li.classList.toggle('is-expanded');
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      });
+
+      link.addEventListener('click', () => {
+        li.classList.add('is-expanded');
+        toggle.setAttribute('aria-expanded', 'true');
+      });
+    });
+
+    function expandCurrentAnchor() {
+      const hash = window.location.hash;
+      if (!hash) return;
+      try {
+        const activeLink = toc.querySelector(`a[href="${hash}"]`);
+        if (activeLink) {
+          let parent = activeLink.closest('li.has-children');
+          while (parent) {
+            parent.classList.add('is-expanded');
+            const btn = parent.querySelector(':scope > .lt-toc-toggle');
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+            parent = parent.parentElement ? parent.parentElement.closest('li.has-children') : null;
+          }
+        }
+      } catch (err) {
+        // Ignore malformed selector
+      }
+    }
+
+    expandCurrentAnchor();
+    window.addEventListener('hashchange', expandCurrentAnchor);
+  });
+</script>
+</head>
+<body class="book toc2 toc-left">
+<div id="header">
+<h1>Little Trotter X-Invoice — Übersicht &amp; Schnellstart</h1>
+<div class="details">
+<span id="author" class="author">Projektinitiator (https://github.com/eifel42[eifel42])</span><br>
+<span id="revnumber">version 0.9.33-SNAPSHOT,</span>
+<span id="revdate">2026-10-09</span>
+</div>
+<div id="toc" class="toc2">
+<div id="toctitle">Inhaltsverzeichnis</div>
+<ul class="sectlevel1">
+<li><a href="#_30_sekunden_überblick_der_belegablauf">1. 30-Sekunden-Überblick: Der Belegablauf</a></li>
+<li><a href="#_kaufmännische_und_technische_leitlinien">2. Kaufmännische und technische Leitlinien</a>
+<ul class="sectlevel2">
+<li><a href="#_normkonformität_durch_architektur">2.1. Normkonformität durch Architektur</a></li>
+<li><a href="#_praxisnahe_anforderungen_für_handwerk_und_b2b">2.2. Praxisnahe Anforderungen für Handwerk und B2B</a></li>
+<li><a href="#_wirtschaftlichkeit_und_digitale_souveränität">2.3. Wirtschaftlichkeit und digitale Souveränität</a></li>
+</ul>
+</li>
+<li><a href="#_systemarchitektur_im_überblick">3. Systemarchitektur im Überblick</a>
+<ul class="sectlevel2">
+<li><a href="#_technologieentscheidungen_kotlin_vaadin_typst_geringer_ressourcenbedarf">3.1. Technologieentscheidungen: Kotlin, Vaadin, Typst, geringer Ressourcenbedarf</a></li>
+</ul>
+</li>
+<li><a href="#_schnellstart_mit_docker_compose">4. Schnellstart mit Docker Compose</a></li>
+<li><a href="#_qualitätssicherung_und_prüfgates">5. Qualitätssicherung und Prüfgates</a></li>
+<li><a href="#_roadmap_und_philosophie">6. Roadmap und Philosophie</a>
+<ul class="sectlevel2">
+<li><a href="#_namensursprung_zugferd_zugpferd_und_little_trotter">6.1. Namensursprung: ZUGFeRD, Zugpferd und Little Trotter</a></li>
+<li><a href="#_bedeutung_der_release_namen">6.2. Bedeutung der Release-Namen</a></li>
+</ul>
+</li>
+<li><a href="#_glossar_und_begriffsbestimmungen">7. Glossar und Begriffsbestimmungen</a></li>
+<li><a href="#_lizenz_und_urheberschaft">8. Lizenz und Urheberschaft</a></li>
+</ul>
+</div>
+</div>
+<div id="content">
+<div id="preamble">
+<div class="sectionbody">
+<div class="quoteblock abstract">
+<div class="title">Zusammenfassung</div>
+<blockquote>
+Little Trotter ist eine modulare Open-Source-Software für elektronische Rechnungen (E-Rechnung) und das kaufmännische Angebotswesen in kleinen und mittleren Betrieben, Ingenieurbüros und Handwerksunternehmen. Das System verbindet normierte Standards (EN 16931, ZUGFeRD / Factur-X, XRechnung) mit einer ergonomischen, tastaturbedienbaren Benutzeroberfläche und vollständiger lokaler Datenhoheit (<strong>Local-First</strong>).
+</blockquote>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Hinweis</div>
+</td>
+<td class="content">
+<div class="dlist">
+<div class="title">Hinweise zu Transparenz, Testdaten und Compliance</div>
+<dl>
+<dt class="hdlist1">Transparenz und KI-Assistenz</dt>
+<dd>
+<p>Diese Dokumentation und ihre Architekturartefakte wurden mithilfe fortschrittlicher KI-Assistenzsysteme erstellt, strukturiert und redaktionell gepflegt.</p>
+</dd>
+<dt class="hdlist1">Synthetische Testdaten (<code>datagen</code>)</dt>
+<dd>
+<p>Sämtliche in dieser Dokumentation und in Bildschirmabbildungen genannten Firmen, Personen, Adressen und Beträge beruhen auf rein zufällig erzeugten synthetischen Testdaten (<code>datagen</code>) und stellen keine realen Unternehmen oder Personen dar.</p>
+</dd>
+<dt class="hdlist1">Rechtliche und steuerliche Einordnung</dt>
+<dd>
+<p>Little Trotter X-Invoice ist eine technische Softwarelösung zur strukturierten Erstellung und Validierung elektronischer Rechnungsdaten. Die Anwendung erbringt keine Steuerberatung und keine Rechtsberatung. Für die individuelle steuerliche Beurteilung von Geschäftsvorfällen, die ordnungsmäßige Buchführung sowie die Einhaltung kaufmännischer Aufbewahrungspflichten (z. B. GoBD) sind die Betriebe in Abstimmung mit ihrer Steuerberatung eigenverantwortlich zuständig.</p>
+</dd>
+<dt class="hdlist1">Betriebssicherheit und Entwicklungsstand</dt>
+<dd>
+<p>Little Trotter ist eine Open-Source-Lösung im Beta-Entwicklungsstand. Der lokale Entwicklungsstack (<code>make dev</code>) dient der technischen Erprobung und Evaluation; für den Produktivbetrieb ist eine gehärtete Infrastruktur mit professioneller Administration erforderlich.</p>
+</dd>
+</dl>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_30_sekunden_überblick_der_belegablauf"><a class="anchor" href="#_30_sekunden_überblick_der_belegablauf"></a><a class="link" href="#_30_sekunden_überblick_der_belegablauf">1. 30-Sekunden-Überblick: Der Belegablauf</a></h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 25%;">
+<col style="width: 75%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Kaufmännische Aktion</th>
+<th class="tableblock halign-left valign-top">Verarbeitung im System</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Angebot schreiben</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Formelle Angebotserstellung, Strukturierung des Leistungsumfangs und 1-Klick-Übernahme freigegebener Angebote direkt in Rechnungsentwürfe.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Rechnung erfassen</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Automatische Anwendung steuerlicher Regeln (Inland, EU-Steuerschuldumkehr / Reverse Charge), Berechnung von Reisekosten und Tagespauschalen sowie formale Vorprüfung vor dem Abschluss.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Fertigstellen und Festschreiben</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Vergibt die Rechnungsnummer, sperrt den Beleg gegen nachträgliche Änderungen, generiert PDF/A-3 mit eingebetteter XRechnung/Factur-X-XML, validiert über den amtlichen KoSIT-Prüfer und versiegelt das Dokument mit einer Prüfsumme.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Belege anheften</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Hotelrechnungen, Tickets oder Lieferscheine werden im Belegpool auf Duplikate (SHA-256) geprüft und unter Einhaltung eines festen Größenbudgets in den PDF-Anhang und den XML-Container eingebettet.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Korrigieren (Storno)</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Erzeugt einen normgerechten Stornobeleg (Rechnungstyp 384) neben dem Originalbeleg mit Vorzeichenumkehr; keine Datensätze werden überschrieben oder gelöscht.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Kaufmännischer Excel-Export</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Erstellt eine strukturierte Excel-Arbeitsmappe je Rechnung oder Abrechnungszeitraum mit typisierten Zellen, dynamischen Kontrollformeln für interne Summenprüfungen und Journalblatt.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_kaufmännische_und_technische_leitlinien"><a class="anchor" href="#_kaufmännische_und_technische_leitlinien"></a><a class="link" href="#_kaufmännische_und_technische_leitlinien">2. Kaufmännische und technische Leitlinien</a></h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="_normkonformität_durch_architektur"><a class="anchor" href="#_normkonformität_durch_architektur"></a><a class="link" href="#_normkonformität_durch_architektur">2.1. Normkonformität durch Architektur</a></h3>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Standards für den elektronischen Geschäftsverkehr</strong>: Vollständige Unterstützung von Factur-X / ZUGFeRD 2.x und XRechnung 3.0.x gemäß europäischer Norm EN 16931.</p>
+</li>
+<li>
+<p><strong>Integrierte Validierungsstufen</strong>: Prüfung gegen das amtliche KoSIT-Schematron-Regelwerk und veraPDF-Konformitätsläufe für PDF/A-3 vor der endgültigen Belegfestschreibung.</p>
+</li>
+<li>
+<p><strong>Unveränderbarkeit und Nachvollziehbarkeit</strong>: Append-only Protokollierung im Datenbank-Audit-Journal über zustandsbasierte Sperren und kryptografische Prüfsummen.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_praxisnahe_anforderungen_für_handwerk_und_b2b"><a class="anchor" href="#_praxisnahe_anforderungen_für_handwerk_und_b2b"></a><a class="link" href="#_praxisnahe_anforderungen_für_handwerk_und_b2b">2.2. Praxisnahe Anforderungen für Handwerk und B2B</a></h3>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Empfängerspezifische B2B-Profile</strong>: Hinterlegung kundenspezifischer Pflichtangaben wie Leitweg-ID (<code>BT-10</code>), Bestellnummer (<code>BT-13</code>) oder Projektnummer (<code>BT-11</code>).</p>
+</li>
+<li>
+<p><strong>Kunden-Artikelnummern</strong>: Abbildung von kaufmännischen Artikelreferenzen der Kundschaft auf interne Artikelkataloge.</p>
+</li>
+<li>
+<p><strong>Internationale Steuerkennungen</strong>: Unterstützung mehrerer USt-IdNr.-Registrierungen des ausstellenden Betriebs (z. B. DE und LU) für grenzüberschreitende Einsätze im europäischen Binnenmarkt.</p>
+</li>
+<li>
+<p><strong>Hinweise für Privatkunden (Handwerk)</strong>: Automatisierte Aufbewahrungs- und Steuerhinweise (zweijährige Aufbewahrungspflicht bei Arbeiten an Gebäuden/Grundstücken sowie Ausweisung von Arbeits-, Maschinen- und Fahrtkosten) bei Rechnungen an Verbraucher (B2C).</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_wirtschaftlichkeit_und_digitale_souveränität"><a class="anchor" href="#_wirtschaftlichkeit_und_digitale_souveränität"></a><a class="link" href="#_wirtschaftlichkeit_und_digitale_souveränität">2.3. Wirtschaftlichkeit und digitale Souveränität</a></h3>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Keine Lizenz- oder Transaktionskosten</strong>: Open-Source-Modell ohne wiederkehrende Lizenzgebühren pro Arbeitsplatz oder Gebühren je versandter Rechnung.</p>
+</li>
+<li>
+<p><strong>Geringe Hardware-Anforderungen</strong>: Minimaler Ressourcenbedarf für den energieeffizienten Dauerbetrieb oder zeitgesteuerten Nacht-Shutdown auf Standard-Hardware (Mini-PC).</p>
+</li>
+<li>
+<p><strong>Vollständige Datenhoheit (Local-First)</strong>: Lokale Speicherung aller Belege, Dokumente und Datenbankeinträge. Kein Datentransfer an externe Cloud-Anbieter ohne expliziten Belegversand.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_systemarchitektur_im_überblick"><a class="anchor" href="#_systemarchitektur_im_überblick"></a><a class="link" href="#_systemarchitektur_im_überblick">3. Systemarchitektur im Überblick</a></h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Die Software basiert auf einer hexagonalen Architektur mit Domain-Driven Design (DDD) und strikter Trennung von Fachdomäne und Infrastruktur über schmale Rollen-Ports:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Webanwendung (<code>kotlin-invoice</code>)</strong>: Backend auf Basis von Kotlin 2.x und Quarkus 3.x mit ergonomischer, tastaturfreundlicher Benutzeroberfläche in Vaadin Flow.</p>
+</li>
+<li>
+<p><strong>Dokumenten-Engine (<code>kotlin-xpdf</code>)</strong>: Entkoppelte Generierung von DIN 5008 PDF/A-3 Dokumenten mit Typst, Mustang (ZUGFeRD/Factur-X) und Apache PDFBox.</p>
+</li>
+<li>
+<p><strong>Angebotsmodul (<code>kotlin-quote</code>)</strong>: Eigenständiges SCS für das kaufmännische Angebotswesen mit UBL Quotation XML und Übernahme in Rechnungen.</p>
+</li>
+<li>
+<p><strong>E-Mail-Dienst (<code>kotlin-email</code>)</strong>: Entkoppeltes SCS für gesicherten B2B-Rechnungsversand (SMTP/TLS, Ed25519-Signaturpakete) über NATS JetStream.</p>
+</li>
+<li>
+<p><strong>Infrastrukturdienste</strong>: PostgreSQL (transaktionaler Primärspeicher), Valkey (In-Memory-Cache), RustFS (S3-kompatibler Objektspeicher) und NATS JetStream (asynchroner Event- und Job-Backbone).</p>
+</li>
+</ul>
+</div>
+<div class="sect2">
+<h3 id="_technologieentscheidungen_kotlin_vaadin_typst_geringer_ressourcenbedarf"><a class="anchor" href="#_technologieentscheidungen_kotlin_vaadin_typst_geringer_ressourcenbedarf"></a><a class="link" href="#_technologieentscheidungen_kotlin_vaadin_typst_geringer_ressourcenbedarf">3.1. Technologieentscheidungen: Kotlin, Vaadin, Typst, geringer Ressourcenbedarf</a></h3>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Kotlin und Vaadin Flow</strong>: Die Oberfläche wird serverseitig im selben Artefakt wie das Backend ausgeliefert; ein separater Single-Page-Client und eine eigene REST-Schicht für die Oberfläche entfallen.</p>
+</li>
+<li>
+<p><strong>Quarkus, Jakarta EE, Hibernate</strong>: Standard-JVM-Stack; Betrieb im eigenen Haus oder in einer vorhandenen Unternehmensinfrastruktur.</p>
+</li>
+<li>
+<p><strong>Typst (Rust) für PDF</strong>: ersetzt eine JVM-Report-Engine wie JasperReports (ADR-030); deterministische PDF/A-3-Ausgabe im DIN-5008-Layout.</p>
+</li>
+<li>
+<p><strong>Geringer Ressourcenbedarf</strong>: Der Stack läuft auf sparsamer Hardware oder einer kleinen Server-Instanz und lässt sich nachts abschalten.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_schnellstart_mit_docker_compose"><a class="anchor" href="#_schnellstart_mit_docker_compose"></a><a class="link" href="#_schnellstart_mit_docker_compose">4. Schnellstart mit Docker Compose</a></h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Für die lokale Erprobung und Entwicklung werden Docker (Compose v2) und <code>make</code> benötigt:</p>
+</div>
+<div class="paragraph">
+<p>Hinweis: Der Schnellstart dient nur der Erprobung. Für den echten Betrieb richtet ein IT-Dienstleister einen Server ein (siehe Kapitel „Deployment View“ der Architekturdokumentation).</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-bash" data-lang="bash"># Einmalige Initialisierung: erzeugt sichere Zufallszugangsdaten in .env
+make secrets
+
+# Startet alle 7 Container lokal, führt Datenbank-Migrationen aus und initialisiert den Stack
+make dev</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Nach erfolgreichem Start ist die Anwendung unter <strong><a href="http://localhost:8080" class="bare">http://localhost:8080</a></strong> erreichbar. Mit <code>make dev-down</code> wird der Stack gestoppt; die Daten im PostgreSQL-Volume und Objektspeicher bleiben dabei vollständig erhalten.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_qualitätssicherung_und_prüfgates"><a class="anchor" href="#_qualitätssicherung_und_prüfgates"></a><a class="link" href="#_qualitätssicherung_und_prüfgates">5. Qualitätssicherung und Prüfgates</a></h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 66.6667%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Qualitätsstufe</th>
+<th class="tableblock halign-left valign-top">Garantierte Eigenschaft</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Vierstufige Testpyramide (Stand heute: &gt; 16.000 automatisierte Tests in 2.250+ Suiten)</strong></p></td>
+<td class="tableblock halign-left valign-top"><div class="content"><div class="paragraph">
+<p>Lückenlose Testabdeckung auf allen Architekturebenen:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Unit-Tests</strong>: 1.859 Testklassen mit isolierten Mocks (<code>*Test.kt</code>), keine Netzwerk- oder Datenbankabhängigkeit (&gt; 14.000 Einzelprüfungen).</p>
+</li>
+<li>
+<p><strong>Integrationstests (IT)</strong>: 299 Testklassen (<code>*IT.kt</code>) gegen echte Container (PostgreSQL, NATS JetStream, RustFS S3) via Testcontainers (&gt; 2.000 Einzelprüfungen).</p>
+</li>
+<li>
+<p><strong>End-to-End-Pipeline (E2E)</strong>: 99 modulgreifende Integrationsläufe (<code>kotlin-e2e-tests</code>) über die reale Verarbeitungskette.</p>
+</li>
+<li>
+<p><strong>E2E-Browsertests</strong>: Teil der Administrations- und Betriebswerkzeuge (<code>little-trotter-admin-tools/e2e-test-playwright</code>, Playwright mit 70+ Test-Suiten und &gt; 250 browserbasierten Interaktionsprüfungen auf dem laufenden Stack; Veröffentlichung frühestens Q4/2027).</p>
+</li>
+</ul>
+</div></div></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>90/90 Abdeckungs-Gate</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Mindestens 90 % Zeilen- und 90 % Zweigabdeckung im aggregierten Gesamtbericht (<code>make test</code>); keine Ausnahmen oder Testunterdrückungen.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Statische Code-Analyse</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ktlint, detekt (Ratchet-Prinzip ohne Baseline-Ausweitung), sqlfluff für DDL-Migrationen und Qodana-Inspektionen.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Lieferkettensicherheit</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Lückenlose Absicherung entlang des Entwicklungsprozesses: Vor jedem Commit verhindert Gitleaks das Einchecken von Geheimnissen (Pre-Commit-Gate). Im Build analysiert OWASP Dependency-Check Abhängigkeiten auf bekannte Schwachstellen (CVEs) und CycloneDX generiert modulare sowie aggregierte Software-Stücklisten (SBOM). Beim Packaging prüfen Trivy-Containerscans Basis-Images und fertige Container vor der Freigabe.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Normkonforme Validierung</strong></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Amtliche KoSIT-Prüfszenarien für XRechnung und veraPDF-Konformitätsläufe für PDF/A-3.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_roadmap_und_philosophie"><a class="anchor" href="#_roadmap_und_philosophie"></a><a class="link" href="#_roadmap_und_philosophie">6. Roadmap und Philosophie</a></h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Little Trotter orientiert sich am genossenschaftlichen Leitgedanken von <strong>Friedrich Wilhelm Raiffeisen</strong>:</p>
+</div>
+<div class="quoteblock">
+<blockquote>
+<div class="paragraph">
+<p>„Was dem Einzelnen nicht möglich ist, das vermögen viele.“</p>
+</div>
+</blockquote>
+</div>
+<div class="paragraph">
+<p>Kleine und mittlere Unternehmen bis hin zum größeren Mittelstand stehen vor denselben gesetzlichen und technischen Herausforderungen bei der elektronischen Fakturierung. Offene, gemeinschaftlich entwickelte Software sichert digitale Unabhängigkeit gegenüber kostenintensiven Cloud-Monopolen.</p>
+</div>
+<div class="sect2">
+<h3 id="_namensursprung_zugferd_zugpferd_und_little_trotter"><a class="anchor" href="#_namensursprung_zugferd_zugpferd_und_little_trotter"></a><a class="link" href="#_namensursprung_zugferd_zugpferd_und_little_trotter">6.1. Namensursprung: ZUGFeRD, Zugpferd und Little Trotter</a></h3>
+<div class="paragraph">
+<p>Der Projektname und die Versionierung knüpfen unmittelbar an die Entstehung und Metaphorik des E-Rechnungsstandards an:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>ZUGFeRD</strong> steht als Akronym für <em>Zentraler User Guide des Forums elektronische Rechnung Deutschland</em>. Phonetisch und symbolisch ist der Name an das <strong>Zugpferd</strong> angelehnt – die verlässliche Produktivkraft, die schwere kaufmännische Lasten bewegt.</p>
+</li>
+<li>
+<p><strong>Little Trotter</strong> (kleiner Traber) greift dieses Bild auf: Ein schlanker, robuster Belegprozessor für den Mittelstand – vom inhabergeführten Betrieb bis zum gehobenen Mittelstand. Die Software arbeitet ohne laufende Lizenz- oder Transaktionskosten, schützt vor Vendor-Lock-ins und entlastet die tägliche Administration.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_bedeutung_der_release_namen"><a class="anchor" href="#_bedeutung_der_release_namen"></a><a class="link" href="#_bedeutung_der_release_namen">6.2. Bedeutung der Release-Namen</a></h3>
+<div class="paragraph">
+<p>Die Hauptversionen tragen Namen bewährter Arbeits-, Zug- und Botenpferderassen. Sie versinnbildlichen den kaufmännischen Schwerpunkt und Charakter des jeweiligen Entwicklungsabschnitts:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Haflinger (Rechnungs- und Belegkern)</strong><br>
+<em>Namenspate</em>: Ein trittsicheres, robustes und genügsames Arbeitspferd des Alpenraums.<br>
+<em>Kaufmännischer Nutzen</em>: Rechnungen nach EN 16931, ZUGFeRD 2.x und XRechnung werden vor dem Versand geprüft, damit Empfänger sie nicht aus formalen Gründen zurückweisen. Dazu kommen Duplikaterkennung im Belegpool (SHA-256), Storno als Rechnungskorrektur (Typ 384) und ein Änderungsprotokoll in der Datenbank.</p>
+</li>
+<li>
+<p><strong>Andalusier (B2B-Belegversand)</strong><br>
+<em>Namenspate</em>: Die traditionsreiche iberische Rasse (<em>Pura Raza Española</em>), historisch für zuverlässige Botendienste und wendigen Transport geschätzt.<br>
+<em>Kaufmännischer Nutzen</em>: Cashflow-Beschleunigung. Unmittelbare, manipulationssicher signierte Dokumentenzustellung (Ed25519-Signaturen, SMTP/TLS) über entkoppelte NATS-JetStream-Warteschlangen; senkt die Außenstandsdauer (DSO) ohne Gebühren für externe Rechnungsnetzwerke.</p>
+</li>
+<li>
+<p><strong>Schwarzwälder Fuchs (Kaufmännisches Angebot)</strong><br>
+<em>Namenspate</em>: Das Schwarzwälder Kaltblut, ein drahtiges, zugstarkes Arbeitspferd für die Steillagen der Land- und Forstwirtschaft. Die Namensgebung ist zugleich eine Hommage an familiäre Wurzeln in Landwirtschaft, Waldarbeit und Schiefertransport.<br>
+<em>Kaufmännischer Nutzen</em>: Prozesseffizienz im Vertrieb. Lückenlose Vorstufen-Integration vom Angebot (<code>kotlin-quote</code>, UBL Quotation XML) bis zur Rechnungsstellung; verhindert Medienbrüche und reduziert Erfassungsaufwände durch 1-Klick-Übernahme.</p>
+</li>
+<li>
+<p><strong>Percheron (Internationale Profile &amp; Skalierung)</strong><br>
+<em>Namenspate</em>: Das französische Kaltblut der Normandie, weltweit bekannt für enorme Zugkraft im schweren Gespann.<br>
+<em>Kaufmännischer Nutzen</em>: Skalierbarkeit im europäischen Binnenmarkt. Bewältigt wachsende Belegmengen im größeren Mittelstand sowie grenzüberschreitende Factur-X-Profile (Frankreich, Luxemburg, Belgien) und Mehrmandanten-Szenarien.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_glossar_und_begriffsbestimmungen"><a class="anchor" href="#_glossar_und_begriffsbestimmungen"></a><a class="link" href="#_glossar_und_begriffsbestimmungen">7. Glossar und Begriffsbestimmungen</a></h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Begriffsdefinitionen zu E-Rechnungsstandards (EN 16931, ZUGFeRD, XRechnung), rechtlichen Rahmenbedingungen (GoBD, UStG) und Architekturkonzepten sind im zentralen <a href="glossar.html">Fachglossar &amp; Recht</a> sowie im <a href="architecture-glossary.html">Architecture Glossary</a> dokumentiert.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_lizenz_und_urheberschaft"><a class="anchor" href="#_lizenz_und_urheberschaft"></a><a class="link" href="#_lizenz_und_urheberschaft">8. Lizenz und Urheberschaft</a></h2>
+<div class="sectionbody">
+<div class="ulist">
+<ul>
+<li>
+<p><strong>Software</strong>: <a href="LICENSE">Apache License 2.0</a>.</p>
+</li>
+<li>
+<p><strong>Konzept &amp; Dokumentation</strong>: Creative Commons <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> mit Namensnennung (<strong>Little Trotter</strong>).</p>
+</li>
+<li>
+<p><strong>Projektinitiator</strong>: Stefan Zils (Eifel42).</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Version 0.9.33-SNAPSHOT<br>
+Last updated 2026-10-09 20:21:34 UTC
+</div>
+</div>
+</body>
+</html>

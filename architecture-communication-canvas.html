@@ -1,0 +1,159 @@
+<!-- GENERATED FILE - DO NOT EDIT. Generated from doc/architecture-communication-canvas.adoc by scripts/generate-canvas-drawio.py (draw.io mirror); any manual change here is overwritten by the next build. Edit the .adoc and rerun the generator. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Trotter X-Invoice — Architecture Communication Canvas</title>
+<style>
+html { background: #F8F9FA; }
+body { margin: 0; padding: 24px; font-family: Helvetica, Arial, sans-serif; }
+.canvas-wrap { overflow-x: auto; }
+.canvas { position: relative; margin: 0 auto; background: #FFFFFF; }
+.frame { position: absolute; box-sizing: border-box; background: #FFFFFF;
+         border: 3px solid #DADCE0; }
+.header { position: absolute; display: flex; align-items: flex-end; gap: 12px; }
+.header img { width: 40px; height: 40px; flex: none; }
+.header-text { display: flex; flex-direction: column; min-width: 0; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+           line-height: 14px; color: #1A73E8; }
+.header h1 { margin: 0; font-size: 22px; font-weight: 700; line-height: 26px;
+             letter-spacing: -0.01em; color: #202124; }
+.meta { margin-left: auto; font-size: 11px; line-height: 14px; color: #5F6368;
+        font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile { position: absolute; box-sizing: border-box; overflow: hidden; padding: 8px;
+        font-size: 10px; line-height: 1.45; color: #202124; }
+.bar { position: absolute; left: 0; top: 0; width: 6px; height: 100%; }
+.tile-img { position: absolute; object-fit: contain; }
+.credits { margin: 20px auto 0; font-size: 12px; line-height: 1.6;
+           color: #5F6368; }
+.credits a { color: #1A73E8; }
+.back-to-index {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 1200;
+  display: inline-flex;
+  align-items: stretch;
+  margin: 0;
+  padding: 0;
+  background: #1A73E8;
+  color: #FFFFFF !important;
+  font-family: Helvetica, Arial, sans-serif;
+  text-decoration: none !important;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.back-to-index:hover,
+.back-to-index:focus-visible {
+  background: #1557B0;
+  color: #FFFFFF !important;
+  text-decoration: none !important;
+}
+.back-to-index__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  background: #202124;
+  color: #FFFFFF;
+  flex: 0 0 auto;
+}
+.back-to-index__arrow {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.back-to-index__copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0.5rem 1rem 0.5rem 0.875rem;
+  min-width: 0;
+}
+.back-to-index__eyebrow {
+  font-size: 0.625rem;
+  color: #FFFFFF;
+  opacity: 0.85;
+}
+.back-to-index__title {
+  font-size: 0.875rem;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+@media print {
+  .back-to-index { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="canvas-wrap">
+<div class="canvas" style="width:1270px;height:950px">
+  <div class="frame" style="left:20px;top:70px;width:1230px;height:860px"></div>
+  <header class="header" style="left:20px;top:20px;width:1230px;height:40px">
+    <img src="images/little-trotter-head-icon.svg" alt="Little Trotter">
+    <div class="header-text">
+      <span class="eyebrow">ARCHITECTURE COMMUNICATION CANVAS</span>
+      <h1>Little Trotter X-Invoice</h1>
+    </div>
+    <span class="meta">arc42 · v0.9.33-SNAPSHOT</span>
+  </header>
+  <div class="tile" style="left:40px;top:90px;width:290px;height:220px;background:#FFFFFF;border:2px solid #DADCE0;">
+    <div class="bar" style="background:#1A73E8"></div>
+    <font color='#1A73E8'><b style='font-size:13px'>Value Proposition</b></font><br>• <b>Compliant E-Invoicing</b>: Turnkey EN 16931, XRechnung, and ZUGFeRD generation with PDF/A-3b output, optionally sent by e-mail.<br>• <b>Sovereign Local-First</b>: Self-hosted on small-budget hardware (mini PC or Linux server) with zero cloud dependency.<br>• <b>Integrated Storage</b>: S3-compatible document store (RustFS) for durable receipts.<br>• <b>Domain-Aligned UX</b>: User-friendly German interface, change-tracking invoices, organized catalogs, and sender/recipient management.<br>• <b>Reference Prototype</b>: Fully functional prototype reference architecture under Apache-2.0 / CC BY 4.0.
+  </div>
+  <div class="tile" style="left:340px;top:90px;width:290px;height:220px;background:#FFFFFF;border:2px solid #DADCE0;">
+    <div class="bar" style="background:#8E24AA"></div>
+    <font color='#8E24AA'><b style='font-size:13px'>Core Functions</b></font><br>• <b>Master Data Management</b>: Aggregates for issuers, recipients, items, and tax/B2B configurations.<br>• <b>Invoice Lifecycle</b>: State engine (draft, issued, cancelled) with immutable snapshots on issue.<br>• <b>Asynchronous Pipeline</b>: Decoupled PDF/A-3b rendering and ZUGFeRD XML embedding in kotlin-xpdf.<br>• <b>Multi-Stage Validation</b>: Strict structural XML schema, Schematron, and KoSIT validator enforcement.<br>• <b>Receipts & Auditing</b>: Deduplicated receipt intake, S3 archiving, and basic statistics.<br>• <b>Mail Dispatch (optional)</b>: Templates, SMTP submission, append-only send journal, signed archive package, and SMTP journal-copy handover of every sent mail to the operator's mail archive (status in the journal) in kotlin-email; compose, journal and template views in the invoicing UI.
+  </div>
+  <div class="tile" style="left:640px;top:90px;width:290px;height:450px;background:#FFFFFF;border:2px solid #DADCE0;">
+    <div class="bar" style="background:#F4511E"></div>
+    <font color='#F4511E'><b style='font-size:13px'>Core Decisions</b></font><br>• <b>ADR-001 (Deterministic Money Math)</b>: Dedicated Money value type with 4-decimal accumulation and ArchUnit-gated BigDecimal prohibition.<br>• <b>ADR-002 (EN 16931 Business Terms)</b>: B2bTerm Kotlin enum over seeded database catalog; compile-time safety for all e-invoicing terms.<br>• <b>ADR-007 (S3 API Object Storage)</b>: RustFS (S3-compatible) for receipts and documents; open for cloud migration to any managed Postgres + S3 API.<br>• <b>ADR-015 (Mail as Self-Contained System)</b>: Mail dispatch with own image, schema, bucket, and UI; coupled only via the frozen kotlin-mail-contract over NATS/REST.<br>• <b>ADR-020 (Small-Budget Event Backbone)</b>: NATS JetStream job envelopes over a heavyweight Kafka cluster; durable event flow on mini-PC hardware.
+  </div>
+  <div class="tile" style="left:940px;top:90px;width:290px;height:450px;background:#FFFFFF;border:2px solid #DADCE0;">
+    <div class="bar" style="background:#E65100"></div>
+    <font color='#E65100'><b style='font-size:13px'>Technologies</b></font><br>• <b>Application Layer</b>: Kotlin 2.x, Java 25, Quarkus 3.x, Vaadin 25.<br>• <b>Data & Storage</b>: PostgreSQL 18 (JPA / Flyway), Valkey (caching), RustFS (S3-compatible object store).<br>• <b>Messaging Backbone</b>: NATS JetStream (asynchronous generation envelopes and maintenance events).<br>• <b>PDF & Validation</b>: Typst (sole PDF/A-3b layout engine), Mustang Project (ZUGFeRD/CII), embedded KoSIT validator, veraPDF.<br>• <b>Mail</b>: SMTP submission, journal copy to the operator's archive address (envelope recipient, ADR-037), Ed25519-signed archive packages, Mailpit in tests.<br>• <b>Deployment & Ops</b>: Docker Compose, Caddy (TLS), systemd native services, and Go-based lt CLI suite.
+  </div>
+  <div class="tile" style="left:40px;top:320px;width:290px;height:220px;background:#FFFFFF;border:2px solid #DADCE0;">
+    <div class="bar" style="background:#188038"></div>
+    <font color='#188038'><b style='font-size:13px'>Key Stakeholders</b></font><br>• <b>Office Manager / Owner</b>: Prepares and issues invoices, manages master data, and tracks receipts.<br>• <b>Invoice Recipient</b>: Receives legal hybrid PDF/A-3b invoices and structured business transaction XML.<br>• <b>Tax Advisor / Auditor</b>: Inspects GoBD-compliant e-invoice archives, receipt records, and financial reports.<br>• <b>DevOps / Operator</b>: Provisions server, runs automated age backups, and manages deployments via lt CLI.<br>• <b>Developers and AI Agents</b>: Maintain and evolve architecture under spec-first, gate-checked automation.
+  </div>
+  <div class="tile" style="left:340px;top:320px;width:290px;height:220px;background:#FFFFFF;border:2px solid #DADCE0;">
+    <div class="bar" style="background:#455A64"></div>
+    <font color='#455A64'><b style='font-size:13px'>Quality Requirements</b></font><br>• <b>Norm Conformance</b>: Validation against KoSIT and veraPDF.<br>• <b>Quality Gates</b>: Mandatory 90% line and branch JaCoCo test gates across all backend and UI modules.<br>• <b>Comprehensive Coverage</b>: Karibu headless view testing, monkey testing, and Playwright end-to-end suites.<br>• <b>Resource Thrift</b>: Small-footprint services optimized for low-power hardware (~128 MiB NATS, lean JVM).<br>• <b>Accessibility & Usability</b>: ARIA keyboard navigation, dark mode support, and resilient state handling.
+  </div>
+  <div class="tile" style="left:40px;top:550px;width:590px;height:220px;background:#FFFFFF;border:2px solid #DADCE0;">
+    <div class="bar" style="background:#1A73E8"></div>
+    <font color='#1A73E8'><b style='font-size:13px'>Business Context</b></font><br>• <b>Target Audience & Goal</b>: Practical, zero-subscription e-invoicing for solo entrepreneurs, craft businesses, and freelancers; accessible open-source foundation ("Linux for e-invoicing").<br>• <b>Legal Compliance Core</b>: Generates legally mandated EN 16931 e-invoices (ZUGFeRD, XRechnung) and DIN 5008 PDF/A-3b without cloud SaaS lock-in or recurring license fees.<br>• <b>Honest Scope Limits</b>: Dedicated strictly to invoice and receipt lifecycle; excludes Peppol AS4 networks, payment processing, and double-entry accounting; French Factur-X route on standby (no development).<br>• <b>Operating Model</b>: Local-first single-operator system; Caddy reverse proxy terminates HTTPS, core data commits to PostgreSQL, document artifacts persist to S3/RustFS.<br>• <b>System Interfaces</b>: Asynchronous PDF/XML worker pipeline via NATS JetStream; optional mail dispatch SCS (kotlin-email, email-app under /mail, SMTP) and out-of-band ops via lt CLI.
+  </div>
+  <div class="tile" style="left:640px;top:550px;width:590px;height:220px;background:#FFFFFF;border:2px solid #DADCE0;">
+    <div class="bar" style="background:#188038"></div>
+    <font color='#188038'><b style='font-size:13px'>Components / Modules</b></font><br>• <b>kotlin-invoice</b>: Core web application, Vaadin Flow UI, use cases behind per-use-case input ports, domain model, REST endpoints, JPA persistence, and PDFBox-based receipt normalization at upload.<br>• <b>kotlin-shared / kotlin-ui-components</b>: Cross-cutting Money, DTOs, size-budget policy, B2B terms; shared Vaadin widgets (free-text editor).<br>• <b>kotlin-xpdf (+ kotlin-facturx library)</b>: Rendering/validation service — Typst, Mustang/CII, KoSIT, veraPDF; the library's French Factur-X route is on standby.<br>• <b>kotlin-email (+ kotlin-mail-contract)</b>: Optional mail SCS — email-core, email-service, headless deployable email-app (REST only; mail views live in the invoicing app); frozen published contract.<br>• <b>kotlin-e2e-tests / email-e2e-tests</b>: Cross-module E2E suites on real Testcontainers (Postgres, NATS, RustFS, Mailpit).<br>• <b>little-trotter-admin-tools (sibling repo)</b>: Operator tooling — Phase 1 shell automation and reference configs (MVP until Q4/2027); Phase 2 Go CLI suite (lt, lhorse) after phase-gate hardening; Playwright suite, monitoring, backups.
+  </div>
+  <div class="tile" style="left:40px;top:780px;width:1190px;height:130px;background:#FDF3F2;border:3px solid #D93025;">
+    <div class="bar" style="background:#D93025"></div>
+    <font color='#D93025'><b style='font-size:13px'>Core Risks and Missing Information</b></font><br>• <b>Regulatory Volatility</b>: Ongoing changes to European e-invoicing standards, profiles, and validation rules.<br>• <b>Rendering Complexities</b>: PDF/A-3b color profiling, font licensing, and dynamic page-break layout math.<br>• <b>Resource Headroom</b>: Mini PC memory constraints requiring active resource limits and lean profiles.<br>• <b>Single-Maintainer Bus Factor</b>: Mitigated by ArchUnit rules, conventional commits, and arc42 documentation.<br>• <b>Mail Integration</b>: Separate SCS (kotlin-email) needs a frozen contract, durable NATS queues, and SMTP deliverability on self-hosted hardware.
+  </div>
+</div>
+</div>
+<div class="credits" style="max-width:1270px">
+  arc42 template: <a href="https://canvas.arc42.org/architecture-communication-canvas">Architecture Communication Canvas</a>.<br>
+Canvas as draw.io (generated from this page): <a href="architecture-communication-canvas.drawio">architecture-communication-canvas.drawio</a>.<br>
+Related canvas: <a href="architecture-inception-canvas.html">Architecture Inception Canvas</a> | <a href="architecture-inception-canvas.drawio">draw.io</a>.<br>
+Full documentation: <a href="arc42-docs.html">arc42 Architecture Documentation</a>.<br>
+Notice: AI-assisted documentation. All examples, organizations, and fixtures represent randomly generated synthetic test data (`datagen`).<br>
+License: software Apache-2.0; concept, design and this canvas CC BY 4.0 with attribution to <a href="LICENSE">Little Trotter</a> (see <a href="LICENSE">LICENSE</a> / <a href="NOTICE">NOTICE</a>).
+</div>
+  <a href="index.html" class="back-to-index" rel="home" aria-label="Back from Little Trotter X-Invoice — Architecture Communication Canvas to the documentation index" title="Back to documentation index">
+    <span class="back-to-index__icon" aria-hidden="true">
+      <span class="back-to-index__arrow">&larr;</span>
+    </span>
+    <span class="back-to-index__copy">
+      <span class="back-to-index__eyebrow">Documentation Hub</span>
+      <span class="back-to-index__title">Return to index</span>
+    </span>
+  </a>
+</body>
+</html>

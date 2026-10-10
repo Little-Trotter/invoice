@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 2.0.18">
+<meta name="description" content="Zentrales Fachglossar: E-Rechnungsstandards (EN 16931, ZUGFeRD, XRechnung), deutsches Steuer- und Handelsrecht (UStG, GoBD, BEG IV) und Praxisbegriffe">
+<meta name="author" content="Projektinitiator (https://github.com/eifel42[eifel42])">
+<meta name="copyright" content="Copyright (C) 2026 https://github.com/little-trotter/invoice">
+<title>Fachglossar: E-Rechnung, Steuerrecht &amp; Praxis</title>
+<link rel="stylesheet" href="css/arc42-docs.css">
+<!-- arc42 documentation — docinfo header -->
+<!-- No external runtime resources: generated output must not depend on CDNs. -->
+
+<!-- Meta tags for better mobile experience -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- App accent color (--lt-accent in styles.css); browsers auto-pick a
+     prefers-color-scheme variant of the same file, but there is no
+     dedicated dark theme-color here since the docs page itself always
+     paints its own dark background via CSS regardless. -->
+<meta name="theme-color" content="#1A73E8">
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const path = window.location.pathname;
+    const isIndex = path.endsWith('/index.html') || path === '/' || path === '';
+
+    if (isIndex || document.querySelector('.back-to-index')) {
+      return;
+    }
+
+    const pageTitle =
+      document.querySelector('#content h1, #header h1')?.textContent?.trim() ||
+      document.title.replace(/\s+-\s+.*$/, '').trim() ||
+      'Current page';
+
+    const link = document.createElement('a');
+    link.href = 'index.html';
+    link.className = 'back-to-index';
+    link.setAttribute('rel', 'home');
+    link.setAttribute('aria-label', `Back from ${pageTitle} to the documentation index`);
+    link.setAttribute('title', 'Back to documentation index');
+    link.innerHTML = `
+      <span class="back-to-index__icon" aria-hidden="true">
+        <span class="back-to-index__arrow">&larr;</span>
+      </span>
+      <span class="back-to-index__copy">
+        <span class="back-to-index__eyebrow">Documentation Hub</span>
+        <span class="back-to-index__title">Return to index</span>
+      </span>
+    `;
+    document.body.appendChild(link);
+
+    // Executive Brand Header Banner (A-Concept)
+    if (!document.querySelector('.lt-brand-bar')) {
+      const brandBar = document.createElement('div');
+      brandBar.className = 'lt-brand-bar';
+      brandBar.innerHTML = `
+        <div class="lt-brand-bar__inner">
+          <a href="index.html" class="lt-brand-bar__logo-link" title="Little Trotter Homepage">
+            <img src="images/little-trotter-head-icon.svg" alt="Little Trotter Horse Head Icon" class="lt-brand-bar__icon" />
+          </a>
+          <div class="lt-brand-bar__text">
+            <div class="lt-brand-bar__title">LITTLE TROTTER</div>
+            <div class="lt-brand-bar__subtitle">X-Invoice</div>
+          </div>
+          <div class="lt-brand-bar__badges">
+            <span class="lt-brand-badge">v0.9.10</span>
+            <span class="lt-brand-badge lt-brand-badge--preview">Developer Preview</span>
+          </div>
+        </div>
+      `;
+      const headerEl = document.getElementById('header') || document.body.firstChild;
+      if (headerEl && headerEl.parentNode) {
+        headerEl.parentNode.insertBefore(brandBar, headerEl);
+      } else {
+        document.body.insertBefore(brandBar, document.body.firstChild);
+      }
+    }
+  });
+</script>
+
+<!-- Focus styles -->
+<style>
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Improved focus styles for accessibility */
+  a:focus, button:focus, input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--lt-accent, #1A73E8);
+    outline-offset: 2px;
+  }
+
+  /* Dark mode: all variables are defined in arc42-docs.css / arc42-canvas.css
+     (loaded via :stylesheet:, always present on every page this file is
+     injected into) — this block just reads --lt-* custom properties, it
+     does not redefine them. */
+</style>
+
+<!-- Disclaimer footer injected on all arc42 pages -->
+<style>
+  #ltx-disclaimer {
+    margin-top: 3rem;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--lt-rule, #DADCE0);
+    font-size: 0.8rem;
+    color: var(--lt-text-secondary, #5F6368);
+    line-height: 1.6;
+  }
+  #ltx-disclaimer .disclaimer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-bottom: 6px;
+  }
+  #ltx-disclaimer .disclaimer-links a {
+    color: var(--lt-accent, #1A73E8);
+  }
+  #ltx-disclaimer .disclaimer-note {
+    color: var(--lt-text-disabled, #9AA0A6);
+    font-size: 0.75rem;
+  }
+  @media print {
+    #ltx-disclaimer { display: none; }
+  }
+</style>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const footer = document.createElement('div');
+    footer.id = 'ltx-disclaimer';
+    footer.innerHTML = `
+      <div class="disclaimer-links">
+        <a href="https://github.com/little-trotter" target="_blank" rel="noopener">&#169; 2026 little-trotter</a>
+        <a href="index.html">Documentation Index</a>
+      </div>
+      <p class="disclaimer-note">
+        Internal architecture documentation for Little Trotter X-Invoice.
+        AI-assisted documentation &middot; Synthetic test data (datagen) &middot; Not published outside the development team.
+      </p>
+    `;
+    document.body.appendChild(footer);
+  });
+</script>
+
+<!-- Click-to-zoom lightbox for arc42 diagrams (dependency-free) -->
+<style>
+  [hidden] {
+    display: none !important;
+  }
+
+  #content .imageblock img {
+    cursor: zoom-in;
+  }
+
+  .lt-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .88);
+    cursor: zoom-out;
+    touch-action: none;
+  }
+
+  /* Sized by script to fit 95vw x 95vh while keeping the aspect ratio: vector diagrams are
+     scaled up, raster images never beyond their natural size. No letterboxing, so the
+     white diagram background ends exactly where the image ends.
+     Zoom/pan is layered on top via a CSS transform (translate + scale) with
+     transform-origin at the top-left corner, so the script's math stays in one
+     coordinate space (see setZoom/clampPan below). */
+  .lt-lightbox__img {
+    display: block;
+    cursor: zoom-out;
+    background: #ffffff;
+    transform-origin: 0 0;
+    will-change: transform;
+    touch-action: none;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  .lt-lightbox__hint {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: .75rem;
+    margin: 0;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255, 255, 255, .75);
+    pointer-events: none;
+  }
+
+  .lt-lightbox__close {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, .12);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, .4);
+    font-size: 1.75rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .lt-lightbox__close:hover {
+    background: rgba(255, 255, 255, .24);
+  }
+  .lt-lightbox__close:focus {
+    outline: 3px solid var(--lt-accent, #1A73E8);
+    outline-offset: 2px;
+  }
+</style>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const images = document.querySelectorAll('#content .imageblock img');
+    if (!images.length) {
+      return;
+    }
+
+    let overlay = null;
+    let overlayImg = null;
+    let closeBtn = null;
+    let lastFocused = null;
+
+    // Zoom/pan state, shared by the single overlay instance. `scale` is relative
+    // to the fitted size from fitOverlayImage(); translate is in screen pixels
+    // and applies via `transform: translate(tx,ty) scale(scale)` with
+    // transform-origin 0 0 (see CSS), so the maths below stays in one space.
+    const MIN_SCALE = 1;
+    const MAX_SCALE = 8;
+    let scale = 1;
+    let tx = 0;
+    let ty = 0;
+    let baseRect = null; // overlayImg's layout rect while scale=1/tx=0/ty=0
+    const activePointers = new Map(); // pointerId -> {x, y}, for pan + pinch
+    let dragState = null; // single-pointer drag/click tracking
+    let pinchState = null; // two-pointer pinch-zoom tracking
+    let pendingClickTimer = null; // double-click disambiguation on the image
+
+    function isSvgSrc(src) {
+      return /\.svg(\?.*)?$/i.test(src || '');
+    }
+
+    function labelFor(img) {
+      const figureTitle = img.closest('.imageblock')?.querySelector('.title')?.textContent?.trim();
+      return figureTitle || img.getAttribute('alt') || 'Diagram';
+    }
+
+    function fitOverlayImage(allowUpscale) {
+      const naturalWidth = overlayImg.naturalWidth;
+      const naturalHeight = overlayImg.naturalHeight;
+      if (!naturalWidth || !naturalHeight) {
+        return;
+      }
+      let fitted = Math.min(
+        (window.innerWidth * 0.95) / naturalWidth,
+        (window.innerHeight * 0.95) / naturalHeight
+      );
+      if (!allowUpscale) {
+        fitted = Math.min(fitted, 1);
+      }
+      overlayImg.style.width = Math.round(naturalWidth * fitted) + 'px';
+      overlayImg.style.height = Math.round(naturalHeight * fitted) + 'px';
+    }
+
+    function applyTransform() {
+      overlayImg.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    }
+
+    function resetTransform() {
+      scale = 1;
+      tx = 0;
+      ty = 0;
+      applyTransform();
+      overlayImg.style.cursor = '';
+    }
+
+    // Fit the image to the viewport and drop any zoom/pan, then remember its
+    // untransformed layout rect -- the fixed reference point for all zoom/pan math.
+    function refit(allowUpscale) {
+      fitOverlayImage(allowUpscale);
+      resetTransform();
+      baseRect = overlayImg.getBoundingClientRect();
+    }
+
+    // Keep at least 20% of the (scaled) image inside the viewport on each axis.
+    function clampPan() {
+      if (!baseRect) {
+        return;
+      }
+      const displayedWidth = baseRect.width * scale;
+      const displayedHeight = baseRect.height * scale;
+      const minVisibleX = displayedWidth * 0.2;
+      const minVisibleY = displayedHeight * 0.2;
+      const txMax = window.innerWidth - minVisibleX - baseRect.left;
+      const txMin = minVisibleX - displayedWidth - baseRect.left;
+      const tyMax = window.innerHeight - minVisibleY - baseRect.top;
+      const tyMin = minVisibleY - displayedHeight - baseRect.top;
+      tx = Math.min(txMax, Math.max(txMin, tx));
+      ty = Math.min(tyMax, Math.max(tyMin, ty));
+    }
+
+    // Zoom to `newScale`, keeping the content point under (clientX, clientY) fixed on screen.
+    function setZoom(newScale, clientX, clientY) {
+      if (!baseRect) {
+        return;
+      }
+      newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
+      if (newScale === scale) {
+        return;
+      }
+      const localX = (clientX - baseRect.left - tx) / scale;
+      const localY = (clientY - baseRect.top - ty) / scale;
+      tx += localX * (scale - newScale);
+      ty += localY * (scale - newScale);
+      scale = newScale;
+      clampPan();
+      applyTransform();
+      overlayImg.style.cursor = scale > 1 ? 'grab' : '';
+    }
+
+    function toggleZoom(clientX, clientY) {
+      if (scale > 1) {
+        resetTransform();
+      } else {
+        setZoom(2.5, clientX, clientY);
+      }
+    }
+
+    function distanceBetween(p1, p2) {
+      return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    }
+
+    function midpointBetween(p1, p2) {
+      return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    }
+
+    // A pointerup that never moved 4px is a "click". On the backdrop that always
+    // closes; on the image it closes only when not zoomed, with a short delay so
+    // a second click arriving in time is treated as a double-click (zoom toggle)
+    // instead.
+    function handleClick(clientX, clientY, onImage) {
+      if (!onImage) {
+        closeLightbox();
+        return;
+      }
+      if (pendingClickTimer) {
+        clearTimeout(pendingClickTimer);
+        pendingClickTimer = null;
+        toggleZoom(clientX, clientY);
+        return;
+      }
+      pendingClickTimer = setTimeout(() => {
+        pendingClickTimer = null;
+        if (scale <= 1) {
+          closeLightbox();
+        }
+      }, 300);
+    }
+
+    function onPointerDown(event) {
+      if (event.target === closeBtn) {
+        return; // the button handles its own click
+      }
+      event.preventDefault(); // no native image drag / text selection while panning
+      activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const onImage = event.target === overlayImg;
+
+      if (activePointers.size === 2) {
+        // Second finger: switch to pinch-zoom, drop any single-pointer drag.
+        dragState = null;
+        const pts = [...activePointers.values()];
+        const mid = midpointBetween(pts[0], pts[1]);
+        pinchState = {
+          dist: distanceBetween(pts[0], pts[1]),
+          scale0: scale,
+          localX: (mid.x - baseRect.left - tx) / scale,
+          localY: (mid.y - baseRect.top - ty) / scale
+        };
+        return;
+      }
+
+      if (activePointers.size === 1) {
+        overlayImg.setPointerCapture?.(event.pointerId);
+        dragState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startTx: tx,
+          startTy: ty,
+          moved: false,
+          onImage
+        };
+        if (scale > 1 && onImage) {
+          overlayImg.style.cursor = 'grabbing';
+        }
+      }
+    }
+
+    function onPointerMove(event) {
+      if (!activePointers.has(event.pointerId)) {
+        return;
+      }
+      activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      if (pinchState && activePointers.size === 2) {
+        const pts = [...activePointers.values()];
+        const newDist = distanceBetween(pts[0], pts[1]);
+        const mid = midpointBetween(pts[0], pts[1]);
+        scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinchState.scale0 * (newDist / pinchState.dist)));
+        tx = mid.x - baseRect.left - pinchState.localX * scale;
+        ty = mid.y - baseRect.top - pinchState.localY * scale;
+        clampPan();
+        applyTransform();
+        return;
+      }
+
+      if (dragState && event.pointerId === dragState.pointerId && activePointers.size === 1) {
+        const dx = event.clientX - dragState.startX;
+        const dy = event.clientY - dragState.startY;
+        if (Math.hypot(dx, dy) > 4) {
+          dragState.moved = true;
+        }
+        if (scale > 1 && dragState.onImage) {
+          tx = dragState.startTx + dx;
+          ty = dragState.startTy + dy;
+          clampPan();
+          applyTransform();
+        }
+      }
+    }
+
+    function onPointerUp(event) {
+      if (!activePointers.has(event.pointerId)) {
+        return;
+      }
+      activePointers.delete(event.pointerId);
+
+      if (pinchState) {
+        if (activePointers.size < 2) {
+          pinchState = null;
+        }
+        return;
+      }
+
+      if (dragState && event.pointerId === dragState.pointerId) {
+        overlayImg.style.cursor = scale > 1 ? 'grab' : '';
+        if (!dragState.moved) {
+          handleClick(event.clientX, event.clientY, dragState.onImage);
+        }
+        dragState = null;
+      }
+    }
+
+    function onPointerCancel(event) {
+      activePointers.delete(event.pointerId);
+      pinchState = null;
+      dragState = null;
+    }
+
+    function buildOverlay() {
+      overlay = document.createElement('div');
+      overlay.className = 'lt-lightbox';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.hidden = true;
+
+      overlayImg = document.createElement('img');
+      overlayImg.className = 'lt-lightbox__img';
+      overlayImg.draggable = false; // otherwise a mouse drag starts native image drag-and-drop
+      overlayImg.style.transform = 'translate(0px, 0px) scale(1)';
+
+      closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'lt-lightbox__close';
+      closeBtn.setAttribute('aria-label', 'Close enlarged image');
+      closeBtn.innerHTML = '&times;';
+
+      const hint = document.createElement('p');
+      hint.className = 'lt-lightbox__hint';
+      hint.setAttribute('aria-hidden', 'true');
+      hint.textContent = 'Scroll or pinch to zoom · drag to pan · 0 resets · Esc closes';
+
+      overlay.appendChild(overlayImg);
+      overlay.appendChild(closeBtn);
+      overlay.appendChild(hint);
+      document.body.appendChild(overlay);
+
+      overlayImg.addEventListener('load', () => refit(isSvgSrc(overlayImg.src)));
+      window.addEventListener('resize', () => {
+        if (!overlay.hidden) {
+          refit(isSvgSrc(overlayImg.src));
+        }
+      });
+
+      overlay.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const notches = -event.deltaY / 100;
+        setZoom(scale * Math.pow(1.1, notches), event.clientX, event.clientY);
+      }, { passive: false });
+
+      overlay.addEventListener('pointerdown', onPointerDown);
+      overlay.addEventListener('pointermove', onPointerMove);
+      overlay.addEventListener('pointerup', onPointerUp);
+      overlay.addEventListener('pointercancel', onPointerCancel);
+
+      closeBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        closeLightbox();
+      });
+      overlay.addEventListener('keydown', (event) => {
+        const panStep = 40;
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeLightbox();
+        } else if (event.key === 'Tab') {
+          // Only the close button is focusable inside the dialog: keep Tab there.
+          event.preventDefault();
+          closeBtn.focus();
+        } else if (event.key === '+' || event.key === '=') {
+          event.preventDefault();
+          setZoom(scale * 1.4, window.innerWidth / 2, window.innerHeight / 2);
+        } else if (event.key === '-' || event.key === '_') {
+          event.preventDefault();
+          setZoom(scale / 1.4, window.innerWidth / 2, window.innerHeight / 2);
+        } else if (event.key === '0') {
+          event.preventDefault();
+          resetTransform();
+        } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault();
+          if (event.key === 'ArrowUp') ty -= panStep;
+          else if (event.key === 'ArrowDown') ty += panStep;
+          else if (event.key === 'ArrowLeft') tx += panStep;
+          else tx -= panStep;
+          clampPan();
+          applyTransform();
+        }
+      });
+    }
+
+    function openLightbox(img) {
+      if (!overlay) {
+        buildOverlay();
+      }
+      lastFocused = document.activeElement;
+
+      const src = img.currentSrc || img.src;
+      overlay.setAttribute('aria-label', img.getAttribute('alt') || labelFor(img));
+      overlayImg.alt = img.getAttribute('alt') || '';
+      overlayImg.style.width = '';
+      overlayImg.style.height = '';
+      overlayImg.src = src;
+      refit(isSvgSrc(src));
+
+      overlay.hidden = false;
+      document.body.style.overflow = 'hidden';
+      closeBtn.focus();
+    }
+
+    function closeLightbox() {
+      if (!overlay || overlay.hidden) {
+        return;
+      }
+      overlay.hidden = true;
+      document.body.style.overflow = '';
+
+      if (pendingClickTimer) {
+        clearTimeout(pendingClickTimer);
+        pendingClickTimer = null;
+      }
+      dragState = null;
+      pinchState = null;
+      activePointers.clear();
+
+      if (lastFocused && typeof lastFocused.focus === 'function') {
+        lastFocused.focus();
+      }
+      lastFocused = null;
+    }
+
+    images.forEach((img) => {
+      img.setAttribute('tabindex', '0');
+      img.setAttribute('role', 'button');
+      img.setAttribute('aria-label', 'Enlarge: ' + labelFor(img));
+
+      img.addEventListener('click', () => openLightbox(img));
+      img.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openLightbox(img);
+        }
+      });
+    });
+  });
+</script>
+
+<!-- Collapsible Table of Contents (Accordion) -->
+<style>
+  .lt-toc-search {
+    margin: 0 0 0.75rem;
+    position: relative;
+  }
+  .lt-toc-search__input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    border: 1px solid var(--sidebar-border, #dadce0);
+    border-radius: 4px;
+    background: var(--bg-primary, #ffffff);
+    color: var(--lt-text-primary, #202124);
+    outline: none;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+  .lt-toc-search__input:focus {
+    border-color: var(--lt-accent, #1a73e8);
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+  }
+  .lt-toc-search__results {
+    display: none;
+    max-height: 280px;
+    overflow-y: auto;
+    margin: 4px 0 0;
+    padding: 4px 0;
+    list-style: none;
+    background: var(--bg-primary, #ffffff);
+    border: 1px solid var(--sidebar-border, #dadce0);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    font-size: 0.78rem;
+    z-index: 10;
+  }
+  .lt-toc-search__results li a {
+    display: block;
+    padding: 6px 10px;
+    color: var(--lt-text-primary, #202124);
+    text-decoration: none;
+    line-height: 1.3;
+  }
+  .lt-toc-search__results li a:hover,
+  .lt-toc-search__results li a:focus {
+    background: var(--lt-hover, #e8f0fe);
+    color: var(--lt-accent, #1a73e8);
+  }
+  .lt-search-match {
+    background: #fff3b0;
+    color: #202124;
+    padding: 1px 3px;
+    border-radius: 2px;
+  }
+
+  .lt-toc-controls {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed var(--sidebar-border, #dadce0);
+  }
+
+  .lt-toc-btn {
+    background: transparent;
+    border: 1px solid var(--sidebar-border, #dadce0);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    font-family: inherit;
+    font-weight: 500;
+    color: var(--lt-text-secondary, #5f6368);
+    cursor: pointer;
+    line-height: 1.2;
+    transition: all 0.15s ease-in-out;
+  }
+
+  .lt-toc-btn:hover,
+  .lt-toc-btn:focus-visible {
+    border-color: var(--lt-accent, #1a73e8);
+    color: var(--lt-accent, #1a73e8);
+    background-color: var(--lt-hover, #e8f0fe);
+    outline: none;
+  }
+
+  #toc li.has-children {
+    position: relative;
+  }
+
+  #toc li.has-children > a {
+    padding-right: 2.25rem;
+  }
+
+  .lt-toc-toggle {
+    position: absolute;
+    right: 0.25rem;
+    top: 0.25rem;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--lt-text-secondary, #5f6368);
+    cursor: pointer;
+    padding: 0;
+    z-index: 2;
+    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+  }
+
+  .lt-toc-toggle:hover,
+  .lt-toc-toggle:focus-visible {
+    background-color: var(--lt-hover, #e8f0fe);
+    color: var(--lt-accent, #1a73e8);
+    outline: none;
+  }
+
+  .lt-toc-toggle svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  #toc li.has-children > ul {
+    display: none;
+  }
+
+  #toc li.has-children.is-expanded > ul {
+    display: block;
+  }
+
+  #toc li.has-children.is-expanded > .lt-toc-toggle svg {
+    transform: rotate(90deg);
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toc = document.getElementById('toc');
+    if (!toc) return;
+
+    const toctitle = document.getElementById('toctitle');
+    const isDe = (document.documentElement.lang || 'en').startsWith('de');
+
+    if (toctitle) {
+      const searchBox = document.createElement('div');
+      searchBox.className = 'lt-toc-search';
+      searchBox.innerHTML = `
+        <input type="search" class="lt-toc-search__input" placeholder="${isDe ? 'In Dokumentation suchen…' : 'Search documentation…'}" aria-label="${isDe ? 'Dokumentation durchsuchen' : 'Search documentation'}">
+        <ul class="lt-toc-search__results" role="listbox"></ul>
+      `;
+      toctitle.after(searchBox);
+
+      const input = searchBox.querySelector('.lt-toc-search__input');
+      const resultsList = searchBox.querySelector('.lt-toc-search__results');
+
+      // Index section titles and paragraphs
+      let searchIndex = null;
+      function buildIndex() {
+        if (searchIndex) return searchIndex;
+        searchIndex = [];
+        const content = document.getElementById('content');
+        if (!content) return searchIndex;
+        const headings = content.querySelectorAll('h1, h2, h3, h4');
+        headings.forEach(h => {
+          const id = h.id || h.querySelector('a.link, a.anchor')?.getAttribute('href')?.replace('#', '');
+          if (id && h.textContent.trim()) {
+            searchIndex.push({
+              id: id,
+              title: h.textContent.replace(/^§*\s*[\d.]*\s*/, '').trim(),
+              tag: h.tagName.toLowerCase(),
+              text: (h.nextElementSibling?.textContent || '').substring(0, 160)
+            });
+          }
+        });
+        return searchIndex;
+      }
+
+      input.addEventListener('input', () => {
+        const query = input.value.trim().toLowerCase();
+        if (query.length < 2) {
+          resultsList.style.display = 'none';
+          resultsList.innerHTML = '';
+          return;
+        }
+        const index = buildIndex();
+        const matches = index.filter(item =>
+          item.title.toLowerCase().includes(query) || item.text.toLowerCase().includes(query)
+        ).slice(0, 8);
+
+        if (matches.length === 0) {
+          resultsList.innerHTML = `<li style="padding:6px 10px;color:var(--lt-text-secondary);">${isDe ? 'Keine Treffer' : 'No results found'}</li>`;
+          resultsList.style.display = 'block';
+          return;
+        }
+
+        resultsList.innerHTML = matches.map(m => `
+          <li>
+            <a href="#${m.id}">
+              <strong>${m.title}</strong>
+              <div style="font-size:0.7rem;color:var(--lt-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.text}</div>
+            </a>
+          </li>
+        `).join('');
+        resultsList.style.display = 'block';
+      });
+
+      resultsList.addEventListener('click', (e) => {
+        const link = e.target.closest('a');
+        if (link) {
+          resultsList.style.display = 'none';
+          input.value = '';
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!searchBox.contains(e.target)) {
+          resultsList.style.display = 'none';
+        }
+      });
+
+      // Quick shortcut '/' to focus search
+      document.addEventListener('keydown', (e) => {
+        if (e.key === '/' && document.activeElement !== input && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+          e.preventDefault();
+          input.focus();
+        }
+      });
+
+      const controls = document.createElement('div');
+      controls.className = 'lt-toc-controls';
+      controls.innerHTML = `
+        <button type="button" class="lt-toc-btn lt-toc-btn--expand" title="${isDe ? 'Alle Abschnitte aufklappen' : 'Expand all sections'}">${isDe ? 'Alle aufklappen' : 'Expand all'}</button>
+        <button type="button" class="lt-toc-btn lt-toc-btn--collapse" title="${isDe ? 'Alle Abschnitte einklappen' : 'Collapse all sections'}">${isDe ? 'Alle einklappen' : 'Collapse all'}</button>
+      `;
+      searchBox.after(controls);
+
+      controls.querySelector('.lt-toc-btn--expand').addEventListener('click', () => {
+        toc.querySelectorAll('li.has-children').forEach((li) => {
+          li.classList.add('is-expanded');
+          const btn = li.querySelector(':scope > .lt-toc-toggle');
+          if (btn) btn.setAttribute('aria-expanded', 'true');
+        });
+      });
+
+      controls.querySelector('.lt-toc-btn--collapse').addEventListener('click', () => {
+        toc.querySelectorAll('li.has-children').forEach((li) => {
+          li.classList.remove('is-expanded');
+          const btn = li.querySelector(':scope > .lt-toc-toggle');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+
+    const allLis = toc.querySelectorAll('li');
+    allLis.forEach((li) => {
+      const childUl = li.querySelector(':scope > ul');
+      const link = li.querySelector(':scope > a');
+      if (!childUl || !link) return;
+
+      li.classList.add('has-children');
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'lt-toc-toggle';
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-label', isDe ? 'Unterpunkte umschalten' : 'Toggle sub-sections');
+      toggle.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>`;
+
+      link.after(toggle);
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const expanded = li.classList.toggle('is-expanded');
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      });
+
+      link.addEventListener('click', () => {
+        li.classList.add('is-expanded');
+        toggle.setAttribute('aria-expanded', 'true');
+      });
+    });
+
+    function expandCurrentAnchor() {
+      const hash = window.location.hash;
+      if (!hash) return;
+      try {
+        const activeLink = toc.querySelector(`a[href="${hash}"]`);
+        if (activeLink) {
+          let parent = activeLink.closest('li.has-children');
+          while (parent) {
+            parent.classList.add('is-expanded');
+            const btn = parent.querySelector(':scope > .lt-toc-toggle');
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+            parent = parent.parentElement ? parent.parentElement.closest('li.has-children') : null;
+          }
+        }
+      } catch (err) {
+        // Ignore malformed selector
+      }
+    }
+
+    expandCurrentAnchor();
+    window.addEventListener('hashchange', expandCurrentAnchor);
+  });
+</script>
+</head>
+<body class="book toc2 toc-left">
+<div id="header">
+<h1>Fachglossar: E-Rechnung, Steuerrecht &amp; Praxis</h1>
+<div class="details">
+<span id="author" class="author">Projektinitiator (https://github.com/eifel42[eifel42])</span><br>
+<span id="revnumber">version 0.9.33-SNAPSHOT,</span>
+<span id="revdate">2026-10-08</span>
+</div>
+<div id="toc" class="toc2">
+<div id="toctitle">Inhaltsverzeichnis</div>
+<ul class="sectlevel1">
+<li><a href="#_e_rechnung_rechnungsarten_standards">1. E-Rechnung, Rechnungsarten &amp; Standards</a></li>
+<li><a href="#_steuerrecht_gobd_praxis">2. Steuerrecht, GoBD &amp; Praxis</a></li>
+</ul>
+</div>
+</div>
+<div id="content">
+<div id="preamble">
+<div class="sectionbody">
+<div class="quoteblock abstract">
+<div class="title">Zusammenfassung</div>
+<blockquote>
+Dieses Dokument dient als verbindliches Fachglossar für den geschäftlichen, rechtlichen und praktischen Einsatz von <strong>Little Trotter X-Invoice</strong>. Es definiert die relevanten Normen des deutschen Steuer- und Handelsrechts (UStG, GoBD, AO, BEG IV) sowie die Vorgaben der europäischen E-Rechnungsstandards (EN 16931).
+</blockquote>
+</div>
+<div id="ai-notice-glossar-de" class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+<div class="dlist">
+<div class="title">Hinweise zu Transparenz, Testdaten und KI-Assistenz</div>
+<dl>
+<dt class="hdlist1">Transparenz und KI-Assistenz</dt>
+<dd>
+<p>Dieses Fachglossar und seine Begriffsdefinitionen wurden mit Unterstützung von generativen KI-Systemen erstellt, strukturiert und redaktionell gepflegt. Alle Begriffspaare, Rechtsnormen und Praxisdefinitionen spiegeln den tatsächlich implementierten Stand des Systems wider. Sämtliche in Beispielen verwendeten Firmennamen, Personen, Adressen und Währungsbeträge sind synthetische Testdaten (<code>datagen</code>).</p>
+</dd>
+</dl>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_e_rechnung_rechnungsarten_standards"><a class="anchor" href="#_e_rechnung_rechnungsarten_standards"></a><a class="link" href="#_e_rechnung_rechnungsarten_standards">1. E-Rechnung, Rechnungsarten &amp; Standards</a></h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 25%;">
+<col style="width: 75%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Fachbegriff</th>
+<th class="tableblock halign-left valign-top">Bedeutung &amp; Anwendungskontext</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">EN 16931</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Europäische Norm für das semantische Datenmodell elektronischer Rechnungen: Definiert standardisierte Informationselemente (Business Terms / BT-Codes), die hersteller- und plattformunabhängig in XML-Syntaxen wie CII oder UBL abgebildet werden.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ZUGFeRD</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Deutsches hybrides E-Rechnungsformat (Forum elektronische Rechnung Deutschland): Kombination aus visuell lesbarem PDF/A-3b und strukturierter, maschinenlesbarer XML-Rechnung gem. EN 16931.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">XRechnung</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Deutscher Standard für rein strukturierte, XML-basierte elektronische Rechnungen im Geschäftsverkehr mit der öffentlichen Verwaltung (B2G) auf Basis der europäischen Norm EN 16931.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Factur-X</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Deutsch-französisches hybrides E-Rechnungsformat (PDF/A-3b mit eingebetteter EN 16931 CII-XML), technisch identisch zu ZUGFeRD ab Version 2.0. Verbindliche Schreibweise: Factur-X.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">BT-Nummer</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Eindeutige Kennung eines semantischen Datenelements („Business Term“) im Datenmodell der EN 16931 (z. B. BT-1 Rechnungsnummer, BT-10 Käuferreferenz, BT-25 Vorherige Rechnungsnummer).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">KoSIT-Validator</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Offizielles Referenzprüfwerkzeug der Koordinierungsstelle für IT-Standards zur syntaktischen und semantischen Schematron-Validierung von E-Rechnungen gegen EN 16931 und nationale Geschäftsregeln.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">veraPDF</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Offizieller Open-Source-Referenzvalidator zur Prüfung der Konformität von PDF/A-Dokumenten gem. ISO-Standards (hier PDF/A-3b).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Rechnungstyp 380</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">UNTDID 1001 Typcode für eine reguläre Handelsrechnung (Commercial invoice) über gelieferte Waren oder erbrachte Dienstleistungen.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Rechnungstyp 384</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">UNTDID 1001 Typcode für eine Rechnungskorrektur (Stornorechnung): Neutralisiert eine fehlerhafte oder stornierte Vorgängerrechnung rechnerisch unter Pflichtangabe der ursprünglichen Rechnungsreferenz (BT-25).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Rechnungstyp 389</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">UNTDID 1001 Typcode für eine Gutschrift im umsatzsteuerlichen Sinn (Self-billed invoice / Abrechnung durch den Leistungsempfänger).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Rechnungstyp 381</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">UNTDID 1001 Typcode für eine Gutschriftanzeige / kaufmännische Gutschrift (Credit note, z. B. nachträglicher Preisnachlass, Retoure oder Bonus).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Rechnungsstatus</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Lebenszyklus eines Rechnungsbelegs: Vom unnummerierten, veränderlichen Entwurf (<code>DRAFT</code>) über die festgeschriebene, rechtsgültige Rechnung (<code>SENT</code>) bis zum Ausgleich (<code>PAID</code>) oder der Neutralisierung (<code>CANCELLED</code>).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Beleg</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Kaufmännischer Nachweis über einen Geschäftsvorfall oder getätigte Auslagen (z. B. Bewirtungs-, Fahrt- oder Materialquittung), der als prüfbarer Nachweis einer Rechnungsposition beigefügt wird.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Beleg-Normalisierung</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Verlustarme technische Bild- und Dateigrößenoptimierung eingebetteter Belege, um Übertragungs- und Größenbudgets von E-Rechnungs-Dateien sicher einzuhalten.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Dokumenten-Budget</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Definierte Obergrenze für das Gesamtdatenvolumen einer elektronischen Rechnung samt aller integrierten Anlagen (z. B. 20 MiB Maximalgröße bei ZUGFeRD zur Sicherstellung der Mail- und Portalfähigkeit).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Geldwert-Typ</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Typensicheres Value Object für Währungsbeträge: Verhindert Rundungsfehler und unzulässige Währungsvermischungen durch Kapselung von Skala, Rundungsmodus und Währungseinheit.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Finalisierungs-Schranke</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Prüfschranke vor der Festschreibung: Verhindert die Vergabe einer Rechnungsnummer und den rechtsverbindlichen Versand, solange Konformitäts- oder Schematron-Validierungen fehlschlagen.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Größeneinheiten-Konvention</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Exakte Trennung zwischen interner technischer Berechnung in Binärpräfixen (1 MiB = 1.048.576 Byte) und allgemeinverständlicher Ausgabe in Dezimalangaben (MB).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_steuerrecht_gobd_praxis"><a class="anchor" href="#_steuerrecht_gobd_praxis"></a><a class="link" href="#_steuerrecht_gobd_praxis">2. Steuerrecht, GoBD &amp; Praxis</a></h2>
+<div class="sectionbody">
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 25%;">
+<col style="width: 75%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Fachbegriff</th>
+<th class="tableblock halign-left valign-top">Bedeutung &amp; Anwendungskontext</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Festschreibung (GoBD)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Zentraler Grundsatz der GoBD: Elektronische Rechnungsdaten müssen ab dem Versand bzw. der Bereitstellung gegen nachträgliche Veränderung oder Löschung manipulationssicher geschützt sein. Korrekturen erfolgen ausschließlich durch förmliche Stornierung.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Aufbewahrungsfrist</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Gesetzliche Frist nach Abgabenordnung und Umsatzsteuerrecht: Seit dem Bürokratieentlastungsgesetz IV (BEG IV, ab 2025) beträgt die Aufbewahrungsfrist für Rechnungen und Buchungsbelege 8 Jahre (für Handelsbücher und Jahresabschlüsse weiterhin 10 Jahre).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Nummernkreis &amp; Hash-Kette</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Verfahren zum lückenlosen, chronologischen Nachweis erteilter Rechnungsnummern: Die kryptografische Hash-Verkettung schließt nachträgliche Einschübe oder Auslassungen manipulationssicher aus.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Storno (Rechnungskorrektur)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Förmliche Rücknahme einer bereits festgeschriebenen Rechnung durch Ausstellung eines eigenständigen Stornobelegs (Typ 384) mit betragsmäßiger Vorzeichenumkehr, unter Erhalt des unveränderten Originalbelegs.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Steuerschuldnerschaft des Leistungsempfängers</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Verlagerung der Steuerschuld auf den Rechnungsempfänger (Reverse Charge) bei grenzüberschreitenden B2B-Lieferungen und -Dienstleistungen im EU-Binnenmarkt.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Umsatzsteuer-Identifikationsnummer (USt-IdNr.)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">EU-weite Kennung eines Unternehmers zur steuerlichen Abwicklung grenzüberschreitender Lieferungen und Leistungen im EU-Binnenmarkt.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">VIES / MIAS</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Mehrwertsteuer-Informationsaustauschsystem (MIAS / VIES) der EU-Kommission zur automatisierten Bestätigungsabfrage über die Gültigkeit von ausländischen USt-IdNr. vor Ausstellung steuerfreier B2B-Rechnungen.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Leitweg-ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Adressierungsmerkmal zur eindeutigen Identifikation des öffentlichen Auftraggebers in Deutschland (B2G) bei der Übermittlung von E-Rechnungen an Bundes-, Landes- und Kommunalportale (ZRE, OZG-RE).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">B2B-Profil</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Wiederverwendbare Konfiguration kaufmännischer und semantischer Anforderungen für spezifische Geschäftskunden (z. B. Pflicht zur Angabe von Bestellnummern BT-13 oder Lieferantennummern).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Privatkunden-Hinweis</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Hinweispflicht auf Rechnungen an Privatpersonen über die gesetzliche zweijährige Aufbewahrungspflicht sowie Information über Steuerermäßigungen für Handwerker- und haushaltsnahe Dienstleistungen.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Dienstreise</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Zusammenfassende Position zur Weiterberechnung beruflich veranlasster Auswärtstätigkeiten inklusive Fahrt-, Übernachtungs- und Verpflegungskosten an den Auftraggeber.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Verpflegungstag</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Pauschale für den Verpflegungsmehraufwand je Kalendertag einer Auswärtstätigkeit, unter Berücksichtigung gesetzlicher Kürzungsbeträge bei gestellten Mahlzeiten.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Festpreis</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Vereinbarter Pauschalbetrag für ein Leistungspaket oder eine Reise, der anstelle der detaillierten Einzelaufwände als Abrechnungsgrundlage auf der Rechnung ausgewiesen wird.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Posten</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Einzelne Spesenausgabe oder Belegaufwendung im Rahmen einer Abrechnung (z. B. Hotelübernachtung, Fahrticket, Kilometergeld oder Nebenkosten).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Leistungsverzeichnis</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Stammdatenkatalog standardisierter, wiederkehrend abrechenbarer Dienstleistungen, Stundensätze und Materialien mit hinterlegten Einheitspreisen und Steuersätzen.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Katalogkategorie</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Fachliche Klassifikation von abrechenbaren Leistungen (z. B. Zeitaufwand/Stundensatz, Materialaufwand oder Pauschalpreise).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">XRechnung-Einheitscode</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">International standardisierter Maßeinheitencode nach UNECE Recommendation 20 / 21 (z. B. <code>HUR</code> für Stunde, <code>C62</code> für Stück, <code>KGM</code> für Kilogramm), der im E-Rechnungsdatensatz verpflichtend ist.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Wording-Profil</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Branchenspezifische Terminologieanpassung: Ermöglicht die flexible Ausrichtung von Benutzeroberfläche und Druckbelegen auf branchenübliche Begriffe (z. B. Handwerk, freie Berufe, Handel).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">BSI IT-Grundschutz CON.3</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Vorgabe des Bundesamts für Sicherheit in der Informationstechnik (BSI) für Datensicherungs- und Wiederanlaufkonzepte, basierend auf der 3-2-1-Regel (3 Kopien, 2 Medientypen, 1 räumlich getrennte Sicherung).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Generationenprinzip</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Bewährtes Backup-Rotationsmodell (Großvater-Vater-Sohn): Gestaffelte Vorhaltung von Tages-, Wochen- und Monatssicherungen zur Abwehr von Datenverlusten durch unbemerkt fortschreitende Korruption oder Malware.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">RPO (Maximaler Datenverlust)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Recovery Point Objective: Maximal tolerierbarer Zeitraum zwischen dem letzten konsistenten Sicherungsstand und einem Systemausfall (definiert den maximal zulässigen Datenverlust).</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">RTO (Wiederherstellungszeit)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Recovery Time Objective: Maximal zulässige Zeitspanne vom Auftreten eines Ausfalls bis zur vollständigen Wiederherstellung der operativen Systemfunktionalität.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">WORM-Speicher</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Write Once Read Many: Revisionssichere Speichertechnologie, die das unbemerkte oder vorzeitige Verändern und Löschen archivierter Steuer- und Buchungsdaten über die gesamte Aufbewahrungsfrist technisch ausschließt.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">TCO (Gesamtbetriebskosten)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Total Cost of Ownership: Ganzheitliche kaufmännische Bewertung aller anfallenden Anschaffungs-, Betriebs-, Wartungs- und Energiekosten über den gesamten Lebenszyklus einer IT-Lösung.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Green IT / Energiebudget</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Ganzheitliche ökologische Nachhaltigkeit: Konsequente Minimierung von Energie-, Material- und Rechenaufwand über den gesamten Systemlebenszyklus – vom ressourcensparenden Softwareentwurf bis zum bedarfsgerechten Betrieb.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Versandverlauf</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Systeminterne, manipulationssichere Dokumentation jedes Belegversands per E-Mail: Protokolliert Sendeaufträge, SMTP-Übertragungsstatus (<code>QUEUED</code>, <code>SENT</code>, <code>FAILED</code>), kryptografische Prüfsummen und Vorlagenversionen.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Signiertes Archivpaket (<code>tar.gz</code>)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Deterministisch erstelltes, kryptografisch versiegeltes Archivierungsgebinde (<code>&lt;id&gt;.tar.gz</code>): Beinhaltet Originalbelege (<code>original/</code>), Ed25519-Einzelsignaturen (<code>signed/</code>) und ein normiertes Manifest (<code>manifest.json</code>) zur revisionssicheren Ablage.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Archivkopie</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Inhaltsgleiche Kopie einer versendeten Kunden-E-Mail (inklusive PDF und XML), die automatisiert an eine dedizierte Archivadresse des betrieblichen E-Mail-Archivsystems übergeben wird.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Version 0.9.33-SNAPSHOT<br>
+Last updated 2026-10-08 21:11:51 UTC
+</div>
+</div>
+</body>
+</html>
