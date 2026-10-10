@@ -1,0 +1,419 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>de.littletrotter</groupId>
+    <artifactId>little-trotter-invoice-parent</artifactId>
+    <version>0.9.33-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <groupId>de.littletrotter</groupId>
+  <artifactId>kotlin-e2e-tests</artifactId>
+  <version>0.9.33-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>kotlin-e2e-tests</name>
+  <description>E2E and extended test suites for the little-trotter invoice system</description>
+
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+
+  <properties>
+
+    <kotlin-maven-plugin.version>${kotlin.version}</kotlin-maven-plugin.version>
+    <!-- RG-4 — pulls in kotlin-invoice's RG-2 invariant library as an extra test source
+         (see the build-helper-maven-plugin block below for why). -->
+
+    <jacoco.line.coverage>0.90</jacoco.line.coverage>
+    <jacoco.branch.coverage>0.90</jacoco.branch.coverage>
+
+    <!-- ST-1 — the 100-thread stress harness (ConcurrentCrudStressE2EIT) carries the `stress` JUnit
+         tag; RG-4/EP-5 — the invoice/profile/system monkeys (InvoiceMonkeyE2EIT/ProfileMonkeyE2EIT/
+         SystemMonkeyE2EIT) carry the `monkey` tag. Both groups are excluded from the default failsafe
+         run — they compile with every build (unlike the old, out-of-reactor dev-tools/monkey-tests
+         module) but only RUN when explicitly requested. `make test IT_TESTS=...` clears this to
+         empty (see root Makefile's `test` target) so an explicit run still executes any of them;
+         `make monkey ...` clears it the same way for the monkey group specifically (root
+         Makefile's `monkey` target). -->
+    <!-- Mail module: E2E classes that send mail run against the REAL email-app + Mailpit
+         (EmailAppTestResource), never a stub. The image is not built by Maven; build it once from the
+         repository root with `make e2e-mail-image` (docker build of kotlin-email/email-app/Dockerfile,
+         tag little-trotter-email-app:e2e; `make test` does this first). E2E_EMAIL_APP_IMAGE selects
+         another tag. A missing image fails the run with that hint. -->
+    <failsafe.excludedGroups>stress,monkey</failsafe.excludedGroups>
+
+    <!-- RG-4/EP-5 — seeded-randomness defaults for the monkey suites: every `make monkey`
+         invocation prints the seed it actually used, so a failure is reproducible via
+         `-Dmonkey.seed=<n>` (see MonkeyRun). `0` means "not pinned" (MonkeyRun falls back to
+         System.nanoTime()). -->
+    <monkey.seed>0</monkey.seed>
+    <monkey.steps>150</monkey.steps>
+  </properties>
+
+  <dependencies>
+    <!-- ── Kotlin ─────────────────────────────────────────────────────────── -->
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib</artifactId>
+    </dependency>
+
+    <!-- ── Quarkus ────────────────────────────────────────────────────────── -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-kotlin</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-hibernate-orm-panache-kotlin</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-arc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-flyway</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+    </dependency>
+
+    <!-- NATS JetStream client for messaging tests -->
+    <dependency>
+      <groupId>io.nats</groupId>
+      <artifactId>jnats</artifactId>
+      <version>${jnats.version}</version>
+    </dependency>
+
+    <!-- Modules under test -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-shared</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-invoice</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-xpdf</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- XPR-3 — several E2E suites import de.littletrotter.facturx types (FacturXEngine,
+         HttpFacturXEngineClient, ...) directly, not just transitively via kotlin-xpdf. -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-facturx</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!-- ── Test Dependencies ─────────────────────────────────────────────── -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jacoco</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>${assertj.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito.kotlin</groupId>
+      <artifactId>mockito-kotlin</artifactId>
+      <version>${mockito-kotlin.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- EP-3 — Karibu-Testing: drives the real kotlin-invoice Vaadin views (InvoiceDetailView,
+         B2bProfileFieldsSection) headlessly, no browser/server. -->
+    <dependency>
+      <groupId>com.github.mvysny.kaributesting</groupId>
+      <artifactId>karibu-testing-v24</artifactId>
+      <version>${karibu-testing.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Testcontainers for infrastructure (Postgres, later NATS) -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
+    <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
+
+    <plugins>
+
+      <!-- ── Quarkus (test-only: no build needed) ────────────────────────── -->
+      <plugin>
+        <groupId>${quarkus.platform.group-id}</groupId>
+        <artifactId>quarkus-maven-plugin</artifactId>
+        <version>${quarkus.platform.version}</version>
+        <extensions>false</extensions>
+        <executions>
+          <execution>
+            <goals>
+              <goal>generate-code-tests</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- RG-4 — registers kotlin-invoice's own RG-2 invariant library directory
+           (`InvoiceCalculationInvariants`/`InvoiceCalculationGenerators`, a single-file directory,
+           safe to add whole) as an extra test source for this module, so InvoiceMonkeyE2EIT can
+           re-check the same property-based invariants after every step of its random walk without
+           this module depending on a kotlin-invoice test-jar (kotlin-invoice publishes none). Must
+           run in generate-test-sources, ahead of the kotlin-maven-plugin's test-compile execution
+           below. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>${build-helper-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>add-invoice-invariants-test-source</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${maven.multiModuleProjectDirectory}/kotlin-invoice/src/test/kotlin/de/littletrotter/testing/invariants</source>
+              </sources>
+            </configuration>
+          </execution>
+          <!-- Fix-skipped-tests item 1 — same idiom, one directory down: kotlin-facturx's own
+               FacturXEngineTestResource (a single-file directory, safe to add whole), so
+               ZugferdCreditNoteConformanceE2EIT reuses the one shared resource class instead of
+               starting its own container, without this module depending on a kotlin-facturx
+               test-jar (kotlin-facturx publishes none). -->
+          <execution>
+            <id>add-facturx-engine-test-resource-source</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${maven.multiModuleProjectDirectory}/kotlin-facturx/src/test/kotlin/de/littletrotter/facturx/testsupport</source>
+              </sources>
+            </configuration>
+          </execution>
+          <!-- QA-35b — same idiom, one directory down: kotlin-xpdf's own
+               PdfExportServiceImplTestFactory (a single-file directory, safe to add whole), so
+               every E2E suite that constructs a real PdfExportServiceImpl reuses the one shared
+               factory instead of duplicating its collaborator-wiring chain, without this module
+               depending on a kotlin-xpdf test-jar (kotlin-xpdf publishes none). -->
+          <execution>
+            <id>add-pdf-export-service-test-factory-source</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${maven.multiModuleProjectDirectory}/kotlin-xpdf/src/test/kotlin/de/littletrotter/xpdf/testsupport</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- ── Kotlin Compiler ──────────────────────────────────────────────── -->
+      <plugin>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-maven-plugin</artifactId>
+        <version>${kotlin.version}</version>
+        <executions>
+          <execution>
+            <id>compile</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>test-compile</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>test-compile</goal>
+            </goals>
+          </execution>
+        </executions>
+        <dependencies>
+          <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-maven-allopen</artifactId>
+            <version>${kotlin.version}</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <jvmTarget>${java.version}</jvmTarget>
+          <!-- Kotlin-only call sites: no DefaultImpls compatibility classes for interface defaults
+               (dead forwarders that JaCoCo counted as missed lines). -->
+          <args>
+            <arg>-jvm-default=no-compatibility</arg>
+          </args>
+          <javaParameters>true</javaParameters>
+          <compilerPlugins>
+            <plugin>all-open</plugin>
+          </compilerPlugins>
+          <pluginOptions>
+            <option>all-open:annotation=jakarta.ws.rs.Path</option>
+            <option>all-open:annotation=jakarta.enterprise.context.ApplicationScoped</option>
+            <option>all-open:annotation=jakarta.enterprise.context.RequestScoped</option>
+            <option>all-open:annotation=jakarta.enterprise.context.SessionScoped</option>
+            <option>all-open:annotation=jakarta.enterprise.context.Dependent</option>
+            <option>all-open:annotation=jakarta.persistence.Entity</option>
+            <option>all-open:annotation=jakarta.persistence.MappedSuperclass</option>
+            <option>all-open:annotation=io.quarkus.arc.Unremovable</option>
+          </pluginOptions>
+        </configuration>
+      </plugin>
+
+      <!-- ── Java Compiler (disabled – pure Kotlin) ───────────────────────── -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${maven-compiler-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>default-compile</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>default-testCompile</id>
+            <phase>none</phase>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- ── Unit Tests (disabled for this E2E-only module) ───────────────── -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>${maven-surefire-plugin.version}</version>
+        <configuration>
+          <systemPropertyVariables>
+            <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+            <maven.home>${maven.home}</maven.home>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+
+      <!-- ── Integration Tests (E2E tests run via failsafe) ────────────────── -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>${maven-failsafe-plugin.version}</version>
+        <configuration>
+          <systemPropertyVariables>
+            <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+            <maven.home>${maven.home}</maven.home>
+            <!-- RG-4/EP-5 — forwarded to MonkeyRun so `-Dmonkey.seed=<n> -Dmonkey.steps=<n>` on
+                 the Maven command line actually reaches the forked test JVM. -->
+            <monkey.seed>${monkey.seed}</monkey.seed>
+            <monkey.steps>${monkey.steps}</monkey.steps>
+          </systemPropertyVariables>
+          <!-- ST-1/RG-4/EP-5 — excludes the `stress`/`monkey` tags by default; see the
+               failsafe.excludedGroups property above and the Makefile's `test`/`monkey` targets
+               for how IT_TESTS/`make monkey` clear it. -->
+          <excludedGroups>${failsafe.excludedGroups}</excludedGroups>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- ── JaCoCo Coverage (for reporting and merging with core modules) ── -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <!-- Coverage checks are NOT run in this module; it feeds exec data
+               to the core modules' checks via JaCoCo exec-merge (H27-37). -->
+        </executions>
+      </plugin>
+
+      <!-- H27-42: detekt as the Kotlin lint gate (inherited from parent) -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <!-- Inherits detekt-check execution from parent -->
+      </plugin>
+    </plugins>
+  </build>
+
+</project>

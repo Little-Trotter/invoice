@@ -1,0 +1,127 @@
+= Architecture Constraints
+
+This chapter catalogs the technical and organizational constraints that shape the architecture: language, framework, target hardware, and deployment model. They are binding decisions, not recommendations.
+
+== Technical Constraints
+
+[cols="2,4", options="header"]
+|===
+|Constraint |Rationale
+
+|Kotlin 2.4.20 / Java 25
+|Language and JVM target for every module (`kotlin.version`, `java.version` in the root
+`pom.xml`). No Java-only modules.
+
+|Quarkus 3.39.4
+|Application framework (`quarkus.platform.version` in the root `pom.xml`): CDI, persistence,
+REST, scheduling, health endpoints.
+
+|Vaadin 25.2.8 (Flow-based UI)
+|Server-side UI framework (`vaadin.version` in `kotlin-invoice/pom.xml`) for the
+Office-Manager-facing web application. No separate JavaScript SPA.
+
+|PostgreSQL 18 + Flyway
+|Relational persistence with a single editable baseline migration.
+
+|OCI-compatible container runtimes
+|Deployed via Docker Compose (`docker-compose.yml`); tested with Docker Engine/Desktop, Colima,
+Rancher Desktop, and Podman Desktop.
+
+|Target hardware: small Linux server on small-budget hardware
+|Every service in `docker-compose.yml` declares an explicit `deploy.resources.limits.memory`
+budget; the stack is sized for a mini PC, not a cloud cluster. The machine may be switched off
+in the evening; no component may assume 24/7 uptime (see <<_green_it_principles,Green IT
+Principles>>).
+
+|RustFS as the S3-compatible object store
+|A deliberate architecture decision for receipts and generated documents, including on
+small-budget hardware — not a filesystem fallback.
+
+|Invoice document size budget: 20 MiB
+|A produced e-invoice may not exceed 20 MiB: 19 distinct receipts, each embedded exactly once as
+Base64 inside the ZUGFeRD XML and normalized at upload towards 768 KiB, plus a 1 MiB reserve for
+the invoice document itself, bounded by recipients' mail gateways and the archiving path. See
+<<adr-014,ADR-014>> and <<adr-032,ADR-032>>.
+|===
+
+== Legal Constraints
+
+[cols="2,1,3,4", options="header"]
+|===
+|Topic |Source |Requirement |Architectural consequence
+
+|Invoice content and sequential numbering
+|UStG
+|Mandatory invoice content; consecutive invoice number
+|Invoice numbers come from number ranges with gapless continuity and an append-only number
+journal, allocated on the transition to `SENT` (a storno document at its creation) (<<_invoice_numbering_and_the_number_journal,Invoice Numbering and the Number Journal>>).
+
+|Structured e-invoice
+|UStG
+|Electronic invoice in a structured format (EN 16931)
+|ZUGFeRD and XRechnung output with XSD, Schematron and KoSIT validation.
+
+|Retention
+|UStG, AO
+|Invoices are kept for 8 years, books and annual statements for 10 years
+|The application is not a document archive; the operator archives sent invoices (<<adr-035,ADR-035>>, <<adr-034,ADR-034>>).
+
+|Immutability and traceability (GoBD)
+|Tax-audit rules
+|Issued invoices must not be changed unnoticed
+|Issued invoices are read-only after finalisation; corrections by storno instead of edit; changes
+are recorded in the audit journal.
+
+|Data access during a tax audit
+|AO
+|Tax authorities can request invoice data
+|Provided by the operator's archive or bookkeeping system; the application delivers XML and PDF.
+
+|Data protection
+|GDPR
+|Legal retention overrides erasure
+|Data of issued invoices is not erased on request while the retention period runs.
+|===
+
+== Organizational Constraints
+
+[cols="2,4", options="header"]
+|===
+|Constraint |Rationale
+
+|Solo maintainer + AI-agent workflow
+|A single Product Owner works with AI coding agents under a spec-then-delegate workflow: the
+PO specifies and reviews, agents implement.
+
+|Language layers
+|Source code (including comments) is English, except i18n values. Project business specifications
+and the frontend UI are German. Architecture documentation in the arc42 documentation module is US
+English.
+
+|Licensing: Apache-2.0 + CC BY 4.0
+|The software is licensed under the Apache License, Version 2.0. The overall concept, design,
+layout, and core idea carry a separate attribution requirement under CC BY 4.0 — see the
+repository `LICENSE` file.
+
+|Quality gates
+|A build-enforced JaCoCo gate requires 90% line and 90% branch coverage (including the UI
+layer). Linters (ktlint, detekt, sqlfluff where migrations exist) run as mandatory Maven build
+gates; SonarQube Community Edition must report zero errors, and Gitleaks/Trivy security scans
+must pass, before a feature is considered done; false positives are a Product Owner decision.
+|===
+
+== Conventions
+
+* *Money type*: Monetary amounts use a dedicated `Money` value type everywhere; raw
+  `BigDecimal` is reserved for quantities and factors. See <<adr-001,ADR-001>>.
+* *Enums as integer codes*: Enumerations are persisted as small integer columns (`SMALLINT` or
+  `INTEGER` in the baseline schema) via JPA attribute converters, never as `EnumType.STRING` or
+  free-text/varchar codes. Free text is reserved for user-entered content and invoice line
+  text. See <<_en_16931_mapping,EN 16931 Mapping>> in Chapter 8.
+* *UStG wording*: German invoicing terminology follows the Umsatzsteuergesetz (UStG) — "USt."
+  rather than "MwSt.". "Factur-X" is spelled as such, never "Factor-X". Foreign VAT-ID
+  designations (LU, AT, CH, BE, FR) are kept in their official form.
+* *No document-path or task-ID references from code*: KDoc and code comments explain why in
+  plain domain terms; history belongs in commit messages and the architecture documentation.
+* *Greenfield-first*: No deprecated APIs or backward-compatibility shims in new or changed
+  code; legacy patterns are replaced directly rather than kept alongside a fallback.

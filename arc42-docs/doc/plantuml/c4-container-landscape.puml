@@ -1,0 +1,99 @@
+@startuml c4-container-landscape
+
+!include <C4/C4_Container>
+
+' Arrow style (PO 2026-10-02): straight arrows first — right-angled (`ortho`), then straight
+' segments (`polyline`); a smoother form only where neither stays readable. Here `ortho` puts
+' relation labels on boundary frames and titles, and `polyline` bends most cross-boundary
+' relations into kinks, so this view uses `splines`.
+skinparam linetype splines
+skinparam defaultFontName "Roboto Condensed, Arial Narrow, sans-serif-condensed, sans-serif"
+skinparam defaultFontSize 12
+
+' PO decision 2026-09-12: reflects the real Ubuntu-server setup (little-trotter-admin-tools,
+' verified 2026-09-12) instead of a "one Docker host" simplification. PostgreSQL, RustFS and
+' Caddy run NATIVELY (systemd) — shared by every instance on the box; only the application layer
+' (app, job worker, renderer/worker, NATS, Valkey) is Docker Compose, one project per instance
+' (prod|dev|demo). Authentik and monitoring are shared Docker services adopted from — or run
+' alongside — the instance projects, never inside one. Hand-authored layout (no autoLayout):
+' native vs. Docker is called out per container via a "[native]"/"[Docker]" technology tag (kept
+' from crowding into a second boundary style so the palette stays readable), one aggregated
+' dependency stands in for every app-to-native edge, and monitoring/identity are drawn once,
+' beside the instance boundary inside the server (they run on the same host), as the
+' cross-cutting concerns they are. Palette matches
+' doc/plantuml/c4-styling.puml.inc and doc/c4/workspace.dsl (kept in sync by hand, no shared build
+' step across DSL/PlantUML/CSS in this repo).
+
+LAYOUT_TOP_DOWN()
+
+UpdateElementStyle("person", $bgColor="#5F6368", $fontColor="#ffffff", $borderColor="#4C4F53")
+UpdateElementStyle("system", $bgColor="#1A73E8", $fontColor="#ffffff", $borderColor="#1456AE")
+UpdateElementStyle("external_system", $bgColor="#9AA0A6", $fontColor="#202124", $borderColor="#74787C")
+UpdateElementStyle("container", $bgColor="#3C88EB", $fontColor="#202124", $borderColor="#2D66B0")
+UpdateElementStyle("container_db", $bgColor="#1662C5", $fontColor="#ffffff", $borderColor="#1456AE")
+UpdateElementStyle("container_queue", $bgColor="#1250A2", $fontColor="#ffffff", $borderColor="#0E3C7A")
+
+UpdateBoundaryStyle($bgColor="#ffffff", $fontColor="#5F6368", $borderColor="#5F6368")
+
+Person(officeManager, "Office Manager", "Runs invoicing, receipts")
+
+Boundary(server, "Ubuntu server", "one shared host per environment") {
+
+  Boundary(native, "Native services (systemd, not Docker)", "shared by every instance, no port offset") {
+    Container(caddy, "Caddy", "Caddy [native]", "TLS-terminating reverse proxy; one shared install, one vhost per instance")
+    ContainerDb(postgres, "PostgreSQL", "PostgreSQL 18 [native]", "One cluster; one database + role-trio per instance")
+    ContainerDb(rustfs, "RustFS", "S3 API [native]", "One instance; one bucket per instance")
+
+    Lay_R(caddy, postgres)
+    Lay_R(postgres, rustfs)
+  }
+
+  Boundary(instance, "Docker: compose project little-trotter-<instance>", "prod +0 / dev +10000 / demo +20000, own subnet each") {
+    Container(app, "little-trotter-invoice", "Kotlin, Quarkus, Vaadin Flow", "Web app: master data, invoices, receipts")
+    ContainerQueue(nats, "NATS JetStream", "NATS [Docker, per instance]", "Job and result queues")
+    Container(xpdf, "kotlin-xpdf", "Kotlin, Quarkus, Typst, Mustang, KoSIT, veraPDF", "Renders and validates PDF/A-3b, XML")
+    Container(worker, "little-trotter-job-worker", "Kotlin, Quarkus", "Driven by the app's job table: re-publishes stuck jobs")
+    ContainerDb(valkey, "Valkey", "Redis protocol [Docker, per instance]", "Cache and text payloads")
+    Container(mail, "email-app (optional)", "Kotlin, Quarkus, Vaadin [Docker, per instance]", "Mail SCS under /mail: templates, SMTP dispatch, send journal; off by default")
+
+    Lay_R(app, nats)
+    Lay_R(nats, xpdf)
+    Lay_R(xpdf, worker)
+    Lay_R(worker, valkey)
+    Lay_D(app, mail)
+  }
+
+  Lay_D(native, instance)
+
+  Boundary(shared, "Shared services", "Docker") {
+    Container(authentik, "Authentik", "OIDC provider [Docker]", "Identity provider: Office Manager login for every instance; also forward-auth for the admin site")
+    System_Ext(monitoring, "Monitoring", "Prometheus/Grafana, admin-tools")
+  
+    Lay_R(monitoring, authentik)
+  }
+  Lay_R(instance, shared)
+}
+
+System_Ext(smtp, "SMTP relay", "Operator's mail provider, outside the server")
+Lay_R(shared, smtp)
+
+Rel(officeManager, caddy, "Uses", "HTTPS")
+Rel(caddy, app, "Proxies", "HTTPS, loopback port")
+Rel_D(instance, native, "Persists,\nstores", "JDBC 5432,\nS3 9010")
+Rel_U(monitoring, instance, "Scrapes metrics", "HTTP")
+Rel_R(app, authentik, "Authenticates\nthe Office Manager", "OIDC,\nauthorization code")
+Rel_R(app, nats, "Publishes jobs, consumes results", "JetStream")
+Rel_R(nats, xpdf, "Delivers jobs, takes results", "JetStream")
+Rel(app, mail, "Creates mail draft", "HTTPS, optional")
+Rel(mail, nats, "Reports dispatch result", "JetStream")
+Rel(mail, smtp, "Submits mail", "SMTP")
+
+note bottom of shared
+  Shared services run in Docker as adopted or own containers, outside every instance project.
+  Native ports carry no instance offset (shared by prod/dev/demo): PostgreSQL 5432, RustFS 9010.
+  Docker app-stack ports keep the offset (LT_APP 8080/18080/28080, NATS 4222/14222/24222, …).
+end note
+
+SHOW_LEGEND()
+
+@enduml

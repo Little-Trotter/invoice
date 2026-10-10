@@ -1,0 +1,110 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+  <rsm:ExchangedDocumentContext>
+    <ram:BusinessProcessSpecifiedDocumentContextParameter>
+      <ram:ID>S1</ram:ID>
+    </ram:BusinessProcessSpecifiedDocumentContextParameter>
+    <ram:GuidelineSpecifiedDocumentContextParameter>
+      <ram:ID>urn:cen.eu:en16931:2017</ram:ID>
+    </ram:GuidelineSpecifiedDocumentContextParameter>
+  </rsm:ExchangedDocumentContext>
+  <rsm:ExchangedDocument>
+    <ram:ID>IT-BRFRCTC-VIOLATING-1</ram:ID>
+    <ram:TypeCode>380</ram:TypeCode>
+    <ram:IssueDateTime>
+      <udt:DateTimeString format="102">20260210</udt:DateTimeString>
+    </ram:IssueDateTime>
+    <ram:IncludedNote>
+      <ram:Content>Des frais de recouvrement sont exigibles en cas de retard de paiement.</ram:Content>
+      <ram:SubjectCode>PMT</ram:SubjectCode>
+    </ram:IncludedNote>
+    <ram:IncludedNote>
+      <ram:Content>Des penalites de retard sont applicables en cas de paiement tardif.</ram:Content>
+      <ram:SubjectCode>PMD</ram:SubjectCode>
+    </ram:IncludedNote>
+    <ram:IncludedNote>
+      <ram:Content>Pas d'escompte pour paiement anticipe.</ram:Content>
+      <ram:SubjectCode>AAB</ram:SubjectCode>
+    </ram:IncludedNote>
+  </rsm:ExchangedDocument>
+  <rsm:SupplyChainTradeTransaction>
+    <ram:IncludedSupplyChainTradeLineItem>
+        <ram:AssociatedDocumentLineDocument>
+            <ram:LineID>1</ram:LineID>
+        </ram:AssociatedDocumentLineDocument>
+        <ram:SpecifiedTradeProduct>
+            <ram:Name>Beratung</ram:Name>
+        </ram:SpecifiedTradeProduct>
+        <ram:SpecifiedLineTradeAgreement>
+            <ram:NetPriceProductTradePrice>
+                <ram:ChargeAmount>100.00</ram:ChargeAmount>
+            </ram:NetPriceProductTradePrice>
+        </ram:SpecifiedLineTradeAgreement>
+        <ram:SpecifiedLineTradeDelivery>
+            <ram:BilledQuantity unitCode="C62">8.0</ram:BilledQuantity>
+        </ram:SpecifiedLineTradeDelivery>
+        <ram:SpecifiedLineTradeSettlement>
+            <ram:ApplicableTradeTax>
+                <ram:TypeCode>VAT</ram:TypeCode>
+                <ram:CategoryCode>S</ram:CategoryCode>
+                <ram:RateApplicablePercent>19.00</ram:RateApplicablePercent>
+            </ram:ApplicableTradeTax>
+            <ram:SpecifiedTradeSettlementLineMonetarySummation>
+                <ram:LineTotalAmount>800.00</ram:LineTotalAmount>
+            </ram:SpecifiedTradeSettlementLineMonetarySummation>
+        </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>
+    <ram:ApplicableHeaderTradeAgreement>
+      <ram:SellerTradeParty>
+        <ram:Name>Sender GmbH</ram:Name>
+        <ram:PostalTradeAddress>
+<ram:PostcodeCode>28195</ram:PostcodeCode>            <ram:LineOne>Hafenstr. 12</ram:LineOne>
+            <ram:CityName>Bremen</ram:CityName>
+            <ram:CountryID>DE</ram:CountryID>
+        </ram:PostalTradeAddress>
+        <ram:URIUniversalCommunication>
+          <ram:URIID schemeID="EM">buchhaltung@sender.example</ram:URIID>
+        </ram:URIUniversalCommunication>
+        <ram:SpecifiedTaxRegistration>
+          <ram:ID schemeID="VA">DE123456789</ram:ID>
+        </ram:SpecifiedTaxRegistration>
+      </ram:SellerTradeParty>
+      <ram:BuyerTradeParty>
+        <ram:Name>Acme SARL</ram:Name>
+        <ram:SpecifiedLegalOrganization>
+             <ram:ID schemeID="0002">732829320</ram:ID>
+        </ram:SpecifiedLegalOrganization>
+        <ram:PostalTradeAddress>
+<ram:PostcodeCode>75001</ram:PostcodeCode>            <ram:LineOne>12 Rue de Paris</ram:LineOne>
+            <ram:CityName>Paris</ram:CityName>
+            <ram:CountryID>FR</ram:CountryID>
+        </ram:PostalTradeAddress>
+        <ram:URIUniversalCommunication>
+          <ram:URIID schemeID="0225">732829320</ram:URIID>
+        </ram:URIUniversalCommunication>
+        <ram:SpecifiedTaxRegistration>
+          <ram:ID schemeID="VA">FR40303265045</ram:ID>
+        </ram:SpecifiedTaxRegistration>
+      </ram:BuyerTradeParty>
+    </ram:ApplicableHeaderTradeAgreement>
+    <ram:ApplicableHeaderTradeDelivery>
+    </ram:ApplicableHeaderTradeDelivery>
+    <ram:ApplicableHeaderTradeSettlement>
+      <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
+      <ram:ApplicableTradeTax>
+            <ram:CalculatedAmount>160.00</ram:CalculatedAmount>
+            <ram:TypeCode>VAT</ram:TypeCode>
+            <ram:BasisAmount>800.00</ram:BasisAmount>
+            <ram:CategoryCode>S</ram:CategoryCode>
+            <ram:RateApplicablePercent>19.00</ram:RateApplicablePercent>
+      </ram:ApplicableTradeTax>
+      <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+        <ram:LineTotalAmount>800.00</ram:LineTotalAmount>
+        <ram:TaxBasisTotalAmount>800.00</ram:TaxBasisTotalAmount>
+        <ram:TaxTotalAmount currencyID="EUR">160.00</ram:TaxTotalAmount>
+        <ram:GrandTotalAmount>960.00</ram:GrandTotalAmount>
+		<ram:DuePayableAmount>960.00</ram:DuePayableAmount>
+      </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+    </ram:ApplicableHeaderTradeSettlement>
+  </rsm:SupplyChainTradeTransaction>
+</rsm:CrossIndustryInvoice>

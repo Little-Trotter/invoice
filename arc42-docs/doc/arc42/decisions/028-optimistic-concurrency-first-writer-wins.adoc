@@ -1,0 +1,139 @@
+[[adr-028]]
+= ADR-028: Optimistic Concurrency, First Committed Writer Wins
+
+== Status
+Accepted, implemented
+
+== Context
+
+A concurrency audit (2026-09-26) found the invoice
+header already checks a submitted revision against `Invoice.version` before applying a change
+(`InvoiceHeaderUpdateService.updateHeader`, `AbstractCrudView`'s shared revision hooks) and
+`Recipient` is fully covered (`RecipientAddressSaveConcurrencyIT`, Karibu), but invoice items had
+no version check at all: `InvoiceItemCommand`/`TripCommand` carry no `expectedVersion`, so two
+users editing the same position silently overwrite each other — a lost update, not merely an
+untested path. `Article`/Leistungsverzeichnis and reference-data catalogues sit in between: a
+version check exists (`OptimisticLockException` on a stale row, proven in
+`ArticleManagementServiceSaveTest`/`CatalogueWritesTest`), but only at unit-test granularity, with
+no delete-vs-update or two-session proof. A delete racing a concurrent update was inconsistently
+handled: sometimes a readable not-found error, sometimes an unguarded removal of changes the
+deleting session never saw.
+
+Two designs were available for versioning invoice items: give each item write its own version check
+against `InvoiceItem.version` (the column Hibernate already maintains on that entity), or route
+every item/trip write through the owning `Invoice` aggregate's single version. `Invoice` does *not*
+behave like the latter for free: `Invoice.items` is a `mappedBy` collection — the item owns the
+foreign key and its own `@Version` — so `Invoice.recalculateTotals()` before
+`InvoiceRepository.save(invoice)` only dirties the `invoice` row when the recomputed totals actually
+change; an item-only edit that leaves them numerically the same (a description-only edit, for
+example) leaves `Invoice.version` unadvanced, a real lost update caught by stress-test invariant 6.
+Making `Invoice.version` advance on every item/trip change regardless is therefore an explicit,
+separate part of this decision (see below), not a side effect already true of the aggregate.
+
+== Decision
+
+* Concurrency control is optimistic, via JPA `@Version`, one version per aggregate root — never a
+  pessimistic lock held across a user's think time. Locking (<<_locking,Locking>> above) covers a
+  different problem: mutual exclusion between concurrent transactions inside one request, not
+  contention between two separate user sessions across think time; the two mechanisms are not
+  substitutes for each other and this decision does not change lock-ordering.
+* The invoice aggregate's version (`Invoice.version`) is the single version checked for every
+  write that touches the invoice, its items, or its trips. `InvoiceItemCommand` and `TripCommand`
+  carry an `expectedVersion: Long?` field, populated from the invoice version the editing dialog
+  last loaded, checked the same way `UpdateInvoiceHeaderCommand.expectedVersion` already is —
+  before `InvoiceItemMutationService`/`TripService` mutate the loaded aggregate, never after.
+  `InvoiceItem.version`/`TripExpense.version` remain as Hibernate's own optimistic-lock columns
+  (unremovable without restructuring the entity mapping) but are not the value application code
+  compares; comparing the aggregate's one version keeps the check consistent with how the header
+  already works and avoids a second, item-scoped conflict notion the UI would also have to surface.
+* Because `InvoiceItem`/`TripExpense` are separately versioned, `mappedBy` entities, an item/trip
+  write does not reliably dirty the `invoice` row on its own (recomputed totals can come out
+  unchanged, e.g. a description-only edit). `InvoiceItemMutationService.addItem`/`updateItem`/
+  `deleteItemByPosition` and `TripService.addTrip`/`updateTrip` therefore each call
+  `InvoiceRepository.forceVersionIncrement(saved)`
+  (`em.lock(invoice, LockModeType.OPTIMISTIC_FORCE_INCREMENT)`) immediately after
+  `InvoiceRepository.save(invoice)`, unconditionally, so `Invoice.version` advances on every
+  item/trip write regardless of whether it changed any column of `invoice` itself — the same pattern
+  already used to force `SenderProfile`/`Recipient`/`Article`'s own version forward when only a
+  child row changed.
+* First committed writer wins: whichever session's transaction commits first advances
+  `Invoice.version`; every other session holding the now-stale version is rejected on its next
+  write, never allowed to overwrite silently. A version mismatch is checked and rejected *before*
+  any row is touched — the transaction is never a partial write rolled back afterward, it never
+  starts making changes.
+* A version mismatch throws `jakarta.persistence.OptimisticLockException`, surfaced to the UI as
+  a dedicated optimistic-lock notification; the offending dialog/editor stays open with the
+  user's input intact rather than closing or discarding it.
+* An update against a row deleted meanwhile fails with a readable "changed or deleted by another
+  user" error and never re-inserts the row; a delete carrying a stale `expectedVersion` is
+  rejected the same way a stale update is — a delete is a write like any other and is bound by the
+  same check, never a silent removal of edits the deleting session never saw. An update racing a
+  *successful* concurrent delete of the same row is distinguishable from a genuine version
+  conflict and reported as the deletion it is, not as an ambiguous `OptimisticLockException`.
+* A recipient, sender or article deleted concurrently while an invoice or item write referencing
+  it is in flight yields a readable rejection, never a raw foreign-key violation reaching the
+  caller.
+* Reference-data catalogues keep the existing shared `CatalogueWrites.rowFor(id, expectedVersion)`
+  helper (a `null` `expectedVersion` intentionally skips the check, for programmatic/seed writes
+  that have no prior read to compare against).
+* Verification spans four levels, each proving a different part of the same contract: unit/Karibu
+  tests per entity; the `ConcurrentCrudStressE2EIT` 100-thread storm
+  (`kotlin-e2e-tests`), extended with a lost-update invariant and a `pg_stat_database.deadlocks`
+  delta invariant; a Playwright two-user conflict spec per entity
+  (`e2e-test-playwright/tests/concurrency/`, sibling `little-trotter-admin-tools` repository); and
+  the stress suite's deadlock-delta gate at full-stack scale. The storm checks 7 invariants (zero
+  unexpected failures, zero deadlocks, no lost update) and the Playwright suite covers 10 conflict
+  specs; the module suite runs under the coverage gate and detekt. See
+  <<_concurrent_editing,Concurrent Editing>> for the per-entity coverage table.
+
+== Alternatives Considered
+
+* *Per-item version check against `InvoiceItem.version` directly:* rejected — it would introduce
+  a second, item-scoped notion of "conflict" alongside the header's invoice-scoped one, forcing
+  the UI to distinguish and explain two kinds of optimistic-lock error for what a user experiences
+  as one document; checking the aggregate's one version once is simpler, at the cost of the
+  explicit `forceVersionIncrement` call above to make that version actually advance on every item
+  change (it does not do so on its own — see Context).
+* *Pessimistic (row) locking held for the duration of an open dialog:* rejected — a lock held
+  across user think time (seconds to minutes) blocks every other session from even reading the
+  row, defeats the multi-tab/multi-user editing the application already supports, and risks the
+  same AB-BA lock-ordering hazards <<_locking,Locking>> exists to prevent, for no correctness gain
+  over optimistic checking at commit time.
+* *Last-writer-wins, unversioned:* rejected — silently
+  discards a concurrent edit neither user is warned about; acceptable for nothing a user
+  deliberately typed.
+* *Merge/reconcile concurrent edits automatically:* rejected — an invoice position has no
+  field-level merge semantics a user would trust silently (quantity, price and tax rate are not
+  independently mergeable); rejecting and asking the user to re-apply their edit against the
+  current state is the safer, simpler contract.
+
+== Consequences
+
+=== Positive
+* One conflict notion, one notification, one dialog-stays-open behavior across header, items,
+  trips, recipient, article and reference data — a user learns the pattern once.
+* No lost updates: every accepted write is provably against the version the editing session last
+  saw, for every entity in the table, not only the header.
+* Deadlock risk is not increased: optimistic checks add no new lock, so the existing lock-first
+  ordering rule (<<_locking,Locking>>) is untouched; the new deadlock-delta invariant exists
+  to keep proving that under load, not merely by inspection.
+
+=== Negative
+* `InvoiceItemCommand`/`TripCommand` grow one more field the UI dialogs must thread through
+  correctly; a dialog that fails to refresh its loaded `expectedVersion` after a partial save
+  would see spurious conflicts against its own prior write.
+* Reusing `Invoice.version` for item/trip writes means an unrelated header edit (e.g. a note
+  change) and a concurrent item edit can conflict with each other even though they touch disjoint
+  fields — a deliberately coarser granularity than per-field merging, traded for the single,
+  explainable conflict notion above.
+
+=== Mitigation
+* The four-level test proof (see Decision) runs with the build, so the contract is verified
+  continuously rather than assumed once this decision is recorded.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/InvoiceItemMutationService.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/TripService.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/repository/InvoiceRepository.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/reference/CatalogueWrites.kt`._

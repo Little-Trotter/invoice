@@ -1,0 +1,45 @@
+@startuml sequence-verify-vat-id
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+participant "EU VIES REST API" as Vies
+database "PostgreSQL\n<size:10>[Database]</size>" as DB
+
+OfficeManager -> WebApp: click "VIES prüfen"
+WebApp -> WebApp: VatIdValidator.prefixOf/numberOf\n(split the VAT id, never the address country)
+
+alt prefix not an EU VAT prefix, or format invalid
+  WebApp --> OfficeManager: info/error notification\n(no request sent)
+else EU prefix, format valid
+  WebApp -> Vies: GET /ms/{prefix}/vat/{number}
+  alt isValid=true
+    Vies --> WebApp: isValid:true, userError, name, address
+    WebApp -> WebApp: record VERIFIED, timestamp,\nnote prefill (dialog state)
+    WebApp --> OfficeManager: push VERIFIED\n(trader name/address shown)
+  else isValid=false, userError=INVALID
+    Vies --> WebApp: isValid:false, userError:INVALID
+    WebApp -> WebApp: record FAILED, timestamp\n(dialog state)
+    WebApp --> OfficeManager: push FAILED badge
+  else unreachable (timeout, 5xx, any other userError)
+    Vies --> WebApp: no answer / userError != INVALID
+    WebApp --> OfficeManager: push UNREACHABLE\n(reason named, dialog state untouched)
+  end
+end
+
+OfficeManager -> WebApp: save customer
+WebApp -> DB: persist vatIdVerificationStatus,\nvatIdVerifiedAt, note
+
+note over OfficeManager, WebApp
+  The VIES outcome is dialog state (`RecipientView.pendingVerification`) until the
+  customer is saved; a cancelled dialog discards it. Verification only ever runs on
+  this explicit click — never automatically or on a schedule, per the EU VIES terms
+  of use (<<adr-023,ADR-023>>). The button is additionally disabled while the field
+  is blank, format-invalid, or non-EU. Customers only; the seller profile and
+  additional seller VAT registrations are format-validated but never queried
+  against VIES.
+end note
+
+$SequenceStorageLegend()
+@enduml

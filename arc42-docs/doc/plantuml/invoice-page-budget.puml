@@ -1,0 +1,31 @@
+@startuml invoice-page-budget
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 11
+skinparam shadowing false
+skinparam linetype ortho
+skinparam roundCorner 0
+
+skinparam rectangle {
+  FontSize 11
+  FontStyle bold
+  FontColor #ffffff
+  BorderColor #2D66B0
+}
+
+rectangle "Page 1: Title & DIN 5008 Header\n<color:#D5E8FF>Letterhead | Address Window (DIN 5008 Form B) | Meta Info Boxes</color>" as P1Header #1A73E8
+
+rectangle "Dynamic Flow: Line Items Table\n<color:#D5E8FF>Natively paginated across pages | Repeating column header | Context-sensitive columns (VAT, period, art. no.)</color>" as Table #3C88EB
+
+rectangle "Dynamic Flow: Totals & Tax Breakdown\n<color:#D5E8FF>Sized to content rows | Tax rate split | Cash discount terms</color>" as Totals #3C88EB
+
+rectangle "Sticky Block: Payment Block + Notes\n<color:#D5E8FF>Moves as whole unit to continuation page if space tight | Optional GiroCode QR | Bank details</color>" as Payment #0D9488
+
+rectangle "Universal Page Footer (Every Page)\n<color:#D5E8FF>Mandatory register details, managing director, IBAN/BIC | Auto text-fitting (fit-line)</color>" as Footer #5F6368
+
+P1Header -down-> Table
+Table -down-> Totals
+Totals -down-> Payment : Flows together
+Payment -down-> Footer : Content area above footer
+
+@enduml

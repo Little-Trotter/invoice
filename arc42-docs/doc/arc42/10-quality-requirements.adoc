@@ -1,0 +1,186 @@
+= Quality Requirements
+
+== Quality Tree
+
+The tree below maps the six quality goals from
+<<_introduction_and_goals,Introduction and Goals>> to the concrete quality attributes and
+enforcement mechanisms that make each goal verifiable rather than aspirational. *Domain
+correctness* ranks first because the system's output is a legal document. *Test coverage and
+quality gates* rank second because they keep every other goal from silently regressing.
+*Ergonomics*, *operability*, *traceability*, and *green IT* follow, each with its own measurable attributes.
+
+.Quality Attributes — Little Trotter X-Invoice
+image::quality-tree.svg[Quality tree: six quality goals mapped to attributes and enforcement mechanisms]
+
+== Quality Scenarios
+
+The table below identifies each scenario by ID and states it as source → stimulus → response →
+measurement, so a scenario can be checked, not just read.
+
+[cols="1,2,2,3,4,4", options="header"]
+|===
+|ID |Quality Goal |Source |Stimulus |Response |Measurement
+
+|QS-1
+|Domain correctness
+|User
+|An invoice is transitioned from draft to issued.
+|The system runs XSD schema validation, then EN 16931 Schematron rules, then the embedded
+KoSIT validator against the generated X-Rechnung/ZUGFeRD XML (Mustang Project `validator`
+2.26.0, `org.kosit:validator` 1.6.3).
+|The invoice cannot reach `SENT` state while any validation stage reports a rejection;
+the KoSIT verdict is persisted and downloadable alongside the PDF/XML.
+
+|QS-2
+|Domain correctness
+|User
+|A user assigns receipts to a position or to the invoice as a whole.
+|The system judges the invoice's whole resulting receipt set against the shared document size
+budget (`ReceiptSizePolicy`) and refuses the assignment that would push the count past 19 distinct
+receipts, naming the limit; an estimated document size past 20 MiB warns instead of refusing.
+|No invoice can be saved with more than 19 distinct receipts (deduplicated by object key); document
+generation (`GenerationJobCreationService.createJob`) and the export worker
+(`PdfExportServiceImpl.enforceSizeBackstop`) each independently refuse an estimated or actual
+document size above 20 MiB as later, harder backstops.
+
+|QS-3
+|Green IT / lean payload
+|User
+|An invoice carries 19 receipts, each normalized at upload to
+`ReceiptSizePolicy.TARGET_RECEIPT_SIZE` (768 KiB).
+|Each receipt is embedded exactly once, as Base64 inside the ZUGFeRD XML
+(<<adr-032,ADR-032>>); no rasterized annex or PDF/A-3
+attachment duplicates it.
+|Target, not a production measurement: the produced container stays ≤ 6 MiB for typical
+receipts, on the assumption that reduced receipts land well below the 768 KiB target. The only
+verified bound is the hard one: 19 receipts at exactly 768 KiB export to ≤ 20 MiB
+(`ReceiptContainerBudgetIT`, `ReceiptNormalisationE2EIT`).
+
+|QS-4
+|Green IT / lean payload
+|User
+|A user uploads a 300 dpi scanned receipt above `ReceiptSizePolicy.TARGET_RECEIPT_SIZE`.
+|`PdfBoxReceiptPdfReducer` downsamples embedded images to 150 dpi / JPEG 0.75 (stage 1), then
+rasterizes pages at 150 dpi if still oversized (stage 2), stopping as soon as the target is met.
+|Target: upload-time reduction cuts the stored size by ≥ 80% versus the original 300 dpi scan
+for the common case (a single-page photo/scan receipt). Evidence so far is synthetic only —
+`ReceiptNormalisationE2EIT` reduces a generated two-page 300 dpi scan of about 4 MiB to well
+under the target; real-world scans are not yet measured.
+
+|QS-5
+|Test coverage and quality gates
+|Developer or agent
+|A developer or agent runs `mvn verify` on the root reactor.
+|JaCoCo computes line and branch coverage per module against the configured `BUNDLE` minimums.
+|The build fails below `jacoco.line.coverage=0.90` / `jacoco.branch.coverage=0.90` (root
+`pom.xml` default, including `kotlin-invoice`); selected critical classes (e.g. `Money`, tax
+rule evaluation) carry a 100%/100% `CLASS`-level override.
+
+|QS-6
+|UI system correctness (full-stack) — planned
+|Developer or agent
+|The Playwright E2E suite (`e2e-test-playwright/`, sibling `little-trotter-admin-tools`
+repository, 39 spec files) runs against the dev instance on the server or from the Mac through
+a tunnel.
+|Every spec exercises the browser → Vaadin → application → NATS → `kotlin-xpdf` → RustFS
+chain the way an Office Manager would, using i18n-label-driven selectors.
+|Target: the full suite green with zero `test.fixme` scenarios on a freshly deployed dev
+instance; the first verified run is the tracked next step (see
+<<_risks_and_technical_debt,Risks and Technical Debt>>).
+
+|QS-7
+|Domain correctness — concurrent editing
+|Users
+|Two users load the same invoice position, both edit it, and both save; separately, the
+`ConcurrentCrudStressE2EIT` 100-thread storm runs its weighted-random CRUD mix
+(<<_concurrent_editing,Concurrent Editing>>, <<adr-028,ADR-028>>).
+|The invoice aggregate's `@Version` is checked before either save applies: the first commit wins
+and advances the version; the second is rejected before any row is touched, with an
+optimistic-lock notification and its dialog left open rather than silently overwriting the first
+user's edit.
+|No lost update is possible: the second saver's rejected write never reaches the database, proven
+per entity by the coverage table in <<_concurrent_editing,Concurrent Editing>>; the 100-thread
+storm's deadlock-delta invariant shows `pg_stat_database.deadlocks` unchanged before and
+after the run, matching the stress-suite gate at full-stack scale.
+
+|QS-8
+|Ergonomics / accessibility
+|Developer
+|A developer changes UI color tokens or adds a new UI surface.
+|The change is checked against the Google Material color palette convention (no brown), in
+both light and dark theme, before merge.
+|Text and interactive-element contrast meets the WCAG AA target (≥ 4.5:1 for normal text);
+the theme stylesheet (`kotlin-invoice/src/main/frontend/themes/littletrotter/styles.css`)
+records the specific WCAG AA adjustments made.
+
+|QS-9
+|Restart resilience
+|Operator (platform restart)
+|The `kotlin-xpdf` renderer/worker container or the interactive application is restarted while
+a `GenerationJob` is `DELEGATED` or `RUNNING`.
+|`GenerationJobProcessor`'s single configurable-interval recovery scan
+(`invoice.jobs.recovery-interval`, default `1h`) resets a `DELEGATED` job back to `PENDING` and
+re-publishes it over NATS JetStream in the same pass, incrementing `attempts`, but only once
+`StaleDelegatedResetCoordinator` has checked the job's own message against the real stream and found
+it genuinely gone — a job merely queued behind a backlog, or still in flight under the worker's own
+JetStream lease, is left `DELEGATED` untouched; after `invoice.jobs.max-attempts` (default 5)
+resets, the job transitions terminally to `FAILED` with `last_error` set and a Message Center
+notification raised.
+|No job is silently lost: every `GenerationJob` ends in a terminal `COMPLETED` or `FAILED`
+state, the Office Manager is notified rather than having to notice a stuck job by polling, and a
+worker outage of any length never by itself exhausts a job's attempt budget.
+
+|QS-10
+|Restart resilience (daily maintenance)
+|Operator (platform restart)
+|The interactive application is restarted at an arbitrary point in the 24-hour interval of
+`ChainVerificationScheduler` or `SystemMessageRetentionScheduler`.
+|Each scheduler checks the most recent `DatabaseMaintenanceEvent` of its own type
+(`CHAIN_VERIFICATION` / `SYSTEM_MESSAGE_RETENTION`) before running: no prior event (fresh
+deployment) runs immediately, an event less than 24 h old is skipped, an event 24 h or older runs
+again.
+|A restart never re-runs a daily task within minutes of its last real run, and never silently
+skips a day it missed while the process was down.
+
+|QS-11
+|Backup / restore
+|Operator (cron schedule)
+|The scheduled (cron-driven) or manually invoked `backup.sh` runs.
+|PostgreSQL (primary, plus Authentik if present) is dumped and the entire RustFS bucket (all
+years) is archived; the combined archive is encrypted with `age` before any plaintext copy is
+removed, and retention keeps 7 daily plus 4 weekly archives.
+|`restore.sh` against the newest retained archive reproduces master data, invoices, and
+receipts; an archive that fails `age` decryption or is missing its manifest is treated as
+invalid and does not count toward retention.
+
+|QS-12
+|Operability on small hardware — evening power-off
+|DevOps
+|DevOps switches the server off in the evening while a print job is `RUNNING` and a
+daily task has not run for two days, then switches it on the next morning.
+|Containers stop within their grace period; on start the worker catches up: pending jobs are
+re-published immediately, overdue daily tasks run once, and the stale in-flight job is
+redelivered or ends `FAILED` with `last_error`.
+|Within 60 s of start every `GenerationJob` is in a terminal state, `scheduled_task_run` shows
+one completed run per daily task, and exactly one document set exists per job in RustFS.
+
+|QS-13
+|Operability on small hardware — idle footprint
+|Operator (idle system)
+|The stack runs for 10 minutes with no user activity and no pending job.
+|The worker issues only its minute-scale safety-net queries and no maintenance-status rows are
+written; the browser side still polls every open invoice list, print-job list, and detail view at
+its fixed `LIVE_UPDATE_POLL_INTERVAL_MS`/`DETAIL_POLL_INTERVAL_MS` interval (2–5 s) regardless of
+whether a job is pending — narrowing this to poll only while a job is pending is a specified but not
+yet implemented improvement.
+|Hibernate query metrics show at most 3 job-table queries per 5 minutes in the worker; the
+`database_maintenance_event` row count is unchanged; a UI session left on the invoice list still
+issues its fixed-interval poll requests until that narrowing lands.
+
+|QS-14
+|Responsiveness under bulk load
+|Office Manager
+|Issues an invoice and opens its e-mail editor while a bulk of other document jobs is queued.
+|The interactive document runs in its own lane (subject `document-jobs-interactive`, consumer `kotlin-xpdf-interactive`) and does not wait behind the bulk backlog. Limit: at most 10 s from the send action until the document is `READY`. If the limit is exceeded the editor does not fail: the send button shows "Dokument wird erzeugt ..." and the editor opens when the document exists (see <<_open_mail_editor,Open the Invoice E-Mail Editor>>).
+|E2E `InvoiceMailDocumentPendingE2EIT` creates a bulk of synthetic invoices (default 500, property `e2e.bulk.invoices`), queues them as bulk jobs, triggers one send action and checks that the interactive document is `READY` within 10 s. Residual risk and the pending load test on the test host: <<_risks_and_technical_debt,R-13>>.
+|===

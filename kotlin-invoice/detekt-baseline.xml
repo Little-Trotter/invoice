@@ -1,0 +1,91 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>DoubleNegativeLambda:B2bInvoiceE2EIT.kt$B2bInvoiceE2EIT$none { it.location != null }</ID>
+    <ID>DoubleNegativeLambda:MainLayoutMailEntryKaribuTest.kt$MainLayoutMailEntryKaribuTest$none { it.externalUrl != null }</ID>
+    <ID>DoubleNegativeLambda:PdfTemplatesTab.kt$PdfTemplatesTab$none { it.id != null &amp;&amp; it.id == current.id }</ID>
+    <ID>EmptyElseBlock:TripDialog.kt$TripDialog$if (::perDiemDaysEditor.isInitialized) dirty = true</ID>
+    <ID>LongParameterList:Address.kt$Address.Companion$(recipient: Recipient, type: AddressType, street: String, postalCode: String, city: String, country: Country = Country.DE, isDefault: Boolean = false)</ID>
+    <ID>LongParameterList:Address.kt$Address.Companion$(sender: SenderProfile, type: AddressType, street: String, postalCode: String, city: String, country: Country = Country.DE, isDefault: Boolean = false)</ID>
+    <ID>LongParameterList:AddressManagementService.kt$AddressManagementService$( customer: Recipient, type: Address.AddressType, street: String, postalCode: String, city: String, country: String, )</ID>
+    <ID>LongParameterList:AddressManagementService.kt$AddressManagementService$( sender: SenderProfile, type: Address.AddressType, street: String, postalCode: String, city: String, country: String, )</ID>
+    <ID>LongParameterList:InvoiceOverviewQueryService.kt$InvoiceOverviewQueryService$( pageIndex: Int, pageSize: Int, filterText: String?, status: InvoiceStatus?, sort: InvoiceOverviewSort, dimensions: InvoiceOverviewDimensions, )</ID>
+    <ID>LongParameterList:InvoiceOverviewQueryService.kt$InvoiceOverviewQueryService$( pageIndex: Int, pageSize: Int, filterText: String?, status: InvoiceStatus?, sortField: InvoiceOverviewSortField, sortDir: SortDirection, reverseCharge: Boolean?, )</ID>
+    <ID>LongParameterList:SellerProfileService.kt$SellerProfileService$( senderId: Long, type: Address.AddressType, street: String, postalCode: String, city: String, country: String )</ID>
+    <ID>LoopWithTooManyJumpStatements:MoneyArchitectureTest.kt$MoneyArchitectureTest$for</ID>
+    <ID>TooGenericExceptionCaught:AbstractCrudView.kt$AbstractCrudView$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:AiReportDialog.kt$AiReportDialog$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:BasePanacheRepository.kt$BasePanacheRepository$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:DocumentDownloadResource.kt$DocumentDownloadResource$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:DocumentGeneratedReactionHandler.kt$DocumentGeneratedReactionHandler$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:DocumentJobPublisher.kt$DocumentJobPublisher$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:FacturXEngineIdleStopScheduler.kt$FacturXEngineIdleStopScheduler$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobFastPublishTransaction.kt$GenerationJobFastPublishTransaction$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobNatsAdapter.kt$GenerationJobNatsAdapter$dlqEx: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobNatsAdapter.kt$GenerationJobNatsAdapter$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobProcessor.kt$GenerationJobProcessor$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobRecoveryService.kt$GenerationJobRecoveryService$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobResultConsumer.kt$GenerationJobResultConsumer$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobResultHandler.kt$GenerationJobResultHandler$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobResultHandler.kt$GenerationJobResultHandler$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:GenerationJobUiPushHandler.kt$GenerationJobUiPushHandler$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceCreateDialog.kt$InvoiceCreateDialog$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceCockpitHero.kt$InvoiceCockpitHero$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceEntryPartyCard.kt$InvoiceEntryPartyCard$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceEntrySaveFlow.kt$InvoiceEntrySaveFlow$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceExportDownloadGroup.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceItemDialogs.kt$InvoiceItemDialogs$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceMailActions.kt$InvoiceMailActions$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceStatusActions.kt$InvoiceStatusActions$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceListExportDialog.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceLlmAnalysisEventHandler.kt$InvoiceLlmAnalysisEventHandler$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoicePrintControls.kt$InvoicePrintControls$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:InvoiceReadRepositoryImpl.kt$InvoiceReadRepositoryImpl$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MailSendResultNatsAdapter.kt$MailSendResultNatsAdapter$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MaintenanceQueueProcessor.kt$MaintenanceQueueProcessor$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:MasterDataNumberService.kt$MasterDataNumberService$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:MessageCenterEventHandler.kt$MessageCenterEventHandler$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:NatsAdminStatusService.kt$NatsAdminStatusService$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:PostgresDatabaseMaintenanceService.kt$PostgresDatabaseMaintenanceService$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:ReceiptDialog.kt$ReceiptDialog.OpenSession$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ReceiptDialogRendering.kt$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:ReceiptPoolPane.kt$ReceiptPoolPane$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:ReceiptPoolView.kt$ReceiptPoolView$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:SocketProxyEngineActivation.kt$SocketProxyEngineActivation$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:StaleDelegatedResetCoordinator.kt$StaleDelegatedResetCoordinator$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:UiEventBus.kt$UiEventBus$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:UiNotifications.kt$UiNotifications$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:ValidationReportDialog.kt$ValidationReportDialog$ex: Exception</ID>
+    <ID>TooGenericExceptionThrown:AiReportDialogTest.kt$AiReportDialogTest$throw RuntimeException("read failed")</ID>
+    <ID>TooGenericExceptionThrown:AiReportDialogTest.kt$AiReportDialogTest$throw RuntimeException("s3 down")</ID>
+    <ID>TooGenericExceptionThrown:AiReportDialogTest.kt$AiReportDialogTest$throw RuntimeException()</ID>
+    <ID>TooGenericExceptionThrown:DocumentGeneratedReactionHandlerTest.kt$DocumentGeneratedReactionHandlerTest.InMemoryInvoiceDocumentRepository$throw RuntimeException("simulated write failure")</ID>
+    <ID>TooGenericExceptionThrown:DocumentGeneratedReactionHandlerTest.kt$DocumentGeneratedReactionHandlerTest.InMemoryInvoiceRepository$throw RuntimeException("simulated write failure")</ID>
+    <ID>TooGenericExceptionThrown:DocumentGeneratedReactionHandlerTest.kt$DocumentGeneratedReactionHandlerTest.InMemoryValidationFindingRepository$throw RuntimeException("simulated write failure")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobCellsTest.kt$GenerationJobCellsTest$throw RuntimeException("s3 down")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobFastPublishTransactionTest.kt$GenerationJobFastPublishTransactionTest.&lt;no name provided&gt;$throw RuntimeException("db down")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobProcessorTest.kt$GenerationJobProcessorTest.&lt;no name provided&gt;$throw RuntimeException("db down")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobProcessorTest.kt$GenerationJobProcessorTest.&lt;no name provided&gt;$throw RuntimeException("db temporary")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobProcessorTest.kt$GenerationJobProcessorTest.&lt;no name provided&gt;$throw RuntimeException("persistent db error")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobResultConsumerIT.kt$GenerationJobResultConsumerIT.&lt;no name provided&gt;$throw RuntimeException("simulated repeated processing failure (e.g. L2 stale-version write-back)")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobResultConsumerTest.kt$GenerationJobResultConsumerTest.&lt;no name provided&gt;$throw RuntimeException("db hiccup")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobResultConsumerTest.kt$GenerationJobResultConsumerTest.&lt;no name provided&gt;$throw RuntimeException("simulated repeated processing failure")</ID>
+    <ID>TooGenericExceptionThrown:GenerationJobServiceTest.kt$GenerationJobServiceTest.&lt;no name provided&gt;$throw RuntimeException("simulated DB hiccup")</ID>
+    <ID>TooGenericExceptionThrown:InvoiceDtoMapperTest.kt$InvoiceDtoMapperTest.&lt;no name provided&gt;$throw RuntimeException("unfetched lazy collection")</ID>
+    <ID>TooGenericExceptionThrown:InvoiceListExportDialogTest.kt$InvoiceListExportDialogTest$throw RuntimeException("boom")</ID>
+    <ID>TooGenericExceptionThrown:InvoicePrintControlsPrintClickCoverageKaribuTest.kt$InvoicePrintControlsPrintClickCoverageKaribuTest$throw RuntimeException("db down")</ID>
+    <ID>TooGenericExceptionThrown:InvoicePrintControlsPrintClickCoverageKaribuTest.kt$InvoicePrintControlsPrintClickCoverageKaribuTest$throw RuntimeException()</ID>
+    <ID>TooGenericExceptionThrown:MaintenanceQueueProcessorTest.kt$MaintenanceQueueProcessorTest.ThrowingQueue$throw RuntimeException("advisory lock connection lost")</ID>
+    <ID>TooGenericExceptionThrown:ValidationReportDialogCoverageKaribuTest.kt$ValidationReportDialogCoverageKaribuTest$throw RuntimeException("read failed")</ID>
+    <ID>TooGenericExceptionThrown:ValidationReportDialogCoverageKaribuTest.kt$ValidationReportDialogCoverageKaribuTest$throw RuntimeException("s3 down")</ID>
+    <ID>TooManyFunctions:AbstractCrudView.kt$AbstractCrudView&lt;T, F&gt; : VerticalLayout</ID>
+    <ID>TooManyFunctions:GenerationJobRepository.kt$GenerationJobRepository</ID>
+    <ID>TooManyFunctions:InvoiceRepository.kt$InvoiceRepository</ID>
+    <ID>TooManyFunctions:PanacheGenerationJobRepository.kt$PanacheGenerationJobRepository : BasePanacheRepositoryGenerationJobRepository</ID>
+    <ID>TooManyFunctions:PanacheInvoiceRepository.kt$PanacheInvoiceRepository : BasePanacheRepositoryInvoiceRepository</ID>
+    <ID>TooManyFunctions:ReceiptRepository.kt$ReceiptRepository</ID>
+    <ID>UnusedImports:ArticleView.kt$import de.littletrotter.shared.Money</ID>
+    <ID>VariableNaming:PanacheRecipientRepositorySearchIT.kt$PanacheRecipientRepositorySearchIT$val müller = createRecipient("Müller GmbH", "PSIT-0001", "München")</ID>
+  </CurrentIssues>
+</SmellBaseline>

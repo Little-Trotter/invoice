@@ -1,0 +1,63 @@
+@startmindmap quality-tree
+
+' A42-11 — accent-blue family (verified against --lt-accent in
+' kotlin-invoice/src/main/frontend/themes/littletrotter/styles.css), same
+' tint family as the C4 diagrams (see c4-styling.puml.inc). Root/node/leaf are
+' given the intended three-step tint below (root = full accent, node = 85%
+' tint, leaf = 55% tint, all dark-text-on-tint pairs checked >=4.5:1 AA) —
+' PlantUML 1.2023.12's mindmap renderer only actually honors the `node`
+' block here and renders every level with it, so the built diagram currently
+' shows one flat accent-blue tone throughout (#3C88EB, still on-palette and
+' AA-safe with #202124 text: 4.53:1). Left in place for whenever the pinned
+' PlantUML version changes.
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+
+skinparam mindmapDiagram {
+  BackgroundColor #ffffff
+  RootBackgroundColor #1A73E8
+  RootFontColor #ffffff
+  RootFontSize 14
+  RootFontStyle bold
+}
+
+skinparam node {
+  BackgroundColor #3C88EB
+  BorderColor #1456AE
+  FontColor #202124
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam leafNode {
+  BackgroundColor #81B2F2
+  BorderColor #2D66B0
+  FontColor #202124
+  FontSize 11
+}
+
+* **Quality**
+** **1. Domain correctness**
+*** EN 16931 / UStG legal compliance
+*** Multi-stage validation: XSD, Schematron, embedded KoSIT validator
+*** Money type everywhere; no floating-point amounts
+** **2. Test coverage and quality gates**
+*** JaCoCo: 90% line / 90% branch bundle gate, every module including the UI
+*** Critical components (Money, tax rules) at 100% line and branch
+*** Zero-finding linters: ktlint, detekt, sqlfluff
+*** Zero-error Qodana static analysis
+** **3. Ergonomics**
+*** German-language UI, English fallback locale
+*** WCAG AA contrast, checked per color/UI change
+*** Dark mode parity for every UI surface
+** **4. Operability on small hardware**
+*** Explicit per-container memory budget (Pi-class target)
+*** Restart resilience: no job lost across a container restart
+** **5. Traceability**
+*** Reconstructable invoice state history (draft/issued/cancelled)
+*** Encrypted database and object-storage backups (recovery, not archiving)
+** **6. Green IT (lean payload and storage)**
+*** Receipts reduced at upload, embedded exactly once per invoice
+*** Document size budget per invoice
+
+@endmindmap

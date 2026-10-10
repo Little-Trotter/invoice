@@ -1,0 +1,144 @@
+= Introduction and Goals
+
+== Requirements Overview
+
+Little Trotter X-Invoice is a Java/Kotlin reference implementation for generating UStG-compliant,
+X-Rechnung / ZUGFeRD capable e-invoices (EN 16931) with PDF/A-3b output, for freelancers, engineering offices, specialty craft businesses, retail and service businesses and,
+in general, small and medium-sized enterprises (SMEs). Invoices can be issued in German or in English (international layout). It covers the full invoicing workflow for a single Office Manager — the person actually
+writing the invoices: often the business owner, engineer or tradesperson themselves, sometimes someone experienced in bookkeeping:
+
+* Master data: invoice issuers, invoice recipients, catalog items (services/materials), and reference data (countries, tax rates, B2B
+  terms).
+* Invoice lifecycle with an explicit state model (draft, issued, cancelled/annulled), line
+  items, and travel/catering expense items.
+* Receipt management with checksum-based duplicate detection and S3-compatible object storage.
+* ZUGFeRD / X-Rechnung generation (Mustang Project) with multi-stage validation (XSD schema,
+  EN 16931 Schematron, embedded KoSIT validator).
+* PDF rendering (Typst as the only layout engine) via a dedicated renderer/worker service, driven by asynchronous
+  generation jobs over NATS.
+* Statistics/trend views.
+
+=== Quick Start
+
+In alignment with the root `README.md`, running the complete local evaluation stack requires Docker (Compose v2) and `make`:
+
+[source,bash]
+----
+make secrets   # once: creates .env with strong random credentials
+make dev       # builds images, migrates the database, starts the 7 services
+----
+
+The application is reachable at `http://localhost:8080`. `make dev-down` stops the stack while preserving data. The local deployment contains seven containerized services: the invoicing web application, background job worker, document engine (PDF/A-3, XRechnung, Factur-X, KoSIT validation), PostgreSQL, S3-compatible object store, NATS JetStream, and Valkey cache. Everything operates strictly locally.
+
+NOTE: The `make dev` stack is for evaluation only. Productive use is a server installation set up by an IT service provider.
+
+NOTE: Per the project README, this is an open-source reference implementation — functionally complete for its core invoicing flow, not production-ready, provided as-is. This documentation is AI-assisted and all examples are synthetic test data; see
+<<ai-notice,the notice at the start of this document>>.
+
+== Quality Goals
+
+The table below lists the top six quality goals, ordered by priority, consistent with the
+<<architecture-canvases-reference,Architecture Communication Canvas>>.
+
+[cols="1,2,4", options="header"]
+|===
+|Priority |Quality Goal |Motivation
+
+|1
+|Domain correctness
+|The output is a legal document. Every invoice passes multi-stage validation (schema, EN
+16931/Schematron, embedded KoSIT validator) before it can be issued.
+
+|2
+|Test coverage and quality gates
+|A JaCoCo gate enforces 90% line and 90% branch coverage across every module, including the
+Vaadin UI layer. Linters (ktlint, detekt, sqlfluff where applicable), SonarQube Community
+Edition, and Gitleaks/Trivy must all report clean before a feature is considered done.
+
+|3
+|Ergonomics (German UI, accessibility)
+|The primary user is a single Office Manager — writing the invoices, experienced in bookkeeping,
+or the business owner, engineer or tradesperson themselves — not necessarily an IT specialist. The
+UI is German-language with UStG-compliant wording (English as fallback locale); accessibility and
+dark-mode support are checked on every UI/color change.
+
+|4
+|Operability on small hardware
+|The target deployment is a small Linux server on small-budget hardware (a mini PC), not a
+cloud cluster. Every container in `docker-compose.yml` carries an explicit memory limit, and
+the stack stays within a modest combined budget together with optional monitoring.
+
+|5
+|Traceability
+|Invoice state changes and validation results are reconstructable after the fact; DevOps-operated
+database and object-storage backups (Phase 1 scripts under `admin-tools/scripts/backup/`, expanding to the
+`lt` CLI suite in Phase 2) give the same guarantee for the underlying data — for the Office Manager's own
+bookkeeping and for a tax advisor's or auditor's review.
+
+|6
+|Green IT (lean payload and storage)
+|Every copy a receipt or generated document produces is carried across the whole invoice chain —
+sender store and backup, transfer, receiver archive and backup — and occupies hardware for the
+retention period (invoices are kept for 8 years, books and annual statements for 10 years). Receipts are reduced at upload and embedded exactly once in a produced
+e-invoice (<<_document_size_budget,Document Size Budget>>, <<_green_it_principles,Green IT
+Principles>>) so storage and transfer volume stay lean over the whole chain, not only at the point
+of generation.
+|===
+
+== Scope
+
+=== In Scope
+
+* Legally compliant e-invoices (X-Rechnung / ZUGFeRD per EN 16931) with PDF/A-3b output.
+* Master data, invoice lifecycle, and receipt management for a single Office Manager.
+* Asynchronous PDF/XML generation and validation via a dedicated job worker and renderer.
+* Self-hosted deployment on small server hardware; productive use is a server installation by an
+  IT service provider, the local `make dev` stack is for evaluation only.
+* Issued invoices are handed over to the business's bookkeeping (for example DATEV, Lexware or the
+  tax advisor's system).
+
+=== Out of Scope
+
+* Peppol and other network dispatch channels — invoices are generated and stored, not sent by
+  the invoicing application. E-mail dispatch is optional and handled by the separate mail
+  dispatch component (`kotlin-email`), see <<_system_scope_and_context,System Scope and Context>>.
+* Bookkeeping / general-ledger accounting and DATEV export.
+* Payment tracking and open items, dunning.
+* Receiving incoming e-invoices — receipt and processing happen in the bookkeeping system.
+* Instalment invoices and final invoices with deduction of instalments (Abschlags- and
+  Schlussrechnung).
+* Domestic reverse charge for construction services between two German businesses; reverse charge
+  is supported for EU customers only. Domestic reverse charge would be an add-on feature on request.
+* Archiving and retention — the operator's responsibility (invoices are kept for 8 years, books and
+  annual statements for 10 years). Invoices are stored
+  in the bookkeeping or archive system; because they are sent by e-mail, an e-mail archive that
+  stores mail immutably is recommended. The application is not a document archive, see
+  <<adr-035,ADR-035>>.
+* Multi-tenancy — one operator/business per deployment.
+* Backup/restore — a DevOps operation run with Phase 1 operational scripts (`admin-tools/scripts/backup/backup.sh` /
+  `restore.sh`) and Phase 2 consolidated CLI tooling (`lt backup`) against PostgreSQL and RustFS directly; not application
+  code, not an in-app feature (see <<_deployment_view,Deployment View>>).
+
+== Stakeholders
+
+[cols="2,4", options="header"]
+|===
+|Role |Expectations
+
+|Office Manager / Product Owner
+|Runs day-to-day invoicing — writes the invoices, is experienced in bookkeeping, or is the
+business owner, engineer or tradesperson themselves. Expects a reliable, low-maintenance system
+producing legally correct invoices.
+
+|Tax advisor / auditor
+|Consumes generated invoices, backups, and compliance artifacts. Expects consistent, complete,
+re-derivable records.
+
+|Invoice recipients
+|B2B and B2C invoice recipients (country-specific VAT-ID formats — DE/LU/AT/CH/BE/FR). Expect
+an e-invoice their own systems can parse and validate against EN 16931.
+
+|Developers and AI coding agents
+|Implement and review changes under a spec-then-delegate workflow. Expect clear architecture
+documentation, enforced quality gates, and greenfield-first conventions.
+|===

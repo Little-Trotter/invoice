@@ -1,0 +1,41 @@
+[[adr-010]]
+= ADR-010: Fault Tolerance Is Hand-Implemented, Not Framework-Driven
+
+== Status
+Accepted, implemented
+
+== Context
+A general-purpose fault-tolerance extension in the dependency tree, applied without being
+exercised anywhere meaningful, is worse than not having one: no annotation actually matters for
+the application's failure modes, yet it adds build size and a plausible-looking-but-inert
+annotation surface that a future contributor might reasonably assume is doing something.
+
+== Decision
+The project carries no general-purpose fault-tolerance framework: `smallrye-fault-tolerance` and its
+`rhino` scripting dependency are absent from the dependency tree. Fault tolerance is not abandoned
+as a concern — retry-with-backoff and dead-lettering are hand-implemented where they matter today
+(the NATS result consumer's retry loop and DLQ routing, see
+<<_messaging_event_driven_architecture,Messaging and Event-Driven Architecture>>) — but a
+general-purpose framework is added only when a specific critical component needs it, rather than
+kept installed "just in case."
+
+== Consequences
+
+=== Positive
+* Smaller dependency footprint; no dead annotation surface implying protection that is not
+  actually configured anywhere.
+* The existing hand-rolled retry/DLQ logic is easier to audit precisely because it is the only
+  fault-tolerance mechanism in the codebase, not one of several overlapping ones.
+
+=== Negative
+* Reintroducing structured fault tolerance (circuit breakers, bulkheads) for a genuinely critical
+  component later means adding the dependency back and instrumenting it from scratch, rather than
+  un-commenting existing annotations.
+
+=== Mitigation
+* None needed before a concrete need arises; the decision is deliberately revisit-when-needed
+  rather than speculative.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/infrastructure/messaging/GenerationJobResultConsumer.kt`._

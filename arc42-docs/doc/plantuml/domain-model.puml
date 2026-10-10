@@ -1,0 +1,197 @@
+@startuml domain-model
+' PO 2026-09-12: the big association arrows read more naturally curved (default splines);
+' the straight-edge rule applies to the C4 and flow diagrams, not to this class diagram.
+
+' A42-15 — palette reused from the merged A42-11 theme (doc/plantuml/c4-styling.puml.inc,
+' invoice-state-machine.puml): same hex values, same font-color pairings, so this diagram
+' reads as part of the same document rather than inventing a new scheme.
+' Grouping is by aggregate role, not by package:
+'   core       #1A73E8 / white   — the Invoice aggregate itself (Invoice, InvoiceItem)
+'   masterdata #3C88EB / #202124 — small aggregates referenced by an invoice (Recipient,
+'                                  SenderProfile, Article), each owning its own child rows
+'   reference  #81B2F2 / #202124 — standalone reference/lookup data (TaxRate, NumberRange)
+'   receipt    #1662C5 / white   — object-storage-backed, not owned by any invoice
+'   job        #9AA0A6 / #202124 — its own aggregate; bridges to kotlin-xpdf over NATS
+' Contrast: identical bg/font pairs already carry their AA check in c4-styling.puml.inc /
+' invoice-state-machine.puml — reused as-is, not recomputed.
+
+skinparam defaultFontName "Roboto Condensed, Arial Narrow, sans-serif-condensed, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+
+skinparam class {
+  FontSize 12
+  ArrowColor #5F6368
+  ArrowFontColor #202124
+  ArrowFontSize 11
+  BackgroundColor #F8F9FA
+  BorderColor #DADCE0
+}
+
+skinparam class<<core>> {
+  BackgroundColor #1A73E8
+  BorderColor #1456AE
+  FontColor #ffffff
+}
+
+skinparam class<<masterdata>> {
+  BackgroundColor #3C88EB
+  BorderColor #2D66B0
+  FontColor #202124
+}
+
+skinparam class<<reference>> {
+  BackgroundColor #81B2F2
+  BorderColor #5A7DA9
+  FontColor #202124
+}
+
+skinparam class<<receipt>> {
+  BackgroundColor #1662C5
+  BorderColor #1456AE
+  FontColor #ffffff
+}
+
+skinparam class<<job>> {
+  BackgroundColor #9AA0A6
+  BorderColor #74787C
+  FontColor #202124
+}
+
+class Invoice <<core>> {
+  id : Long
+  invoiceNumber : InvoiceNumber
+  status : InvoiceStatus
+  typeCode : InvoiceTypeCode
+  currency : Currency
+  invoiceDate : LocalDate
+  dueDate : LocalDate
+  totals : InvoiceTotals
+  reverseCharge : Boolean
+}
+
+' ADR-025 — status has a private setter (transitionTo/withInitialStatus are the only ways to
+' set it); the items/documents/partySnapshots associations below are typed List, not
+' MutableList, so addItem/removeItem/applyPartySnapshots remain the only mutation path. Not
+' shown as UML visibility markers here (this diagram omits methods on purpose, see caption) —
+' recorded as a note instead so the encapsulation is visible without reading the source.
+note right of Invoice
+  status: private set
+  items/documents/partySnapshots:
+  read-only List views
+  (ADR-025)
+end note
+
+class InvoiceItem <<core>> {
+  id : Long
+  positionId : String
+  category : InvoiceItemCategory
+  quantity : BigDecimal
+  unitPriceNet : Money
+  taxRateSnapshot : BigDecimal
+  netAmount : Money
+  vatAmount : Money
+  grossAmount : Money
+}
+
+class TripExpense <<core>> {
+  id : Long
+  kind : TripExpenseKind
+  quantity : BigDecimal
+  unitPriceNet : Money
+  netAmount : Money
+}
+
+class TravelExpenseEntry <<core>> {
+  id : Long
+  travelDate : LocalDate
+  country : Country
+  calculatedAmount : Money
+}
+
+class Recipient <<masterdata>> {
+  id : Long
+  customerNumber : String
+  name : String
+  vatId : String
+  customerType : CustomerType
+}
+
+class SenderProfile <<masterdata>> {
+  id : Long
+  name : String
+  invoicePrefix : String
+  vatId : String
+  iban : Iban
+  isDefault : Boolean
+}
+
+class Article <<masterdata>> {
+  id : Long
+  name : String
+  category : InvoiceItemCategory
+  defaultUnitPriceNet : Money
+  isDefault : Boolean
+}
+
+class TaxRate <<reference>> {
+  id : Long
+  code : String
+  rate : BigDecimal
+  category : String
+  country : Country
+  validFrom : LocalDate
+  validTo : LocalDate
+}
+
+class NumberRange <<reference>> {
+  id : Long
+  code : String
+  subject : NumberRangeSubject
+  continuity : Continuity
+  startValue : Long
+}
+
+class Receipt <<receipt>> {
+  id : Long
+  fileName : String
+  objectKey : String
+  sha256Checksum : String
+}
+
+class GenerationJob <<job>> {
+  id : Long
+  jobType : String
+  status : GenerationJobStatus
+  engine : DocumentEngine
+  attempts : Int
+}
+
+Invoice "1" *-- "0..*" InvoiceItem : items
+Invoice "0..*" --> "0..1" SenderProfile : senderProfile
+Invoice "0..*" --> "0..1" Recipient : recipient
+InvoiceItem "0..*" -down-> "0..1" TaxRate : taxRateRef
+InvoiceItem "0..*" --> "0..1" Article : articleRef
+Article "0..*" --> "0..1" TaxRate : defaultTaxRateRef
+Invoice "0..*" -- "0..*" Receipt : receipts
+InvoiceItem "0..*" -right- "0..*" Receipt : receipts
+GenerationJob "0..*" --> "1" Invoice : invoice
+InvoiceItem "1" *-- "0..*" TripExpense : tripExpenses
+InvoiceItem "1" *-- "0..*" TravelExpenseEntry : perDiemEntries
+
+note right of NumberRange
+  Allocates numbers for Invoice, Recipient,
+  Article, SenderProfile — via services, no FK
+end note
+
+legend bottom left
+Each box is one JPA entity class of the Quarkus application; attribute types are Kotlin types.
+|= Color |= Meaning |
+|<back:#1A73E8><color:#FFFFFF> Invoice aggregate      </color></back>| Invoice, InvoiceItem, TripExpense, TravelExpenseEntry — one repository, cascaded together |
+|<back:#3C88EB><color:#202124> Master-data aggregate  </color></back>| Recipient, SenderProfile, Article — each owns its own child rows |
+|<back:#81B2F2><color:#202124> Reference data         </color></back>| TaxRate, NumberRange — standalone, referenced by FK only |
+|<back:#1662C5><color:#FFFFFF> Object-storage-backed  </color></back>| Receipt — linked, never owned, by any invoice/item |
+|<back:#9AA0A6><color:#202124> Async job aggregate    </color></back>| GenerationJob — own repository, bridges to kotlin-xpdf |
+endlegend
+
+@enduml

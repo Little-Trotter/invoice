@@ -1,0 +1,754 @@
+= Building Block View
+
+This chapter presents the system in hierarchical layers: the runtime containers (Level 1), the
+components within the main application (Level 2), the cross-cutting types used by multiple modules,
+and the test and tooling projects that enforce quality gates.
+
+== Level 1: Container Landscape
+
+The diagram and table below cover the services declared in the root `docker-compose.yml`
+(profile `core`). arc42's "Level 1" here corresponds to the *container* level of Simon Brown's C4
+model — C4's own "Level 1" is the system context, covered in
+<<_system_scope_and_context,System Scope and Context>>.
+
+.Container landscape
+image::c4-container-landscape.svg["C4 container diagram of the invoicing system: application, job worker, renderer, shared infrastructure and the reverse proxy"]
+
+The diagram reflects the Ubuntu-server target, not "one Docker host": PostgreSQL, RustFS and
+Caddy run *natively* under systemd, shared by every instance on the box, while the application
+layer (`little-trotter-invoice`, `little-trotter-job-worker`, `kotlin-xpdf`, NATS JetStream,
+Valkey, plus the optional `email-app` of the mail component) is Docker Compose, one project per
+instance (`prod`/`dev`/`demo`). One aggregated
+dependency edge stands for the many application-to-infrastructure connections; the per-container
+protocol (JDBC, S3 API, NATS, Redis protocol) is the detail level the table below carries.
+Authentik and monitoring are drawn once, as shared, cross-cutting Docker services outside every
+instance project: Authentik is the OIDC identity provider every Office Manager logs in through (the
+web app is a Quarkus OIDC web-app client), and additionally the forward-auth gate of the
+server's admin site.
+
+The dedicated single-instance variant (small-budget hardware — a mini PC or another standalone
+host, no instance model) instead runs the *whole* stack — Postgres, RustFS, Caddy included — as
+Docker containers from this repository's own `docker-compose.yml`; see
+<<_deployment_view,Deployment View>> for that variant's own table.
+
+[cols="2,2,2,4", options="header"]
+|===
+|Container |Technology |Runtime on the server |Responsibility + Interfaces
+
+|`little-trotter-invoice`
+|Kotlin, Quarkus, Vaadin Flow
+|Docker, per instance
+|Interactive web application: master data, invoice lifecycle, receipts, and statistics.
+Reads/writes PostgreSQL over JDBC, reads/writes RustFS over the S3 API, publishes generation-job
+envelopes to and consumes results from NATS JetStream, and uses Valkey for caching and text
+payloads. Behind Caddy; the only container reachable from a browser.
+
+|`little-trotter-job-worker`
+|Kotlin, Quarkus
+|Docker, per instance
+|Scheduler-driven job worker — the *same build artifact* as `little-trotter-invoice`, deployed as a
+separate container with `QUARKUS_PROFILE=worker` and `QUARKUS_SCHEDULER_ENABLED=true`. One
+`@Scheduled` pass, `invoice.jobs.recovery-interval` (default `1h`), covers both re-publishing
+persisted `PENDING` generation jobs and resetting `DELEGATED` jobs older than `staleCutoffMinutes`
+(default 2 minutes) back to `PENDING` — one interval, not two independently-firing timers. That age
+only makes a job a *candidate*; the reset itself checks the job's own message against the real
+`document-jobs` stream before acting on it — see `kotlin-xpdf`'s entry below and
+<<_generate_e_invoice,Generate E-Invoice>> for the full rule. No UI, no externally exposed port, no
+OIDC/Authentik route.
+
+|`kotlin-xpdf`
+|Kotlin, Quarkus
+|Docker, per instance
+|Renderer/worker service: PDF/A-3b rendering through `BasePdfRendererPort` (Typst CLI, the only
+shipped engine), ZUGFeRD/XRechnung XML
+generation and multi-stage validation (Mustang Project library, embedded KoSIT validator; veraPDF
+and an optional local-LLM check are configurable per deployment). Consumes generation jobs from
+NATS via two durable pull consumers, one per lane (bulk: `kotlin-xpdf-group`, subject `document-jobs`, `JOB_WORKER_THREADS`; interactive: `kotlin-xpdf-interactive`, subject `document-jobs-interactive`, `JOB_INTERACTIVE_WORKER_THREADS`, default 1; each with its own executor and heartbeat), publishes results
+back, reads/writes RustFS, and uses Valkey to resolve text-payload references. Each pulled message
+is leased for a configurable `ackWaitSeconds` (default 120s) and the lease is renewed by a
+periodic `message.inProgress()` heartbeat for the full duration of a job (`JobConsumer`,
+`ackWaitSeconds / 3` interval), started the moment a message is handed to the bounded worker
+thread pool rather than only once a thread actually begins processing it — protects a genuinely
+slow render from being mistaken for a hung worker and redelivered even when a burst queues more
+jobs than the pool can immediately start. Exposes internal-only REST endpoints
+(`/validate`, `/documents/presign`) — not reachable through Caddy.
+
+|PostgreSQL
+|PostgreSQL 18
+|*Native (systemd)*, shared by every instance
+|Primary relational store for master data, invoices, receipts, and generation jobs. One cluster
+per server; one database and one role-trio (`lt_migrator_<instance>`/`lt_app_<instance>`) per
+instance, since PostgreSQL roles are cluster-wide. Schema/seed managed by a single editable
+Flyway baseline (no live instance yet, see <<_architecture_constraints,Architecture
+Constraints>>).
+
+|RustFS
+|RustFS (S3-compatible)
+|*Native (systemd)*, shared by every instance
+|Object storage for receipts and generated PDF/XML documents; one bucket per instance
+(`invoice-documents[-dev\|-demo]`). A deliberate architecture decision, including on the target
+small-budget hardware — not a filesystem fallback.
+
+|NATS JetStream
+|NATS 2.x
+|Docker, per instance
+|Message bus carrying only small job envelopes between `little-trotter-invoice`,
+`little-trotter-job-worker`, and `kotlin-xpdf` (streams `LITTLE_TROTTER_JOBS`,
+`LITTLE_TROTTER_DLQ`; see <<_key_interfaces>>). Payload rule: text lives in Valkey, PDFs/receipts
+in RustFS, so NATS messages stay small on constrained hardware. One broker per instance (own
+client/monitoring ports, offset by instance).
+
+|Valkey
+|Valkey (Redis-protocol)
+|Docker, per instance
+|Cache and text-payload store shared by `little-trotter-invoice` and `kotlin-xpdf`: PDF/query
+cache, trip-workbook references for job envelopes, and the receipt-checksum fast path for duplicate
+detection. One instance per instance project, no published port.
+
+|Caddy
+|Caddy
+|*Native (systemd)*, shared by every instance
+|TLS-terminating reverse proxy — the stack's *only* externally exposed service (ports 80/443). One
+shared installation generates one vhost per instance (`prod`/`dev`/`demo`), each reverse proxying to
+that instance's own loopback app port; every other container stays unreachable from outside the
+server.
+|===
+
+*Why Postgres and RustFS are native, and Valkey stays in Docker.* PostgreSQL and RustFS are
+shared, stateful services used by every instance on the box — running three separate clusters or
+object stores in Docker volumes would triple the memory/disk footprint for per-instance data,
+complicate backups (one sweep per instance instead of one shared cluster), and keep the data
+inside Docker's storage driver instead of the filesystem it is easier to back up and migrate
+from. Caddy is native for the same reason: one systemd install serves every instance's vhost
+instead of three TLS-terminating containers fighting over ports 80/443. Valkey, by contrast, is a
+deliberately disposable cache — losing it costs a warm-up, never data — so it stays in Docker,
+one instance per compose project, matching the lifecycle of the application it caches for.
+
+== Mail Dispatch — a Separate Self-Contained System (`kotlin-email`)
+
+E-mail dispatch is its own bounded context, developed as the module `kotlin-email` of this
+repository (artifact `little-trotter-email`) and deployed as its own image per instance, optional and
+off by default; its only code dependencies are `kotlin-mail-contract` (the frozen published
+language both sides map in their own adapters) and `kotlin-shared`.
+It owns the mail templates, the append-only send journal and SMTP submission, and is headless: it
+serves only a REST API, while the mail views live in the invoicing application (see
+<<_mail_ui_in_the_invoicing_application,Mail UI in the Invoicing Application>>). This system hands it values to compose a
+mail and receives back only a result event, projected onto two read-only columns on the invoice —
+it holds no `Invoice` entity, no database access, and no key into this component's data. See
+<<adr-015,ADR-015>>.
+
+[cols="2,5", options="header"]
+|===
+|Module |Responsibility
+
+|`email-core`
+|Template and journal domain, versioning, placeholder rendering; plain Kotlin with JPA annotations.
+
+|`email-service`
+|Application core and adapters: `mail` schema (templates, append-only send journal), S3 storage of
+the authored document and the sent `.eml`, SMTP submission, signed archive packages, NATS results,
+REST API `/mail/api/*`.
+
+|`email-app`
+|The one deployable: `email-service` as a headless Quarkus image under `/mail`. Callers present a
+bearer token and the forwarded `X-Lt-User`/`X-Lt-Groups` headers; the component checks the groups
+again server-side (`MailEdgeIdentityMechanism`, `MailRoleProvider`).
+
+|`email-e2e-tests`
+|Full-stack tests against `email-app` on real Testcontainers (Postgres, NATS, Valkey, RustFS,
+Mailpit), driven through the REST API only; test harness, outside the coverage aggregate.
+|===
+
+*Delivery state.* The component is part of the repository but not of the end-user delivery: the
+delivered configuration runs without the `email-app` image and without the `mail` schema. The
+deployment switch `MAIL_ENABLED` (`mail.enabled`, default `false`) controls it. While it is off, the
+HTTP dispatch adapter is not instantiated, the mail-result NATS consumer binds no subscription, the
+mail entry in the navigation drawer and the send action on the invoice are absent, and the mail card
+in the settings shows "not installed". The independent per-instance offer flag is described in
+<<_feature_switches,Feature Switches>>.
+
+Inside `kotlin-email`, its REST and NATS adapters reach the application layer only through
+dedicated input ports in `de.littletrotter.email.service.application.port.inbound`
+(<<adr-027,ADR-027>>) — one `*QueryPort`/`*UseCase` per use case, its own `CommandEntryPoint`
+marker (the component does not import the one `kotlin-invoice` uses), and entity-free read models
+(`MailTemplateView`, `MailJournalEntryView`) in place of the JPA-backed `MailTemplate`/`MailJournal`
+entities:
+
+[cols="3,3,3", options="header"]
+|===
+|Interface (input port) |Purpose |Consumer (adapter caller)
+
+|`ComposeMailDraftUseCase` / `MailDraftQueryPort` / `ConsumeMailDraftUseCase`
+|Stage a compose draft, look it up, mark it consumed after send
+|`ComposeResource`
+
+|`SendMailUseCase` / `RetryMailSendUseCase`
+|Enqueue a dispatch; rebuild and re-enqueue a failed one
+|`SendResource` / `JournalResource`
+
+|`ProcessMailSendOrderUseCase`
+|Consume a send-requested envelope and run the actual SMTP dispatch
+|`MailSendNatsAdapter`
+
+|`BuildMailArchivePackageUseCase` / `RearchiveMailUseCase`
+|Sign and store the archive package for a sent mail; repair a failed one
+|`MailSendNatsAdapter` / `JournalResource`
+
+|`MailJournalQueryPort`
+|Read send history
+|`JournalResource`
+
+|`MailTemplateQueryPort` / `UpsertMailTemplateUseCase` / `ResetMailTemplateUseCase` /
+`SendTemplateBccTestUseCase`
+|List/save/reset a template version; test its Bcc address
+|`TemplateResource`
+
+|`MailTemplatePreviewQueryPort`
+|Render a template against sample placeholder values
+|`RenderPreviewResource`
+
+|`SendSmtpTestMailUseCase`
+|Onboarding SMTP probe, never written to the journal
+|`TestSendResource`
+|===
+
+`EmailInputPortArchitectureTest` enforces the cut (naming, no composite ports, adapters never
+depend on a concrete application service or on `email.core.repository..` directly).
+
+=== Mail UI in the Invoicing Application
+
+The mail views are Vaadin Flow routes of `kotlin-invoice`, not part of the component:
+
+[cols="2,2,4", options="header"]
+|===
+|Route |View |Purpose
+
+|`mail/compose/:draftId`
+|`MailComposeView`
+|Review and send a staged compose draft; the draft is consumed only when the send is queued.
+
+|`mail/journal`
+|`MailJournalView`
+|Send journal with server-side filter, sort and paging, status chips, URL state, row details,
+Excel export, retry and re-archive.
+
+|`mail/templates`
+|`MailTemplatesView` with `MailTemplateEditorDialog` and `MailTemplateHistoryDialog`
+|Template list, editing with preview and Bcc test, version history, reset.
+|===
+
+`RouteAccess` gates them with the `AppPermission`s `MAIL_COMPOSE_AND_SEND`, `MAIL_JOURNAL_VIEW`
+and `MAIL_TEMPLATE_EDIT`. The views inject only narrow input ports in
+`application.mail.port.inbound` (one role interface per use case, no composites). Query ports read
+through outbound ports; command ports run through application services and outbound ports such as
+`MailDeliveryPort`, `MailTemplateWritePort` and `MailJournalActionPort`, plus the template reset
+and Bcc-test ports. The outbound ports are implemented by HTTP adapters in `infrastructure.mail`,
+which call `/mail/api/*` and translate the contract types in their `acl` package.
+
+=== Quote Module Interfaces to the Invoicing Application
+
+The quote module (`kotlin-quote`, optional package) is a self-contained system next to the mail
+component, built from `quote-core` (domain without framework), `quote-service` (application
+layer, adapters, Flyway baseline) and `quote-app` (the Quarkus deployable, REST under `/quote/api/*`;
+the screens are Flow routes of the invoicing application). The aggregate `Quote` runs through the
+single status `DRAFT`, `REVIEW`, `SENT`, `ACCEPTED`, `INVOICED`, `REJECTED` or `CANCELLED`: `DRAFT` →
+`REVIEW`/`CANCELLED`; `REVIEW` → `SENT`/`DRAFT` (return with a note)/`CANCELLED`; `SENT` →
+`ACCEPTED`/`REJECTED` (a reason is required); `ACCEPTED` → `INVOICED`. An invoice order (table `quote.quote_invoice_order`, status `REQUESTED`/`CREATED`/`REJECTED`, at most one open or created order per offer) is allowed from `SENT` (acceptance is recorded implicitly) and `ACCEPTED`; acceptance alone creates no invoice. The content is editable only
+in `DRAFT`, the number is assigned on entering `REVIEW`. There is no second outcome attribute, no
+derived expiry and no revision; the validity date is a document field on the PDF. `INVOICED` is
+reached only through the reply event `invoice.created-from-quote` to an order. See <<adr-036,ADR-036>>. Every use case has its own inbound port in
+`application.quote.port.inbound`; the module publishes through an outbox relay.
+
+Offer statistics end at "sent": an offer in `SENT`, `ACCEPTED`, `INVOICED` or `REJECTED` counts as
+sent. There is no win rate, no rejection-reason statistic and no offer-to-invoice figure. The only
+schema addition is `quote.quote.sent_on` (`DATE`), set on `REVIEW` → `SENT` from the actor
+timestamp of the time source and kept through the later statuses; check constraints require it
+exactly for these four statuses and `sent_on >= quote_date`, and the index
+`idx_quote_date (quote_date) INCLUDE (status)` serves the period filter. The blocks:
+
+[cols="2,5",options="header"]
+|===
+|Block |Responsibility
+
+|`quote-core`, package `statistics`
+|Pure value objects `StatisticsPeriod`, `QuoteFacts`, `QuoteKpis` and `QuoteStatusCounts`; every
+figure (sent volume, count, average offer value, in progress, average days to sent) is defined once here.
+
+|`quote-service`
+|Read models `QuoteStatisticsDashboardReadModel` and `QuoteRankingReadModel` behind the ports
+`QuoteStatisticsDashboardQueryPort` and `QuoteRankingQueryPort`. SQL delivers per-offer facts with the
+net amount per line rounded to cents; the value objects aggregate them.
+
+|`quote-app`
+|`QuoteStatisticsResource` with `GET /statistics/dashboard` and `GET /statistics/ranking`
+(permission `QUOTE_VIEW`); views `QuoteDashboardView` and `QuoteRankingRowView` live in the quote contract.
+
+|`kotlin-invoice`
+|Narrow input ports for the dashboard and the ranking, HTTP adapters and an anti-corruption layer
+that maps the contract views. `QuoteStatisticsView` is built from the shared statistics components
+(`ui/component/statistics`) through `QuoteStatisticsPresenter`, mirroring the invoice statistics view.
+|===
+
+The quote module keeps its own schema `quote`. It receives master
+data through replica tables fed by NATS events `masterdata.>` and the snapshot. Besides the existing
+replicas it holds `number_range_replica`, the definition of the quote number (prefix, date part,
+counter width, reset cycle); only number ranges with the subject `QUOTE` are replicated. The counter
+itself is `quote.quote_number_range` per `(range_code, period_key)`
+(<<adr-033,ADR-033>>).
+
+The quote settings (validity in days, XML format) stay in `quote.quote_setting`. Their user
+interface is the card "Angebot" of the settings page in `kotlin-invoice`, shown only when the quote
+module is deployed; it reaches the settings through the input ports `QuoteSettingsQueryPort` and
+`UpdateQuoteSettingsUseCase`.
+
+== Library Modules
+
+Besides the two JVM processes of the invoicing system and the mail component, the reactor carries
+seven library modules that are never deployed on their own:
+
+[cols="2,5", options="header"]
+|===
+|Module |Responsibility + consumers
+
+|`kotlin-shared`
+|Neutral cross-cutting types (`Money`, DTOs, document-size budget, B2B terms); used by
+the invoicing modules and `kotlin-email`. Detailed below.
+
+|`kotlin-mail-contract`
+|Published language between invoicing and mail dispatch (package `de.littletrotter.shared.mail`):
+data classes, enums, schema version, one wire codec; no logic. Frozen — changes are additive and
+carry a new schema version.
+
+|`kotlin-quote-contract`
+|Published language of the offer-to-invoice hand-over (package `de.littletrotter.shared.quote`):
+wire DTOs, the subjects `quote.invoice-order.requested`, `invoice.created-from-quote` and
+`invoice.creation-from-quote.rejected` (both replies carry the order id), the streams `LITTLE_TROTTER_QUOTE_INVOICE_ORDER` and
+`LITTLE_TROTTER_QUOTE_INVOICE`, one codec; no logic.
+
+|`kotlin-quotation-xml`
+|UBL Quotation writer with XSD and Schematron validation, used by `quote-service` to embed the
+structured document in the offer PDF.
+
+|`kotlin-ui-components`
+|Vaadin component jar without Quarkus/CDI of its own, shared by host applications; first tenant is
+the free-text editor with its chip row.
+
+|`kotlin-facturx`
+|Engine client and validation stages used by `kotlin-xpdf`. Detailed below; its French-market
+Factur-X route is on standby.
+
+|`kotlin-architecture-rules`
+|Shared ArchUnit rules (first: the time rules of ADR-029) that every module checks its own
+production classes against; test scope only, enforced by the root POM (ADR-038).
+|===
+
+=== `kotlin-shared` — Cross-Cutting Building Block
+
+`kotlin-shared` is a compiled dependency of both `little-trotter-invoice` and `kotlin-xpdf` (not
+a deployable container in its own right); it is what lets the two JVM processes agree on wire
+formats and domain vocabulary without depending on each other directly.
+
+[cols="2,4", options="header"]
+|===
+|Area |Contents
+
+|B2B / EN 16931 terms (`shared.b2b`)
+|<<_en_16931_mapping,`B2bTerm`>> — one enum constant per BT number with its binding/xpath/
+value-domain metadata — plus the EN 16931 code lists.
+
+|Shared value types
+|<<_money_and_tax_domain_model,`Money`>> (all monetary amounts; raw `BigDecimal` is reserved for
+quantities/factors), `Currency`, `GermanTime`, `VatDesignation`.
+
+|Receipt size subdomain (`shared.receipt`)
+|<<_document_size_budget,`DocumentSize`>>, `ReceiptSizePolicy`, `InvoiceDocumentBudget` and the
+`Base64WithReserveEstimator` — the document-budget value types, policy and estimator, shared so
+`kotlin-xpdf` and `kotlin-invoice` apply one set of numbers instead of each keeping its own copy.
+See <<adr-014,ADR-014>> and <<adr-032,ADR-032>>.
+
+|Messaging contracts
+|Connection/stream setup and payload-reference types used by the NATS producers and consumers
+(see <<_messaging_event_driven_architecture,Messaging>>).
+
+|Mail dispatch contract (`shared.mail`)
+|The published language between this system and the mail dispatch context — compose requests,
+placeholder values, the send-result event. Contracts only, no entities or domain logic; each side
+maps at its own adapter. See <<adr-016,ADR-016>>.
+
+|DTOs shared across the wire
+|Invoice, party, receipt, and B2B-value DTOs used across the UI and export layers.
+
+|Document/validation ports
+|Ports for object storage and for PDF/XML/KoSIT/veraPDF/LLM validation, implemented differently
+by `little-trotter-invoice` and `kotlin-xpdf`.
+|===
+
+=== `kotlin-facturx` — Factur-X Client/Validation Library
+
+`kotlin-facturx` is a compiled dependency of `kotlin-xpdf` (not a deployable container in its own
+right, same relationship `kotlin-shared` has to both JVM processes above): the client for the
+separate `facturx-engine` HTTP container, its DTO mapping, and the local Schematron/BR-FR-CTC
+validation stages that run in-process. Everything that remains once the actual document
+generation has been delegated out to `facturx-engine` — a natural module boundary, unlike the
+in-process Mustang CII exporter, which stays part of `kotlin-xpdf` itself
+(`de.littletrotter.xpdf.impl.mustang`).
+
+*Status.* The Mustang/CII route (ZUGFeRD, XRechnung) is the developed one. The Factur-X engine
+route and the French-market rules (BR-FR-CTC, SIRET) are on standby: kept in the code, not
+developed further.
+
+[cols="2,4", options="header"]
+|===
+|Area |Contents
+
+|Engine port + HTTP adapter
+|`FacturXEngine` (the port) and `HttpFacturXEngineClient` (the only HTTP in this codebase's
+Factur-X route) — generate/convert/validate against the pinned `facturx-engine` container.
+
+|DTO mapping
+|`FacturXMetadataMapper` and the `InvoiceMetadata` wire DTOs — maps this system's `InvoiceDto`
+onto the engine's own JSON schema; `FacturXTaxAggregation`/`FacturXDateMapping` are the two
+extracted sub-concerns it depends on.
+
+|Local validation stages
+|`FacturXSchematronValidator` (the official Factur-X 1.09.2 Schematron, compiled to XSLT,
+embedded) and `BrFrCtcValidator` (the BR-FR-CTC 1.4.0 rule set, run locally rather than via the
+engine's own French-seller-only execution) — both run in-process against the generated CII XML,
+no second container.
+
+|Response mapping
+|`FacturXValidationResponseMapper`/`SvrlFailedAsserts` — turns the engine's/Schematron's own
+result shapes into this system's `ValidationMessage`/`ValidationStageResult` vocabulary.
+|===
+
+Three of these classes (`HttpFacturXEngineClient`, `FacturXSchematronValidator`,
+`BrFrCtcValidator`) are plain classes rather than `@ApplicationScoped` CDI beans. Quarkus's
+build-time ArC bean discovery does not find an `@ApplicationScoped` bean declared in a
+*dependency* module the way it finds one in the consuming module's own Jandex index — verified
+live, not assumed. `kotlin-facturx` therefore carries plain, CDI-unaware classes (the same shape
+`kotlin-shared`'s own `AbstractS3DocumentStore` uses), and
+`kotlin-xpdf` owns three small `@ApplicationScoped` CDI producer beans
+(`FacturXEngineProducer`, `FacturXSchematronValidatorProducer`, `BrFrCtcValidatorProducer`) that
+read config and construct the real instances.
+
+== Test and Tooling Projects
+
+The test and tooling projects are first-class building blocks. This repository ships the product
+and the test layers that exercise it *without* a browser; the browser-driven E2E suite, the
+load/monkey tooling, and the DevOps tooling live in the sibling, private
+`little-trotter-admin-tools` repository, checked out alongside this one. Each project below is
+its own Maven project with its own invocation, feeding a specific quality gate (see
+<<_solution_strategy,Solution Strategy>>).
+
+[cols="2,3,3", options="header"]
+|===
+|Project |Purpose |Invocation + Quality Gate
+
+|`kotlin-e2e-tests`
+|Kotlin system/integration E2E tests exercising real flows across module boundaries against a
+real database and, where relevant, S3 — without a browser. Also carries a Karibu-based monkey
+suite: bounded, seeded random walks over the real Vaadin view tree, driven headlessly.
+|Part of the Maven reactor (`./mvnw verify`, `make test`); feeds `coverage-report`'s aggregate
+JaCoCo bundle. The `monkey`/`stress` tags are excluded by default and run explicitly with a
+chosen seed/step count.
+
+|`email-e2e-tests`
+|Full-stack and Playwright tests of the mail component against its deployable `email-app`.
+|Part of the reactor while the mail profile is active (default); outside the coverage aggregate,
+the graded production code is `email-app`.
+
+|`coverage-report` (`ci/coverage-report`)
+|Aggregates JaCoCo exec data from every module into one project-wide report, so coverage is
+measured once across unit, integration, and E2E tests.
+|Runs last in the Maven reactor; enforces the 90% line / 90% branch bundle gate that `make test`
+reports as GREEN or FAILED.
+
+|`e2e-test-playwright` (sibling repository)
+|Browser-driven system E2E covering the full stack through a real UI. Reads this application's
+i18n texts at runtime rather than from this source tree, so neither repository depends on the
+other at compile time or by path.
+|Invoked from the sibling repository (`make playwright`/`make qa`); feeds its own happy-path/
+border-case gap analysis, not this repository's JaCoCo gate.
+
+|`admin-tools` / `little-trotter-admin` (sibling repository)
+|DevOps tooling and operations management following a staged rollout: Phase 1 lightweight shell
+automation and reference configurations (MVP until Q4/2027); Phase 2 consolidated Go CLI suite (`lt`)
+and Commander TUI (`lhorse`) (Q4/2027–Q1/2028 after operational hardening gates); optional
+Prometheus/Grafana monitoring and Playwright-based load/monkey tooling.
+|Invoked from the sibling repository; has its own test suites outside this repository's JVM coverage
+gate.
+|===
+
+== Level 2: Components of `little-trotter-invoice`
+
+The component view below reflects the top-level packages under
+`kotlin-invoice/src/main/kotlin/de/littletrotter/`.
+
+.Component View — little-trotter-invoice
+image::structurizr-Components.svg["Component diagram of little-trotter-invoice: UI and application, domain, infrastructure and SPI packages",900,600]
+
+[cols="2,2,4", options="header"]
+|===
+|Component |Package |Responsibility
+
+|UI
+|`de.littletrotter.ui`
+|Vaadin Flow views, reusable UI components (e.g. `VatIdField`, the shared VAT-id field with
+visible prefix recognition), i18n, navigation, notifications, and UI-level security guards. Talks
+only to `application` — each view or component injects just the input ports it uses — plus `spi`
+for module-contributed form sections.
+
+|Application
+|`de.littletrotter.application`
+|Use-case orchestration and DTO mapping across invoice lifecycle, master/reference data,
+compliance, messaging, and caching. Exposes one input port per use case in
+`application.<context>.port.inbound` — `*QueryPort` for reads, `*UseCase` for writes — and no
+composite interfaces (<<adr-027,ADR-027>>, <<_input_ports,Input Ports>>). Depends on `domain` and
+calls `infrastructure` adapters, never the reverse.
+
+|Domain
+|`de.littletrotter.domain`
+|Domain model and business rules, independent of persistence/messaging technology; holds the
+repository ports that `infrastructure` implements, plus domain events and value objects (e.g.
+`VatIdValidator`, the single VAT-ID format validator shared by invoice recipient, invoice issuer
+profile, and invoice issuer VAT registration rows).
+
+|Infrastructure
+|`de.littletrotter.infrastructure`
+|Adapters implementing the domain's repository ports: persistence (Panache/JPA), messaging (NATS
+producer/consumer), storage (S3/RustFS), cache (Valkey), EU VAT-ID verification (`ViesHttpClient`,
+the `VatIdVerificationPort` adapter for the EU VIES REST API), and receipt PDF normalisation
+(`infrastructure.receipt.PdfBoxReceiptPdfReducer`, PDFBox, the
+`application.invoice.port.outbound.ReceiptPdfReducer` adapter — see <<_document_size_budget,Document
+Size Budget>>). Also holds developer-only demo-data fixtures, gated to `DEVELOPMENT` launch mode.
+
+|SPI
+|`de.littletrotter.spi`
+|Extension points for module-specific behavior — form fields, master-data extensions, and
+party-identifier contracts — used across `application`, `domain`, and `ui`.
+|===
+
+== Domain Model
+
+The containers and components above say where code runs, not what the domain is made of. The
+domain model lives in the Quarkus application as JPA entities under
+`de.littletrotter.domain` in `kotlin-invoice`; the database is only the storage behind it. The
+diagram shows the core invoicing cluster — the eleven entity classes an invoice actually touches,
+out of roughly 48 — with their Kotlin attribute types (`Money`, `InvoiceNumber`, enums) and the
+associations as declared in code. Child rows (addresses, party snapshots, documents, tax
+variants), the B2B field catalog, the per-diem rate catalog, the compliance log and system
+messaging are left out on purpose: they add nodes without changing the picture. A business trip's
+own children (`TripExpense`, `TravelExpenseEntry`, <<adr-021,ADR-021>>) are the one exception,
+included because they are the shape of a whole invoice position, not incidental detail.
+
+.Domain Model — Core Invoicing Cluster
+image::domain-model.svg[Class diagram of the core invoicing entities and their associations]
+
+[cols="2,3,4", options="header"]
+|===
+|Entity |Responsibility |Key invariants (enforced in code)
+
+|`Invoice`
+|The billing document: header data, the three monetary totals, lifecycle status, one currency
+shared with every item.
+|The invoice number is assigned at the `SENT` transition and never changes; a storno
+(`CORRECTED_INVOICE`) is the exact negative of the invoice it cancels and is read-only from the
+moment it exists; `dueDate` never precedes `invoiceDate`; an explicit per-invoice seller
+override wins over the linked sender profile. `status` has a private setter — `transitionTo`
+(state-machine-checked) and the construction-time-only `withInitialStatus` factory are the only
+ways to set it (<<adr-025,ADR-025>>); `items`/`documents`/`partySnapshots` are typed `List`, not
+`MutableList`, so `addItem`/`removeItem`/`applyPartySnapshots` remain the only mutation path.
+
+|`InvoiceItem`
+|One billed position: quantity × net unit price plus VAT, optionally created from a catalogue item
+(`Article`).
+|The tax snapshot (rule code, category, rate, exemption reason) is frozen once and never
+rewritten after the invoice is read-only; quantity is never negative — a rebate carries its
+sign in the unit price; position ids are never reused after a deletion.
+
+|`TripExpense`
+|One expense line (hotel, transport, mileage, taxi, other) of a `TRIP` position
+(<<adr-021,ADR-021>>).
+|Only ever created under an `InvoiceItem` of category `TRIP`; its net amount is derived the same
+"quantity × price, rounded before multiply" way `InvoiceItem` derives its own; a storno negates
+its unit price, never its quantity.
+
+|`TravelExpenseEntry`
+|One per-diem day of a `TRIP` position, carrying its own rate snapshot and deduction flags.
+|Only ever created under an `InvoiceItem` of category `TRIP`; its calculated claimable amount is
+never negative — a storno's credit for the per-diem share is taken at the trip total instead
+(<<adr-021,ADR-021>>).
+
+|`Recipient`
+|An invoice recipient (master data).
+|Recipient number, name and e-mail are mandatory; the VAT ID is mandatory unless the recipient is
+a consumer; the short hash is assigned once.
+
+|`SenderProfile`
+|An invoice issuer identity the Office Manager issues invoices under — usually one, several are
+possible.
+|Name, invoice prefix, e-mail, tax number, VAT id and IBAN are mandatory; the invoice prefix is
+unique; at most one profile is the default.
+
+|`Article` (Catalogue item)
+|A catalogue position (material, service, unit price) a billed position can be created from.
+|Name mandatory, default quantity positive, default price not negative; at most one default; a
+position keeps its own copied price and tax snapshot when the catalogue item changes later.
+
+|`TaxRate`
+|A VAT rule: rate plus EN 16931 category and validity window.
+|Rate within 0–100; the category constrains the row (`AE` forces rate 0 and the exemption
+reason, `S` is never 0 %); rules sharing a code never have overlapping validity windows.
+
+|`Receipt`
+|An uploaded document, content-addressed by its SHA-256 checksum, stored in RustFS.
+|Object key and checksum are unique; a receipt is never owned by an invoice — it is linked to
+invoices and positions and managed on its own. Every field (description, Belegdatum, file
+name, object key, checksum, size) becomes immutable once any linked invoice is issued
+(`isIssued`: `SENT`/`CANCELLED`), enforced by a DB trigger too.
+
+|`NumberRange`
+|Reference data for how invoice, recipient, catalogue and issuer numbers are formatted and
+allocated.
+|A gapless range allocates in the same transaction as the document it numbers; a yearly reset
+requires a date part in the format; nothing references a number range — application services
+mediate it.
+
+|`GenerationJob`
+|One PDF/e-invoice rendering attempt, tracked across the NATS round trip to `kotlin-xpdf`.
+|Status changes only along the job state machine's legal edges; attempts are capped before a
+job is failed for good; the rendering engine is snapshotted per job.
+|===
+
+=== Aggregates at a Glance
+
+[cols="2,3,3,2", options="header"]
+|===
+|Aggregate root |Owns (saved and deleted together) |References by id only |Repository
+
+|`Invoice`
+|`InvoiceItem` (with `TripExpense`/`TravelExpenseEntry` children for a `TRIP` position), party
+snapshots, documents, LLM analyses
+|`Recipient`, `SenderProfile`, `Article`, `TaxRate`, `PaymentTerm`, `Receipt` (n:m, no cascade)
+|`InvoiceRepository`
+
+|`Recipient`
+|`Address` list
+|—
+|`RecipientRepository`
+
+|`SenderProfile`
+|`Address` list, additional VAT registrations
+|—
+|`SenderProfileRepository`
+
+|`Article`
+|Tax variants, recipient references
+|`TaxRate`
+|`ArticleRepository`
+
+|`Receipt`
+|— (content-addressed file, independent of every invoice)
+|—
+|`ReceiptRepository`
+
+|`TaxRate`, `NumberRange`
+|— (stand-alone reference data)
+|—
+|reference-data services
+
+|`GenerationJob`
+|—
+|`Invoice` (unidirectional; the invoice holds no job collection)
+|`GenerationJobRepository`
+|===
+
+[[_excel_export]]
+== Excel Export
+
+`de.littletrotter.infrastructure.export.workbook` (`kotlin-invoice` only) turns invoice data into
+a real `.xlsx` so an accountant can independently recompute the totals: every money cell stays
+numeric and every control column is a genuine formula, not a pre-rendered string. See
+<<adr-018,ADR-018>> for the choice of Apache POI's streaming writer.
+
+[cols="2,4", options="header"]
+|===
+|Component |Role
+
+|`WorkbookWriter` / `SheetWriter` / `RowWriter`
+|Generic streaming layer (`SXSSFWorkbook`, bounded row window, cached cell styles); one typed
+method per cell kind so a caller cannot write a number as text.
+
+|`CellStyles`
+|One cached style per format, embedding the currency's ISO code in the cell's own number format
+so the cell stays summable.
+
+|`InvoiceHeaderSheetWriter` / `InvoicePositionSheetWriter` / `InvoiceJournalSheetWriter`
+|Domain-specific sheet content — header, positions, and change journal — each recomputing its own
+control/Δ columns independently.
+
+|`InvoiceExportReadRepository`
+|The dedicated read side for the export, a scalar-tuple projection rather than the aggregate. See
+<<_persistence,Persistence>>.
+
+|`InvoiceWorkbookExportPort` / `InvoiceWorkbookExportService`
+|The application-layer port — one invoice with its change journal, or a filtered set without —
+and its POI-aware implementation.
+|===
+
+[[_key_interfaces]]
+== Key Interfaces
+
+[cols="2,2,4,2", options="header"]
+|===
+|Interface |Kind |Purpose |Consumer
+
+|`LITTLE_TROTTER_JOBS` stream, subjects `document-jobs` / `document-jobs-interactive` / `document-job-results`
+|NATS JetStream
+|Carries generation-job envelopes to `kotlin-xpdf` (`document-jobs`, pull consumer
+`kotlin-xpdf-group`; interactive lane: `document-jobs-interactive`, pull consumer
+`kotlin-xpdf-interactive`; ack wait 120 s, renewed by a periodic in-progress heartbeat for the message's
+whole processing time) and results back (`document-job-results`). Deduplicated by JetStream message
+id `job-$id`.
+|`kotlin-xpdf` (jobs); `little-trotter-invoice` and `little-trotter-job-worker` (producers, results)
+
+|`LITTLE_TROTTER_DLQ` stream
+|NATS JetStream
+|Terminal destination for a job envelope after its retry budget (max-attempts=5) is exhausted.
+|Operators
+
+|`little-trotter-documents` bucket
+|S3 API (RustFS)
+|Object storage for receipts and generated PDF/A-3b + XML documents.
+|`little-trotter-invoice`, `kotlin-xpdf` (both write)
+
+|Valkey databases 1/2 (`VALKEY_INVOICE_DB`, `VALKEY_QUERY_CACHE_DB`)
+|Redis protocol
+|Text-payload store for job envelopes and receipt-checksum fast path (db 1), PDF/query cache
+(db 2).
+|`little-trotter-invoice`, `kotlin-xpdf`
+
+|`POST /mail/api/compose`
+|Internal REST (mail dispatch component)
+|The one synchronous call from `little-trotter-invoice` into the mail dispatch component: hands
+over a compose request and receives a draft id plus the route of the compose view in the invoicing
+application. Reachable only inside
+`invoice-net`, authenticated with an integration token; absent on an instance without the
+component.
+|`little-trotter-invoice`
+
+|`LITTLE_TROTTER_MAIL` / `LITTLE_TROTTER_MAIL_RESULT` streams, subjects `mail.send.requested` /
+`mail.send.result`
+|NATS JetStream
+|Both streams belong to the mail dispatch component. `mail.send.requested` is private to it;
+`mail.send.result` is the only subject the invoicing side consumes, and only while the feature is
+enabled.
+|Mail dispatch component; `little-trotter-invoice` (results only)
+
+|`/validate`, `/documents/presign`
+|Internal REST (`kotlin-xpdf`)
+|Used by the job-consumption path inside `kotlin-xpdf` and by development tooling; not exposed
+through Caddy. `little-trotter-invoice` itself exposes no REST endpoints of its own — a
+server-side Vaadin application plus the standard Quarkus health endpoints.
+|`kotlin-xpdf` itself, development tooling
+|===

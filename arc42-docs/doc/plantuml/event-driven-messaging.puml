@@ -1,0 +1,94 @@
+@startuml event-driven-messaging
+
+' Aligned with C4 palette (c4-styling.puml.inc) & compact layout
+skinparam nodesep 50
+skinparam ranksep 60
+skinparam shadowing false
+skinparam defaultFontName "Roboto Condensed, Arial Narrow, sans-serif-condensed, sans-serif"
+skinparam defaultFontSize 11
+skinparam defaultTextAlignment center
+skinparam wrapWidth 200
+
+skinparam component {
+  FontSize 11
+  BackgroundColor #3C88EB
+  BorderColor #2D66B0
+  FontColor #202124
+}
+skinparam database {
+  FontSize 11
+  BackgroundColor #1662C5
+  BorderColor #1456AE
+  FontColor #ffffff
+}
+skinparam queue {
+  FontSize 11
+  BackgroundColor #1250A2
+  BorderColor #0E3C7A
+  FontColor #ffffff
+}
+skinparam note {
+  FontSize 10
+  BackgroundColor #FEF5E0
+  BorderColor #E65100
+  FontColor #202124
+}
+skinparam arrow {
+  FontSize 10
+  Color #5F6368
+  FontColor #202124
+}
+skinparam rectangle {
+  FontSize 11
+  BackgroundColor #ffffff
+  BorderColor #5F6368
+  FontColor #5F6368
+}
+
+database "Job table\n(PostgreSQL)" as JobTable
+component "Job worker\n(re-publisher)" as Worker
+
+component "Web app\n(little-trotter-invoice)" as WebApp
+rectangle "NATS JetStream" as NatsBoundary {
+  queue "LITTLE_TROTTER_JOBS\ndocument-jobs\ndocument-jobs-interactive\ndocument-job-results" as MainQ
+  queue "LITTLE_TROTTER_DLQ\ndocument-jobs-dlq\ndocument-job-results-dlq" as DlqQ
+  MainQ -[hidden]right- DlqQ
+}
+component "kotlin-xpdf\n(renderer)" as Xpdf
+database "RustFS\n(S3 payload store)" as RustFS
+
+WebApp -up-> JobTable : persists job\n(PENDING)
+WebApp -right-> MainQ : publishes jobs,\nconsumes results
+MainQ -down-> Xpdf : delivers jobs,\ntakes results
+Xpdf -right-> RustFS : writes PDF + XML
+
+Worker -left-> JobTable : recovers stuck jobs\n(startup + interval 1 h)
+Worker -down-> MainQ : re-publishes
+
+WebApp -[#188038,dashed]-> Worker : Core NATS hint\n(post-commit, ADR-024)
+Worker -left-> JobTable : validates hint and schedules\nserialized durable drain
+
+note as EnvelopeNote
+  Envelope principle (ADR-008):
+  Messages carry IDs and object keys,
+  never raw document bytes.
+end note
+
+note as RetryNote
+  Retry budget: 3 attempts/message;
+  max 5 job attempts (ARC-28).
+  Poison messages land on DLQ.
+end note
+
+note as PlannedNote #E6F4EA
+  ARC-I01 / ADR-024: PostgreSQL authoritative;
+  Core NATS non-durable hint triggers drain.
+  5-min recovery and startup catch-up as backstop.
+  Chain verification & retention check persisted state.
+end note
+
+EnvelopeNote -up- MainQ
+RetryNote -up- DlqQ
+PlannedNote -left- Worker
+
+@enduml

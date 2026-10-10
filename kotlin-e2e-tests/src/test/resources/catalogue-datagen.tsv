@@ -1,0 +1,6 @@
+# Synthetic datagen generate.py --seed 42 --sql-file, first article per category; 2026-09-16
+Backend Development	0	0	120.00
+Server Hardware	1	4	2500.00
+# Derived cases: same synthetic default service with catalogue category/unit variations.
+Backend Development area	6	6	120.00
+Backend Development trip	5	11	120.00

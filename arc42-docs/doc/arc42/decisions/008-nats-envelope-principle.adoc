@@ -1,0 +1,46 @@
+[[adr-008]]
+= ADR-008: Small NATS Envelopes, Valkey for Text, RustFS for Binaries
+
+== Status
+Accepted, implemented
+
+== Context
+PDF/XML generation is asynchronous, coordinated between `kotlin-invoice` and `kotlin-xpdf` over
+NATS JetStream. Putting full payloads (KoSIT validation reports, rendered documents) directly on
+the message bus would make NATS a de facto document store, working against JetStream's design
+as a message broker and bloating stream storage/ack-pending accounting with payloads the broker
+never needs to interpret.
+
+== Decision
+NATS carries only small, typed envelope structures — `GenerationJobResultRefs` (`kotlin-shared`)
+for job results — never the documents or reports themselves. Text payloads too large or too
+transient for a message (KoSIT validation reports) are exchanged through Valkey via a
+`PayloadExchange` port, addressed by a reference key the envelope carries. Binary artifacts
+(rendered PDFs, generated XML) are written to RustFS/S3 and referenced by object key. A missing
+or expired Valkey entry is treated as a documented degrade path (a `null` report, logged as a
+warning), not a processing failure, since Valkey is a cache/exchange, not the system of record.
+
+== Consequences
+
+=== Positive
+* NATS stream storage and `maxAckPending` stay proportional to job count, not to document size.
+* The envelope's typed shape (`GenerationJobResultRefs`) gives every reader/writer one place that
+  lists the known fields, instead of a bare `Map<String, String>` with magic keys.
+
+=== Negative
+* Three systems (NATS, Valkey, RustFS) must all be healthy for a job to complete cleanly,
+  instead of one.
+
+=== Mitigation
+* Each store's failure mode is handled independently and explicitly at the point of use
+  (Valkey miss degrades to a warning + `null`; RustFS/NATS failures propagate through the
+  existing retry/DLQ path — see the messaging retry and idempotency behavior in
+  <<_messaging_event_driven_architecture,Messaging and Event-Driven Architecture>> of
+  <<_cross_cutting_concepts,Cross-cutting Concepts>>), rather than a single combined
+  failure mode that is harder to diagnose.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/GenerationJobResultRefs.kt`,
+`kotlin-invoice/.../infrastructure/messaging/GenerationJobResultConsumer.kt` (`PayloadExchange`),
+`kotlin-xpdf/.../infrastructure/messaging/ResultPublisher.kt`._

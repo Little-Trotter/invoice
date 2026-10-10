@@ -1,0 +1,44 @@
+[[adr-036]]
+= ADR-036: Offer life cycle is a single status
+
+== Status
+Accepted, 2026-10-07
+
+== Context
+The previous offer model described a sent offer in two dimensions: a workflow status (`DRAFT`,
+`REVIEW`, `SENT`, `INVOICED`, `CANCELLED`) and an outcome attribute (`OPEN`, `ACCEPTED`, `REJECTED`,
+`SUPERSEDED`). On top of that, an expiry was derived from the validity date and a revision created a
+new offer with a number suffix and a predecessor/successor link. Lists, filters, statistics and tests
+had to combine status, outcome and derived expiry to answer "where does this offer stand"; the
+revision chain added cross-references in both directions.
+
+== Decision
+The life cycle is one status with seven values: `DRAFT`, `REVIEW`, `SENT`, `ACCEPTED`, `INVOICED`,
+`REJECTED`, `CANCELLED`.
+
+* Transitions: `DRAFT` → `REVIEW`/`CANCELLED`; `REVIEW` → `SENT`/`DRAFT` (return with a note)/`CANCELLED`;
+  `SENT` → `ACCEPTED`/`REJECTED` (a reason is required); `ACCEPTED` → `INVOICED`, only through the event
+  `invoice.created-from-quote`. `INVOICED`, `REJECTED` and `CANCELLED` are terminal.
+* No outcome attribute, no derived "expired" state and no revision: no number suffix, no
+  predecessor/successor, no revise permission. The validity date is a document field on the PDF only.
+* Log entry kinds: `NOTE`, `STATUS`, `SEND`, `ATTACHMENT`, `INVOICE`.
+* The send action in `REVIEW` is labelled "E-Mail senden"; without the mail module there is no send
+  action.
+* Acceptance rate = (`ACCEPTED` + `INVOICED`) / (`SENT` + `REJECTED` + `ACCEPTED` + `INVOICED`).
+
+== Consequences
+* Lists, filters and statistics read one column; every state has one meaning and one test path.
+* A change request after sending is handled as a rejection with a reason and a new offer with its own
+  number; there is no link between the two.
+* An offer whose validity date has passed stays `SENT` until the user records acceptance or rejection.
+* The previous model is kept only as the git tag `archive/quote-outcome-model` and is not merged.
+
+== Amendment 2026-10-07
+The hand-over to the invoicing application no longer follows from the acceptance. An explicit invoice
+order (`quote.invoice-order.requested`, answered by `invoice.created-from-quote` or
+`invoice.creation-from-quote.rejected`, both carrying the order id) is allowed from `SENT`
+(acceptance is recorded in the same transaction) and `ACCEPTED`. `INVOICED` is still reached only
+through the reply `invoice.created-from-quote`; a rejected order leaves the offer `ACCEPTED`.
+
+'''
+_Architecture Decision Record — source: `kotlin-quote`, module `quote-core` (`Quote`, `QuoteStateMachine`)._

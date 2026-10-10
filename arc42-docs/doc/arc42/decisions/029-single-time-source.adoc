@@ -1,0 +1,113 @@
+[[adr-029]]
+= ADR-029: A Single Injectable Time Source, Two Readings of One Moment
+
+== Status
+Accepted, implemented.
+
+== Context
+Calendar dates and timestamps were read through roughly seventy direct `LocalDate.now()` /
+`OffsetDateTime.now()` calls scattered across the codebase. Each call silently depended on the
+container's `TZ` setting rather than on a product property, and the yearly reset of number ranges
+— an invoice number carries the year it was issued in — could not be tested deterministically: a
+test could not fix "now" at the year boundary without controlling every call site individually.
+A `java.time.Clock` bean already existed, but only five services actually used it.
+
+== Decision
+One component, `TimeSource` (`de.littletrotter.shared.time`, `kotlin-shared`), replaces every
+direct `now()` call in every module. `ClockTimeSource` implements it over a `java.time.Clock`.
+`kotlin-shared` has no CDI, so each deployable produces its own `@ApplicationScoped` instance over
+the system UTC clock: `TimeSourceProducer` in `kotlin-invoice`, a producer of its own in
+`kotlin-xpdf`. `kotlin-facturx` has no CDI either and receives the moment from its caller as a
+parameter.
+
+`TimeSource` exposes two readings of the same instant, not one:
+
+* *Points in time* — `instant()`, `nowUtc()` — are UTC. Everything stored, compared, or measured
+  uses these.
+* *Calendar dates* — `today()`, `localNow()` — are read in the business zone, `Europe/Berlin`
+  (`GermanTime.ZONE`, `kotlin-shared`), the zone the user actually works in.
+
+The distinction matters at midnight: an invoice sent at 00:30 on 1 January in Berlin belongs to
+the new year, although UTC still reads 31 December.
+
+A stored moment becomes a calendar day only through `GermanTime.dayOf(...)` (`kotlin-shared`), never
+through the moment's own offset (`OffsetDateTime.toLocalDate()` on a UTC value) or the process zone
+(`ZoneId.systemDefault()`). The offer's day of sending, for example, is the German day of the
+actor's UTC timestamp, so an offer dated today can be sent at 00:30.
+
+Invoice numbers are drawn for the invoice's own business date, not for the instant the allocation
+happens: `InvoiceNumberService.generateNextNumber(sender, date, …)` takes `invoice.invoiceDate`,
+which is stamped once at the invoice's `→ SENT` transition. The number's embedded year and the
+printed invoice date can therefore never diverge across a midnight boundary.
+
+Persistence and transport stay UTC throughout: every database timestamp column is `TIMESTAMPTZ`,
+Hibernate reads and writes UTC (`quarkus.hibernate-orm.jdbc.timezone=UTC`), event stream envelopes
+and payloads (NATS JetStream) carry instants in UTC, and object storage metadata (RustFS) adheres
+strictly to UTC. The UI renders timestamps in the user's local time (DST-aware, winter/summer time),
+defaulting to `Europe/Berlin` (`GermanTime.ZONE`), and paving the way for multi-timezone operations
+across distributed branches for mid-sized enterprises. Entity audit stamps
+(`AuditableEntity.createdAt`/`updatedAt`) are written by `AuditTimestampListener`, creation moments of
+the remaining entities by `CreationStampListener` (`StampedOnCreation`); both are JPA entity listeners
+that Quarkus runs as CDI beans — so the domain itself never needs a clock for its own bookkeeping, and
+Hibernate's generated timestamps are not used at all.
+
+The database does not invent time either. The schema has no `DEFAULT NOW()`/`CURRENT_DATE`; every
+writer supplies its dates and timestamps. The invoice audit trigger stamps `occurred_at` from the
+session setting `app.now` instead of `clock_timestamp()` and rejects a write without it.
+`AppNowConnectionInterceptor` (an Agroal pool interceptor) sets `app.now` from the `TimeSource` on
+every connection the application takes from the pool; any other writer — an admin script, the
+`datagen` bulk loader — sets it itself. Native SQL binds timestamps as parameters instead of calling
+`CURRENT_TIMESTAMP`; seed rows carry the fixed baseline moment. Domain methods that need a date or
+instant take it as a parameter instead of reading the clock themselves.
+
+== Enforcement
+ArchUnit forbids in production code any `now(...)` call on a `java.time` type, any `Clock.system*`
+factory call, `System.currentTimeMillis()`, `System.nanoTime()`, building a `ClockTimeSource` or a
+fixed/offset/ticking `Clock`, and Hibernate's `@CreationTimestamp`/`@UpdateTimestamp`/
+`@CurrentTimestamp`, outside `ClockTimeSource` and the module's own producer. It also forbids
+`OffsetDateTime.toLocalDate()` and `ZoneId.systemDefault()` outside `GermanTime`, so calendar days
+are read in German time only. The rules exist once, in `TimeRules` of `kotlin-architecture-rules`
+(<<adr-038,ADR-038>>), self-tested there against violating and permitted specimens; every module
+(`kotlin-shared`, `kotlin-facturx`, `kotlin-xpdf`, `kotlin-invoice`, the offer and mail modules)
+checks its own production classes with them in `TimeSourceArchitectureTest`.
+
+== Testability
+Unit tests fix time with `ClockTimeSource.fixedAt(instant)` or `fixedAtLocal(localDateTime)`, or a
+mock. Quarkus tests swap the application-scoped bean per test with
+`QuarkusMock.installMockForType`. A year-rollover test fixes the clock at 31 December 23:59:59 and
+at 1 January 00:00, both Berlin time, and asserts the numbering and date behavior on each side of
+the boundary.
+
+== Alternatives Considered
+* *A static/ambient clock holder:* rejected — global mutable state invites test cross-talk between
+  parallel test classes and hides the dependency from a bean's constructor.
+* *Injecting raw `java.time.Clock` everywhere:* rejected — every call site would then choose its
+  own zone conversion independently, reintroducing the inconsistency this decision removes.
+* *Relying on the container's `TZ=Europe/Berlin`:* rejected — a deployment setting is not a product
+  property; the business zone must not depend on how a given container happens to be configured.
+
+== Consequences
+
+=== Positive
+* Year- and month-boundary behavior (number ranges, reporting cutoffs) is deterministically
+  testable by fixing one clock.
+* Business logic no longer depends on the container's `TZ` configuration.
+* The business zone is defined in exactly one place and can be changed there alone.
+
+=== Negative
+* Every bean that needs "now" takes a `TimeSource` constructor parameter instead of calling a
+  static method — more constructor wiring throughout the codebase.
+* Every writer outside the application — admin scripts, `datagen` — must set `app.now` before it
+  touches a journaled table; a forgotten setting fails the write instead of silently stamping the
+  database's clock.
+* Elapsed-time measurements use the wall clock of the `TimeSource` rather than a monotonic counter;
+  a clock step during a measurement skews that one log value, never a stored business value.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/time/TimeSource.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/infrastructure/persistence/AppNowConnectionInterceptor.kt`,
+`kotlin-invoice/src/main/resources/db/migration/ddl/V1__baseline_schema.sql`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/shared/TimeSourceProducer.kt`,
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/GermanTime.kt`,
+`kotlin-architecture-rules/src/main/kotlin/de/littletrotter/architecture/rules/TimeRules.kt`._

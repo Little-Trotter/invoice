@@ -1,0 +1,12 @@
+{
+  "generator_repository": "little-trotter-admin-tools",
+  "generator_revision": "f20ac998c239698a8b9743cdb79a9df5e8919cc6",
+  "legacy_generation_command": "python3 generate.py --seed 42 --demo 2 --sql-file /private/tmp/lti-arc-i01-demo2.sql",
+  "current_generation_command": "python3 generate.py --seed 42 --sql-file /private/tmp/lti-arc-i01-datagen.sql",
+  "generated_on": "2026-09-16",
+  "legacy_demo_level": 2,
+  "seed": 42,
+  "sql_sha256": "dae1985f4db985881260f664f80a13ec4bfb28904b1d03614473857dc188ebb2",
+  "projection": "First INSERT INTO invoice invoice_number; technical job IDs and failure states are test control values, not imported business data.",
+  "mode": "Offline SQL mode; clean environment; no database, object store or remote host used."
+}

@@ -1,0 +1,16 @@
+# Maven and frontend build output
+target/
+.kotlin/
+node_modules/
+
+# Local IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Generated frontend files are rebuilt during the image build
+vite.generated.ts
+vite.config.ts
+.vaadin-node-tasks.lock
+src/main/frontend/generated/

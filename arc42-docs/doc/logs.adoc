@@ -1,0 +1,156 @@
+= Little Trotter X-Invoice — Release-Log & Chronik
+:author: Projektinitiator (https://github.com/eifel42[eifel42])
+:revnumber: 0.9.33-SNAPSHOT
+:revdate: {docdate}
+:description: Entwicklungschronik, Meilensteine der Release-Linien Haflinger, Andalusier und Schwarzwälder Fuchs sowie Register aller Architektur-Entscheidungen (ADR-001 bis ADR-034)
+:doctype: book
+:toclevels: 3
+:sectanchors:
+:sectlinks:
+:sectnums:
+:sectnumlevels: 4
+:toc: left
+:docinfodir: docinfo
+:stylesdir: css
+:stylesheet: arc42-docs.css
+:linkcss:
+:experimental:
+:docinfo: shared-head
+:icons!:
+:source-highlighter!:
+:imagesdir: images
+:title-logo-image: image:little-trotter-horse.png[Little Trotter Logo: stilisiertes Pferd,300,align="center"]
+:lang: de
+:toc-title: Inhaltsverzeichnis
+:chapter-label: Kapitel
+:section-refsig: Abschnitt
+:figure-caption: Abbildung
+:table-caption: Tabelle
+:example-caption: Beispiel
+:note-caption: Hinweis
+:project-name: Little Trotter X-Invoice
+:project-version: 0.9.33-SNAPSHOT
+
+[abstract]
+.Zusammenfassung
+Dieses Dokument protokolliert die technische Entwicklungschronik und Release-Historie von Little Trotter X-Invoice. Es dokumentiert den Umsetzungsstand der Release-Linien (Haflinger, Andalusier, Schwarzwälder Fuchs) sowie das vollständige Register der Architektur-Entscheidungen (ADR-001 bis ADR-034; ADR-016 und ADR-019 sind in ADR-015 aufgegangen, die Nummern bleiben reserviert).
+
+[NOTE]
+====
+.Hinweise zu Transparenz und Testdaten
+
+Transparenz und KI-Assistenz::
+Diese Entwicklungschronik und das Entscheidungsregister wurden mithilfe fortschrittlicher KI-Assistenzsysteme erfasst, strukturiert und redaktionell gepflegt.
+
+Synthetische Testdaten (`datagen`)::
+Sämtliche in dieser Dokumentation erwähnten Meilensteine, Szenarien und Testangaben beruhen auf synthetischen Testdaten (`datagen`).
+====
+
+== Übersicht der Release-Linien
+
+Die Software befindet sich im Beta-Stadium zur betrieblichen Erprobung. Der Zeithorizont bis zur Produktivreife beträgt circa ein Jahr (Zielkorridor Q3/Q4 2027). Alle Quartalsangaben stellen unverbindliche Orientierungswerte dar.
+
+[cols="1,3", options="header"]
+|===
+|Meilenstein |Funktionsbereich & Kernkomponenten
+
+|*Haflinger*
+|Rechnungskern, Beleglebenszyklus, Factur-X / ZUGFeRD 2.x, XRechnung (EN 16931), KoSIT-Validator, DIN 5008 Typst-Rendering, Storno Typ 384, Excel-Export, Audit-Journal
+
+|*Andalusier*
+|Eigenständiger Dienst `kotlin-email`, Ed25519-Signaturpakete, SMTP/TLS, NATS JetStream Warteschlange, Vorlagenverwaltung, Umschlag-Vorschau
+
+|*Schwarzwälder Fuchs*
+|Eigenständiges Modul `kotlin-quote`, UBL-Quotation-XML, Angebots-Statusmaschine, Übernahme akzeptierter Angebote in Rechnungsentwürfe
+
+|*Percheron*
+|Erweiterte grenzüberschreitende Factur-X-Profile für Frankreich, Luxemburg und Belgien
+|===
+
+== Release Haflinger — Rechnungs- und Belegkern
+
+*Modulverantwortung:* `kotlin-invoice`, `kotlin-xpdf`, `kotlin-shared`
+
+Das Release „Haflinger“ bildet das kaufmännische und technische Fundament von Little Trotter.
+
+=== Kernfunktionen
+* *Standardkonforme Fakturierung*: Vollständige Konformität zur europäischen Norm EN 16931 (XRechnung 3.0.x, Factur-X / ZUGFeRD 2.x).
+* *Typst-basierte PDF/A-3-Erzeugung*: Millimetergenaue DIN 5008 Layout-Berechnung, Vektorausgabe und integrierte GiroCode-Generierung (EPC-QR).
+* *Automatische Validierungsstufen*: Mehrstufige In-Process-Prüfung (Schematron, KoSIT-Validator, veraPDF) vor jeder Belegfestschreibung.
+* *S3-Belegpool (RustFS)*: SHA-256 Dublettenerkennung, strukturierte Kostenzuordnung und festes Größenbudget (0,8 MB) zur Vermeidung von Mailserver-Ablehnungen.
+* *Rechnungskorrektur (Storno Typ 384)*: Normgerechte 1:1-Stornierung mit Vorzeichenumkehr und Zahlungszielunterdrückung; bestehende Belege werden niemals überschrieben oder gelöscht.
+* *Kaufmännischer Excel-Export*: Generierung von Arbeitsmappen via Apache POI inklusive dynamischer Kontrollformeln zur Gegenprüfung.
+* *Rechnungs-Audit-Journal*: Vollständige Protokollierung aller Zustandsänderungen über PostgreSQL-Trigger.
+
+== Release Andalusier — SCS E-Mail-Versand (`kotlin-email`)
+
+*Modulverantwortung:* `kotlin-email`
+
+Das Release „Andalusier“ liefert die eigenständige E-Mail-Versandarchitektur für elektronische B2B-Rechnungen als optionales Teilsystem.
+
+=== Kernfunktionen
+* *Entkoppeltes Self-Contained System*: Drei Module (`email-core`, `email-service`, `email-app`) mit eigenständiger Datenhaltung und NATS-JetStream-Kommunikation.
+* *Unveränderlicher Vertrag (`kotlin-mail-contract`)*: Schema-versionierte Nachrichtenstruktur `de.littletrotter.shared.mail` zur stabilen Entkopplung.
+* *Postfach-Ergonomie & Umschlag-Vorschau*: Mail-Compose-Ansicht mit Umschlag-Vorschau (Empfänger, Betreff, Anlagen, Signatur), Sendebar und Statusanzeige.
+* *Standardisierte Vorlagenverwaltung*: Editierbare B2B-Mailvorlagen mit streng typisierten Platzhaltern je Dokumentart.
+* *Kryptografisch signiertes Versandarchiv*: Append-only Archivierung jedes versandten Belegs mit Ed25519-Signatur für den Nachweis des Versandzeitpunkts.
+* *Einheitliche Zeitbasis (`TimeSource`)*: Deterministische Zeitstempelung über zentralen `TimeSourceProducer` und `app.now`-GUC in PostgreSQL; keine direkten Systemuhr-Abfragen im Fachcode.
+
+== Release Schwarzwälder Fuchs — Modul Angebot (`kotlin-quote`)
+
+*Modulverantwortung:* `kotlin-quote` (SCS-Muster analog `kotlin-email`)
+
+Das Release „Schwarzwälder Fuchs“ ergänzt die Rechnungsplattform um die vorgelagerte Angebotserstellung und -verwaltung. Da an den Release-Strängen parallel gearbeitet wird, ist das Modul als eigenständiges SCS vollständig entkoppelt.
+
+=== Kernfunktionen
+* *Entkoppeltes Self-Contained System*: Eigenständiges Teilsystem (`quote-core`, `quote-service`, `quote-app`) mit eigenem Schema `quote`, Outbox-basierter Stammdatenreplikation (Kunden, Artikel, Steuersätze u. a.) und Rollenmodell (`QuoteRole`, `QuotePermission`). Die Oberfläche liegt als Flow-Routen in der Rechnungsanwendung; `quote-app` ist ein reiner REST-Dienst unter `/quote/api/*`.
+* *Angebotslebenszyklus*: Aggregat `Quote` mit einem einzigen Status: `DRAFT` → `REVIEW`/`CANCELLED`, `REVIEW` → `SENT`/`DRAFT` (Rückgabe mit Notiz)/`CANCELLED`, `SENT` → `ACCEPTED`/`REJECTED` (Grund erforderlich), `ACCEPTED` → `INVOICED`. Inhalt nur in `DRAFT` änderbar, Nummernvergabe bei `REVIEW`. Kein Ergebnisattribut, kein Ablaufstatus, keine Revision. Jede Änderung steht im Logbuch.
+* *Nummernkreis*: Definition (Präfix, Datumsteil, Zählerbreite, Rücksetzzyklus) als Stammdatum der Rechnungsanwendung, lückenloser Zähler im Schema `quote` (ADR-033).
+* *Dokumente*: DIN 5008 PDF über Typst (Standardvorlage, Dokumentsprache Deutsch/International) und strukturiertes XML nach UBL Quotation (Modul `kotlin-quotation-xml`, XSD- und Schematron-Prüfung). Für das Angebots-XML besteht kein eigener ADR.
+* *Übernahme in Rechnungen*: Ein expliziter Rechnungsauftrag `quote.invoice-order.requested` (nur Referenz, aus Status `SENT` oder `ACCEPTED`; die Annahme allein erzeugt keine Rechnung) startet in `kotlin-invoice` die Anlage eines Rechnungsentwurfs (`CreateInvoiceFromQuoteUseCase`); die Antwort `invoice.created-from-quote` (mit Auftrags-ID) setzt das Angebot auf `INVOICED`. Verträge im Modul `kotlin-quote-contract`.
+* *Mail-Versand*: Versand über das E-Mail-SCS per Compose-REST des Mail-Vertrags (`kotlin-mail-contract`), Ergebnis über `mail.send.result`.
+* *Bedienung*: Statistik-Auswertung mit Ansicht, eigene Hauptmenü-Sektion „Angebote“ (Drawer: Fakturierung · Angebote · E-Mail · Stammdaten · Verwaltung · Hilfe), Schnellfilter der Liste, Editor mit Positions-Grid, Protokoll und Dokumentenvorschau, Angebots-Einstellungen in der Verwaltung der Rechnungsanwendung.
+* *Testdaten*: `datagen` erzeugt Angebote mit Positionsarten und Anlagen.
+
+=== Umsetzungsstand
+Umgesetzt sind Gerüst und Identität, Stammdaten-Events und Replikate, Angebotsdomäne mit Oberfläche, PDF- und XML-Erzeugung, Mail-Versand, Übernahme in Rechnungen und Statistik, Hauptmenü-Sektionen, datagen-Unterstützung, Editor-Angleichung an die Rechnung sowie Nummernkreis-Definition und Einstellungen. Die Lastmessung (Baseline: zehn parallele Sitzungen über 30 Minuten ohne Fehler, Annahme bis Rechnungsentwurf unter zwei Sekunden) und der Programmabschluss (vollständiger Testlauf, Sonar- und Qodana-Analyse ohne offene Befunde) sind am 2026-10-07 erfolgt; die Sichtprüfung der Bildschirmfotos in hellem und dunklem Schema steht noch aus. Ein CII/310-Writer ist nur auf Abruf des Product Owners vorgesehen. Erweiterte Factur-X-Profile für Frankreich, Luxemburg und Belgien gehören zur Release-Linie Percheron.
+
+== Register der Architektur-Entscheidungen (ADR-001 bis ADR-034)
+
+[cols="1,3,1", options="header"]
+|===
+|ADR |Titel & Kernthema |Status
+
+|*ADR-001* |Money-Werttyp statt rohem `BigDecimal` |Akzeptiert
+|*ADR-002* |EN-16931-Geschäftsbegriffe als Kotlin-Enum statt Katalogtabelle |Akzeptiert
+|*ADR-003* |Reverse Charge als Entscheidung auf Rechnungsebene, nicht aus Positionen abgeleitet |Akzeptiert
+|*ADR-004* |PDF-Vorlagen je B2B-Profil, beim Druck gewählt |Abgelöst durch ADR-030
+|*ADR-005* |Angezeigte Systemzeit ist immer deutsche Ortszeit |Akzeptiert
+|*ADR-006* |Härtung der JPA-Zugriffe (LIKE-Escaping, stabile Paginierung, explizite Fetches) |Akzeptiert, umgesetzt
+|*ADR-007* |RustFS als S3-kompatibler Objektspeicher, auch auf kleiner Hardware |Akzeptiert
+|*ADR-008* |Kleine NATS-Envelopes, Valkey für Text, RustFS für Binärdaten |Akzeptiert, umgesetzt
+|*ADR-009* |Editionen abgeschafft: eine Komponente statt Community/Commercial |Akzeptiert, umgesetzt
+|*ADR-010* |Fehlertoleranz wird selbst implementiert, nicht per Framework |Akzeptiert, umgesetzt
+|*ADR-011* |Flyway-Baseline wird bis zur ersten Live-Instanz direkt bearbeitet |Akzeptiert (2026-09-16)
+|*ADR-012* |Docker Engine statt Podman für Entwicklung und Produktionshost |Akzeptiert
+|*ADR-013* |Authentik erhält eine eigene Datenbank in derselben PostgreSQL-Instanz |Akzeptiert
+|*ADR-014* |Größenbudget für Rechnungsdokumente: frühe Prüfung plus Export-Absicherung |Akzeptiert
+|*ADR-015* |Die Mail-Komponente ist ein Self-Contained System |Akzeptiert, umgesetzt
+|*ADR-017* |Flyway-Versionen als eine globale Sequenz über `ddl/` und `seed/` |Abgelöst durch ADR-011 (2026-09-16)
+|*ADR-018* |Apache POI für den Excel-Export |Akzeptiert
+|*ADR-020* |NATS JetStream als Event-Backbone |Akzeptiert
+|*ADR-021* |Dienstreise als eine Rechnungsposition |Akzeptiert
+|*ADR-022* |Wording-Profil durch Begriffsersetzung |Akzeptiert (2026-09-13)
+|*ADR-023* |USt-IdNr. als ein Feld, VIES nur auf Anforderung |Akzeptiert
+|*ADR-024* |Wartungs-Wakeup-Hinweise über Core NATS |Vorgeschlagen
+|*ADR-025* |Kapselung des Rechnungsaggregats und Command/DTO-Grenze |Akzeptiert, umgesetzt
+|*ADR-026* |Katalogkategorien und X-Rechnung-Einheiten |Akzeptiert
+|*ADR-027* |Eigene Eingangs-Ports je Anwendungsfall, keine zusammengesetzten Interfaces |Akzeptiert, umgesetzt
+|*ADR-028* |Optimistische Nebenläufigkeit, erster committeter Schreiber gewinnt |Akzeptiert, umgesetzt
+|*ADR-029* |Eine injizierbare Zeitquelle, zwei Lesarten eines Zeitpunkts |Akzeptiert, umgesetzt
+|*ADR-030* |Typst als einzige Layout-Engine |Akzeptiert (2026-09-27)
+|*ADR-031* |EXTENDED-Profil-Eskalation bei Rechnungen mit Skonto |Akzeptiert (2026-09-28)
+|*ADR-032* |Ein Beleg, eine Einbettung |Akzeptiert
+|*ADR-033* |Angebotsnummernkreis: Definition zentral, Zähler dezentral |Akzeptiert (2026-10-06)
+|*ADR-034* |Fehlendes oder ungültiges Originaldokument |Akzeptiert (2026-10-01)
+|===

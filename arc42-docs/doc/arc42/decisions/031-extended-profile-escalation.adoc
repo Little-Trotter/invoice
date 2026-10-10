@@ -1,0 +1,85 @@
+[[adr-031]]
+= ADR-031: EXTENDED Profile Escalation for Cash-Discount Invoices
+
+== Status
+Accepted, 2026-09-28
+
+== Context
+The ZUGFeRD EXTENDED profile adds structured `ApplicableTradePaymentDiscountTerms` to EN 16931,
+allowing the invoice's cash discount to be machine-readable alongside the plain-text BR-DE-18 line.
+EN 16931 is the default B2B profile for German e-invoices and supports only text-based payment terms
+in BT-20.
+
+By default, a cash-discount (Skonto) invoice on the Mustang route exports as EN16931. Receivers
+with EXTENDED support can extract `CalculationPercent` and `BasisAmount`, but receivers without it see
+only the text form in BT-20.
+
+== Decision
+EN16931 remains the default B2B profile, even for cash-discount invoices, because the KoSIT
+XRechnung validator cannot validate EXTENDED. An invoice carrying a cash discount on the Mustang
+route is escalated to EXTENDED so the discount travels as structured
+`ApplicableTradePaymentDiscountTerms` in addition to the BR-DE-18 `#SKONTO#` text line. The
+escalation is opt-in per installation: it applies only when the admin feature flag
+`feature.extended-profile.enabled` (`FeatureFlag.EXTENDED_PROFILE`) is switched on; by default,
+cash-discount invoices export as EN16931.
+
+Profile resolution:: The function
+`resolveExportProfileId(sellerVatId, buyerVatId, extendedFeatures)` in `kotlin-invoice`
+(`domain/invoice/ExportProfile.kt`) decides the profile once. It returns `XRechnung` if a VAT ID
+appears on only one side (seller or buyer, never both), otherwise `EXTENDED` if
+`Invoice.requiresExtendedProfile()` evaluates to true (= `documentEngine != FACTURX` and
+`cashDiscount() != null`), otherwise `EN16931`. XRechnung is never escalated.
+
+Engine pinning:: The Factur-X engine route (`documentEngine == FACTURX`) is pinned to EN16931; the
+engine knows only this profile and cannot output EXTENDED.
+
+Single source of truth:: Both consumers use the same profile-resolution function:
+`InvoiceHeaderDtoMapper.buildMeta` (setting `InvoiceDto.meta.profileId`) and `FinalizationPolicy`
+(the export gate) consult it identically.
+
+XML markup:: In `kotlin-xpdf`, `MustangExportModel.exportProfile` carries the resolved profile;
+`MustangTransactionBuilder` sets `IZUGFeRDPaymentDiscountTerms` only for EXTENDED invoices. Mustang
+writes the element with:
+* `BasisAmount` = gross amount (currency EUR), calculated by Mustang.
+* `CalculationPercent` = the cash discount percentage.
+* No `BasisDateTime` or `BasisPeriodMeasure` (Mustang writes these only together with a base date,
+  and a base date alongside the due date is forbidden by the schema).
+
+The cash-discount deadline remains in the BT-20 text line `#SKONTO#TAGE=…` (BR-DE-18 format).
+
+Conformance:: The XML form matches ZUGFeRD-2.5.2-EXTENDED example X18. The Guideline-URN is
+`urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended`; the attachment name stays
+`factur-x.xml`.
+
+== Consequences
+Profile expansion:: Receivers without EXTENDED support may reject the profile, although the document
+remains EN 16931 conformant per §14 UStG. EXTENDED is an EN-16931-conformant extension, so the
+invoice's core facts stay valid; stricter receivers may simply need configuration to accept it.
+Escalation occurs only when the data (cash discount) justifies the extra profile layer.
+
+Validation:: CII-XSD validation must pass; Factur-X EXTENDED Schematron
+(`FacturXSchematronValidator`) must return VALID with no findings. The bundled KoSIT XRechnung 3.0.2
+configuration has no scenario for the EXTENDED guideline, so the KoSIT stage is skipped with an
+explicit reason for EXTENDED exports and the Factur-X EXTENDED Schematron stage is authoritative; a
+dedicated `PROFILE` stage (outcome VALID) carries one WARNING finding `LT-PROFILE-EXTENDED` telling
+the user that receivers without EXTENDED support may reject the file; overall validation stays
+VALID.
+
+Verification:: `ExportValidationStagesTest` (KoSIT-Skip only for EXTENDED, `PROFILE` stage with
+WARNING, overall VALID), `XmlExportServiceImplTest` verifies the XML fragment, XSD validity and
+Factur-X EXTENDED Schematron acceptance. Unit tests for `ExportProfile`, `InvoiceDtoMapper`,
+`FinalizationPolicy`, `MustangTransactionBuilder`, `MustangExportModelMapper` and
+`InvoiceDtoArityTest` confirm the escalation logic, profile-ID mapping and data transport.
+`KositValidationIT` confirms that EXTENDED URNs are not VALID in KoSIT.
+
+Registration:: The `validation_profile` registry holds an `EXTENDED` row in state EXPERIMENTAL
+(Factur-X 1.09.2 Schematron, Mustang 2.26.0), so finalization is allowed without a KoSIT proof.
+`ValidationProfileMigrationIT` confirms the EXPERIMENTAL status and that exactly one ACTIVE row
+exists.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/invoice/ExportProfile.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/FinalizationPolicy.kt`,
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/mustang/MustangTransactionBuilder.kt`,
+`kotlin-facturx/src/main/kotlin/de/littletrotter/facturx/FacturXSchematronValidator.kt`._

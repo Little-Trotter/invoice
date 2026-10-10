@@ -1,0 +1,98 @@
+[[adr-032]]
+= ADR-032: One Receipt, One Embedding
+
+== Status
+Accepted
+
+== Context
+The export worker used to embed every linked receipt three separate ways in a produced e-invoice:
+once as a rasterized JPEG page appended to the visible PDF (`ReceiptAnnexBuilder`, default
+`mode=raster`, 200 dpi), once more as a PDF/A-3 embedded file alongside the ZUGFeRD XML, and a
+third time as Base64 text inside the XML itself (BG-24 `AdditionalReferencedDocument`), which
+XRechnung requires regardless of what the visible PDF carries. A 19-receipt invoice at the old
+1 MiB per-receipt cap could reach roughly 47 MiB once all three copies were counted — past common
+mail-server attachment limits (10–25 MB) and several public-sector e-invoicing gateway caps, and
+three times the archive volume every stored copy carries over the ten-year retention period
+(<<_green_it_principles,Green IT Principles>>). <<adr-014,ADR-014>>'s budget was sized against raw
+receipt bytes and did not account for any of this multiplication; nothing in the pipeline
+proactively shrank a receipt before it multiplied, either — an oversized upload was refused
+outright rather than reduced.
+
+== Decision
+A receipt is embedded exactly once: as the BG-24 `AdditionalReferencedDocument` /
+`AttachmentBinaryObject` (Base64) inside the ZUGFeRD XML, built by `MustangTransactionBuilder`.
+The rasterized annex pages and the separate PDF/A-3 embedded file are both removed;
+`ReceiptAnnexBuilder` is deleted. The produced PDF holds exactly one embedded file — the
+ZUGFeRD/Factur-X XML — and nothing else changes about how a human reader finds a receipt: it was
+never the primary way a receipt was reviewed, since the receipt pool and the invoice's own receipt
+list already show it directly.
+
+To keep the resulting container small despite this being the *only* copy, receipts are now reduced
+at upload rather than only rejected when oversized: `ReceiptUploadService` calls the outbound port
+`ReceiptPdfReducer` (adapter `PdfBoxReceiptPdfReducer`, PDFBox), which downsamples oversized
+embedded images (150 dpi, JPEG 0.75) and, if that alone is not enough, rasterizes every page at the
+same 150 dpi — see <<_receipt_normalisation_at_upload,Receipt normalisation at upload>>. A user may
+still decline reduction up to a smaller hard cap (`MAX_UNREDUCED_RECEIPT_SIZE`, 1 MiB); nothing
+above `MAX_UPLOAD_SIZE` (10 MiB) is accepted regardless. The pool stores only the resulting
+derivative, never the original upload — the pool is generation material for this invoice, not an
+archive of the supplier's original document, which remains the supplier's own bookkeeping
+responsibility under its own GoBD retention duty.
+
+=== Alternatives Considered
+Keep the rasterized annex pages (for a human reviewer flipping through the visible PDF) and drop
+only the PDF/A-3 attachment::
+Rejected: the annex was still a second full copy of every receipt's pixels, so the size problem
+this decision solves would only have been halved, not removed, and XRechnung recipients — who
+never see the visible PDF pages at all, only the parsed XML — would still receive a receipt they
+cannot use twice as large as necessary.
+
+Keep the PDF/A-3 embedded file (for a viewer that surfaces PDF attachments) and drop only the
+rasterized annex::
+Rejected for the same reason in reverse, plus the PDF/A-3 attachment reproduces the original
+receipt file byte-for-byte, which is strictly more data than the Base64 XML copy already carries
+and offers no capability the pool's own receipt view does not already provide.
+
+Reduce receipt size only at export, leaving the pool and upload untouched::
+Rejected: reducing at export means every generation re-derives the same reduced bytes from the
+same original receipt, repeating work on every regeneration of the same invoice, and the pool
+itself — browsed independently of any one invoice — would still hold oversized originals with no
+size guarantee of its own. Reducing once, at upload, means the stored bytes are already the
+bytes every future embedding uses.
+
+== Consequences
+
+=== Positive
+* A 19-receipt invoice's container size is bounded by one copy of each receipt instead of three;
+  the worst case implied by the policy invariant drops from roughly 60 MiB (three embeddings at
+  the old 1 MiB cap) to 20 MiB, and typical invoices land well under that since normalised
+  receipts are usually smaller than the 768 KiB target.
+* `ReceiptAnnexBuilder` and its raster/merge mode switch are deleted outright, removing a
+  PDF/A-3-compliance concern (`mode=merge` was never veraPDF-clean) along with the code.
+* Deduplication logic collapses to the one place that still needs it,
+  `MustangExportModelMapper.collectReceipts` — the export worker no longer deduplicates twice
+  (once for the annex, once for the XML attachment) against two different definitions of "the same
+  receipt".
+
+=== Negative
+* Rasterization (stage 2 of upload normalization) loses the receipt's text layer; a receipt that
+  needed OCR/copy-paste of its printed text before now only offers that on whatever stage-1 result
+  preserved it. This is an accepted trade-off against the alternative — refusing the upload
+  outright — which was already this project's prior behavior for an oversized receipt.
+* A user who explicitly declines reduction can still land a receipt at the unreduced cap
+  (`MAX_UNREDUCED_RECEIPT_SIZE`, 1 MiB) rather than the target the budget invariant is built on;
+  this is a deliberate escape hatch (the receipt is legally the user's supporting document, and the
+  system does not get to decide it may not be kept exactly as received), not an oversight — the
+  export backstop still catches the resulting document if enough such receipts push a single
+  invoice over 20 MiB.
+* No original upload is retained anywhere in this system once normalization has run; a user
+  needing the pixel-exact original must keep it themselves, outside the receipt pool.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/receipt/` (`ReceiptSizePolicy`,
+`Base64WithReserveEstimator`),
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/ReceiptUploadService.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/port/outbound/ReceiptPdfReducer.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/infrastructure/receipt/PdfBoxReceiptPdfReducer.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/masterdata/ReceiptNormalisationStage.kt`,
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/mustang/MustangTransactionBuilder.kt`._

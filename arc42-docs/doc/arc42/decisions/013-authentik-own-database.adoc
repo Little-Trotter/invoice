@@ -1,0 +1,48 @@
+[[adr-013]]
+= ADR-013: Authentik Gets Its Own Database in the Same PostgreSQL Instance
+
+== Status
+Accepted
+
+== Context
+The optional Authentik-based OIDC overlay needs a persistence decision among three real options:
+a second PostgreSQL instance, a separate database within the existing instance, or a separate
+schema within the existing, shared database. Measurement against the running stack shows the
+fixed cost of an additional *database* in the same instance is negligible — a few megabytes of
+disk and effectively no additional RAM — since the expensive resources (`shared_buffers`, WAL,
+background/backend processes) are per *instance*, not per database.
+
+== Decision
+Authentik uses its own database, `little-trotter-auth`, inside the same PostgreSQL instance as
+the invoicing database, plus its own schema (`authentik`) within that database. A second instance
+is rejected: it would add 150–250 MB of additional RAM and a second WAL stream for no measurable
+benefit here. A shared schema in the invoicing database is rejected because it would mix invoice
+and identity data in one `pg_dump` and weaken role separation to `search_path` alone. The
+decisive factor is independent backup/restore: resetting the invoicing database must never take
+every login with it.
+
+Authentik itself is not part of the default deployment: the application does its own OIDC
+(authorization code flow with PKCE) rather than depending on Authentik as a forward-auth gateway,
+so `authentik`/`auth-redis` live in an optional overlay (`docker/compose/auth.yml`) rather than
+the default `docker-compose.yml`. The database-separation decision above applies unchanged to any
+instance that enables that overlay.
+
+== Consequences
+
+=== Positive
+* Two independent `pg_dump` streams from one server: an invoicing-database restore cannot destroy
+  Authentik logins, and vice versa.
+* Database-level role separation: the Authentik role has no access to the invoicing database.
+
+=== Negative
+* A separate schema *and* a separate database is arguably redundant defense-in-depth — the
+  non-default schema name adds friction to `pg_restore` without adding real isolation beyond what
+  the separate database already provides.
+
+=== Mitigation
+* The schema is kept as-is rather than migrated to `public`, since a schema rename would require
+  reinitializing Authentik — not worth the risk for a cosmetic simplification.
+
+'''
+_Architecture Decision Record — source: `docker/compose/auth.yml`,
+`docker/postgres/init-authentik.sh`._

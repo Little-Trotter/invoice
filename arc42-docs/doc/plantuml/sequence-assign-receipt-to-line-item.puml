@@ -1,0 +1,16 @@
+@startuml sequence-assign-receipt-to-line-item
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+database "PostgreSQL\n<size:10>[Database]</size>" as DB
+
+OfficeManager -> WebApp: assign to line item
+WebApp -> WebApp: check status, supplied version + budget
+WebApp -> DB: persist assignment in short transaction
+DB --> WebApp: commit completed
+WebApp --> OfficeManager: refresh invoice and position tables
+
+$SequenceStorageLegend()
+@enduml

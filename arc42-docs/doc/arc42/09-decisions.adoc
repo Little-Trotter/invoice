@@ -1,0 +1,555 @@
+= Architecture Decisions
+
+This chapter curates the architecturally significant decisions behind the current system. They
+are drawn from two sources: the project's running decision logs (architecture decision records and
+architecture analyses, referenced below by topic) and decisions documented only in code and project
+practice, which are recorded here for the first time as a proper ADR. Curation favors
+significance over completeness: this is not every decision ever made, only the ones that shape
+the architecture a maintainer needs to understand today. The originating documents are
+left untouched; each ADR below cites its source.
+
+ADR-016 and ADR-019 are merged into <<adr-015,ADR-015>>; both numbers stay reserved and both
+anchors still resolve, so existing references to either keep working.
+
+== Overview
+
+[cols="1,4,2,2", options="header"]
+|===
+|ADR |Decision |Source |Detail
+
+|ADR-001
+|Money Value Type Instead of Raw BigDecimal
+|Code (`kotlin-shared`)
+|<<adr-001,ADR-001>>
+
+|ADR-002
+|EN 16931 Business Terms as a Kotlin Enum, Not a Seeded Catalog Table
+|Code (`kotlin-shared`, `kotlin-invoice`)
+|<<adr-002,ADR-002>>
+
+|ADR-003
+|Reverse Charge Is an Invoice-Level Decision, Not Derived from Line Items
+|Reverse-charge architecture analysis
+|<<adr-003,ADR-003>>
+
+|ADR-004
+|PDF Templates Assigned per B2B Profile, Chosen at Print Time; superseded by <<adr-030,ADR-030>>
+(one shipped Typst template)
+|Per-profile template architecture analysis
+|<<adr-004,ADR-004>>
+
+|ADR-005
+|Displayed System Time Is Always German Local Time
+|German system time architecture analysis
+|<<adr-005,ADR-005>>
+
+|ADR-006
+|JPA Access Pattern Hardening (LIKE Escaping, Stable Pagination, Explicit Fetches)
+|JPA access architecture analysis
+|<<adr-006,ADR-006>>
+
+|ADR-007
+|RustFS as the S3-Compatible Object Store, Including on Small-Budget Hardware
+|Code (`docker-compose.yml`)
+|<<adr-007,ADR-007>>
+
+|ADR-008
+|Small NATS Envelopes, Valkey for Text, RustFS for Binaries
+|Code (messaging hardening programme)
+|<<adr-008,ADR-008>>
+
+|ADR-009
+|Editions Abolished — One Component, Not a Community/Commercial Split
+|Code (`kotlin-invoice`)
+|<<adr-009,ADR-009>>
+
+|ADR-010
+|Fault Tolerance Is Hand-Implemented, Not Framework-Driven
+|Code (`kotlin-invoice`)
+|<<adr-010,ADR-010>>
+
+|ADR-011
+|Flyway Baseline Edited In Place Until a Live Instance Exists
+|Project practice
+|<<adr-011,ADR-011>>
+
+|ADR-012
+|Docker Engine, Not Podman, for Both Development and the Production Host
+|Podman evaluation (TLS security programme)
+|<<adr-012,ADR-012>>
+
+|ADR-013
+|Authentik Gets Its Own Database in the Same PostgreSQL Instance
+|Authentik database decision record
+|<<adr-013,ADR-013>>
+
+|ADR-014
+|Invoice Document Size Budget — Early Guard Plus Export Backstop
+|Code (`kotlin-shared`)
+|<<adr-014,ADR-014>>
+
+|ADR-015
+|The mail component is a self-contained system — its own bounded context and image, a
+published-language contract, and a schema in the invoicing database with delegated identity
+(merges ADR-016 and ADR-019); amended 2026-09-25: module `kotlin-email` in this repository; amended 2026-10-02: mail views in the invoicing application, component headless
+|`kotlin-email/docs`
+|<<adr-015,ADR-015>>
+
+|ADR-017
+|Flyway Versions Are One Global Sequence Across `ddl/` and `seed/`, Not Two Blocks
+|Code (`kotlin-invoice`)
+|<<adr-017,ADR-017>>
+
+|ADR-018
+|Apache POI for the Excel Export, Not a Hand-Rolled or Commercial Alternative
+|Excel export programme
+|<<adr-018,ADR-018>>
+
+|ADR-020
+|NATS JetStream as the Event Backbone
+|Code (`kotlin-shared`, `kotlin-xpdf`)
+|<<adr-020,ADR-020>>
+
+|ADR-021
+|Business trip as one invoice position (`InvoiceItem(TRIP)` grouping expenses and per-diem days)
+|Business trip programme (Dienstreise-Programm)
+|<<adr-021,ADR-021>>
+
+|ADR-022
+|Wording profile (Handwerk/Handel/Beratung) resolved by `{term:...}` substitution, not a second
+bundle
+|Business trip programme (Dienstreise-Programm)
+|<<adr-022,ADR-022>>
+
+|ADR-023
+|VAT id is one field with visible prefix recognition; EU VIES is queried only on explicit request,
+never stored beyond a note prefill
+|VAT id field ergonomics specification
+|<<adr-023,ADR-023>>
+
+|ADR-024
+|Maintenance wake-up hints use versioned instance-scoped Core NATS notifications over a durable
+PostgreSQL queue
+|Maintenance wake-up task documentation
+|<<adr-024,ADR-024>>
+
+|ADR-025
+|`Invoice.status` and its item/document/party-snapshot collections are encapsulated behind domain
+methods; the command/DTO boundary's six architecture rules are enforced ArchUnit checks
+|Code (`kotlin-invoice`)
+|<<adr-025,ADR-025>>
+
+|ADR-026
+|Sellable catalogue exposed as three category views (Material, Einheitspreis, Dienstleistung), each
+with its own fixed X-Rechnung unit vocabulary
+|Service catalogue introduction concept
+|<<adr-026,ADR-026>>
+
+|ADR-027
+|UI and inbound adapters depend only on dedicated input ports (`*QueryPort`/`*UseCase`) per use
+case; no composite interfaces, no `*Facade` types — same cut in `kotlin-email`'s own
+`port.inbound` package, with its own `CommandEntryPoint` marker
+|Code (`kotlin-invoice`, `kotlin-email`)
+|<<adr-027,ADR-027>>
+
+|ADR-028
+|Optimistic concurrency via one JPA `@Version` per aggregate root; invoice items/trips check the
+owning invoice's version; first committed writer wins, conflicts reject before any row is touched
+|Concurrent editing audit
+|<<adr-028,ADR-028>>
+
+|ADR-029
+|One shared `TimeSource` replaces direct `now()` calls in every module and in the database
+(`app.now`); UTC for points in time, `Europe/Berlin` for calendar dates
+|Code (`kotlin-shared`, `kotlin-invoice`, `kotlin-xpdf`, `kotlin-facturx`),
+`V1__baseline_schema.sql`
+|<<adr-029,ADR-029>>
+
+|ADR-030
+|Typst is the only layout engine: pinned CLI as a subprocess of the worker,
+Typst is the product's only layout engine (no `XPDF_RENDER_ENGINE` switch, no fallback),
+layouts are product-shipped only (no template catalogue)
+|Product owner 2026-09-27; code (`kotlin-xpdf`, `kotlin-invoice`)
+|<<adr-030,ADR-030>>
+
+|ADR-031
+|EXTENDED profile escalation for cash-discount invoices (opt-in via the admin feature flag
+`feature.extended-profile.enabled`, off by default): EN16931 is the default B2B profile; an
+invoice with a Skonto on the Mustang route escalates to EXTENDED so the discount travels as
+structured `ApplicableTradePaymentDiscountTerms` alongside the BT-20 text line; XRechnung is
+never escalated; Factur-X engine is pinned to EN16931
+|Product owner 2026-09-28; code (`kotlin-invoice`, `kotlin-xpdf`)
+|<<adr-031,ADR-031>>
+
+|ADR-032
+|A receipt is embedded exactly once, as Base64 inside the ZUGFeRD XML (BG-24); the rasterized
+annex and a separate PDF/A-3 attachment do not exist. Receipts
+are reduced towards 768 KiB at upload (`PdfBoxReceiptPdfReducer`) instead of only rejected when
+oversized; no original upload is retained
+|Code (`kotlin-shared`, `kotlin-invoice`, `kotlin-xpdf`)
+|<<adr-032,ADR-032>>
+
+|ADR-033
+|The definition of the quote number (prefix, date part, width, reset cycle) is reference data
+(number range subject `QUOTE`, default `AN-JJJJ-NNNN`), replicated to the quote module over the
+master-data replica; the gapless counter stays in `quote.quote_number_range` and is drawn in the
+status-changing transaction. Quote settings stay in schema `quote`; only their card moves into the
+settings page, without a runtime toggle
+|Product owner 2026-10-06; code (`kotlin-invoice`, `kotlin-quote`, `kotlin-shared`)
+|<<adr-033,ADR-033>>
+
+|ADR-034
+|A missing or altered document of record is resolved on access without a dialog: regenerate
+when never sent; when sent, restore a byte-identical copy (document store, then the mail
+component's sent attachment) before re-rendering; a re-rendered sent invoice is a tagged
+reproduction that is never dispatched; every step is journalled with reason, source and hashes
+|Product owner 2026-10-01; code (`kotlin-invoice`, `kotlin-email`)
+|<<adr-034,ADR-034>>
+
+|ADR-035
+|Archiving and retention are the operator's responsibility: sent invoices (including the XML) are
+stored in the bookkeeping or archive system, an immutable e-mail archive is recommended, and the
+application is not a document archive
+|Product owner decision
+|<<adr-035,ADR-035>>
+
+|ADR-036
+|The offer life cycle is a single status (`DRAFT`, `REVIEW`, `SENT`, `ACCEPTED`, `INVOICED`,
+`REJECTED`, `CANCELLED`); no outcome attribute, no derived expiry, no revision chain; a changed
+proposal after sending is a rejection with a reason and a new offer
+|Product owner 2026-10-07; code (`kotlin-quote`)
+|<<adr-036,ADR-036>>
+
+|ADR-037
+|Every dispatched mail (invoice and quote, each switchable) is handed over byte-identical to one operator-configured archive address as an additional envelope recipient, triggered by the durable `MailSent` outbox handler; own status axis `NOT_CONFIGURED`/`DISABLED`/`PENDING`/`HANDED_OVER`/`FAILED`; a failed handover never blocks sending, is retried automatically and notified to administrators; the signed archive package stays an evidence artifact, not a retention medium
+|Product owner decision 2026-10-08
+|<<adr-037,ADR-037>>
+
+|ADR-038
+|Cross-cutting ArchUnit rules live once in `kotlin-architecture-rules` (parameterised, self-tested
+with negative and positive specimens, no module or domain dependency), consumed in test scope
+only, enforced by the root POM; first content: the time rules of ADR-029
+|Product owner 2026-10-09
+|<<adr-038,ADR-038>>
+|===
+
+[[_adr_001_money_value_type]]
+== ADR-001: Money Value Type Instead of Raw BigDecimal
+
+* *Decision*: All monetary arithmetic is encapsulated by `Money` (`kotlin-shared`), never raw
+  `BigDecimal`.
+* *Consequence*: Universal `HALF_UP` rounding at scale 2, enforced via ArchUnit gates
+  (`MoneyArchitectureTest`) across all modules.
+
+include::decisions/001-money-value-type.adoc[leveloffset=+2]
+
+[[_adr_002_en_16931_business_terms_as_a_kotlin_enum]]
+== ADR-002: EN 16931 Business Terms as a Kotlin Enum, Not a Seeded Catalog Table
+
+* *Decision*: Full EN 16931 business-term taxonomy is modeled as a Kotlin enum (`B2bTerm`,
+  `SMALLINT` BT-code), replacing seeded database catalog tables.
+* *Consequence*: Compile-time validation and refactoring safety for all e-invoicing terms instead of
+  late runtime database errors.
+
+include::decisions/002-b2b-term-enum.adoc[leveloffset=+2]
+
+[[_adr_003_reverse_charge_at_invoice_level]]
+== ADR-003: Reverse Charge Is an Invoice-Level Decision, Not Derived from Line Items
+
+* *Decision*: `Invoice.reverseCharge` is declared at the invoice header, cascading tax rules
+  downward to all invoice items.
+* *Consequence*: Mixed tax treatments on a single invoice are eliminated by construction;
+  disagreements trigger a blocking finalization gate.
+
+include::decisions/003-reverse-charge-invoice-level.adoc[leveloffset=+2]
+
+== ADR-004: PDF Templates Assigned per B2B Profile, Chosen at Print Time
+
+* *Decision*: Superseded; PDF layout is a single product-shipped Typst template, with no per-profile
+  assignment or print-time template choice.
+* *Consequence*: Layout changes are made in code, not through master data.
+
+include::decisions/004-pdf-templates-per-b2b-profile.adoc[leveloffset=+2]
+
+[[_adr_005_german_system_time_everywhere]]
+== ADR-005: Displayed System Time Is Always German Local Time
+
+* *Decision*: All display timestamps use `Europe/Berlin` as default via a centralized `GermanTime` constant, while technical persistence and messaging remain in UTC.
+* *Consequence*: Deterministic date/time rendering across all time zones and container environments, with capability for multi-timezone branch offices in mid-sized enterprises.
+
+include::decisions/005-german-system-time.adoc[leveloffset=+2]
+
+[[_adr_006_jpa_access_pattern_hardening]]
+== ADR-006: JPA Access Pattern Hardening (LIKE Escaping, Stable Pagination, Explicit Fetches)
+
+* *Decision*: Mandatory wildcard escaping for `LIKE` queries, deterministic tiebreakers in paginated
+  queries, and explicit entity fetch joins.
+* *Consequence*: Elimination of query injection vectors, unstable page shifts, and Hibernate lazy
+  initialization surprises.
+
+include::decisions/006-jpa-access-hardening.adoc[leveloffset=+2]
+
+[[_adr_007_rustfs_object_storage]]
+== ADR-007: RustFS as the S3-Compatible Object Store, Including on Small-Budget Hardware
+
+* *Decision*: RustFS (S3-compatible) serves as the standard object store for receipts and generated
+  documents across all hardware profiles.
+* *Consequence*: Unified S3 API from local dev to mini-PC and cloud, replacing fragmented local
+  filesystem storage.
+
+include::decisions/007-rustfs-object-storage.adoc[leveloffset=+2]
+
+[[_adr_008_nats_envelope_principle]]
+== ADR-008: Small NATS Envelopes, Valkey for Text, RustFS for Binaries
+
+* *Decision*: NATS carries only lightweight reference envelopes. Binary documents live in RustFS;
+  cached text payloads live in Valkey.
+* *Consequence*: Constant message size and low queue memory footprint independent of invoice
+  document payload sizes.
+
+include::decisions/008-nats-envelope-principle.adoc[leveloffset=+2]
+
+[[_adr_009_editions_merged_into_one_component]]
+== ADR-009: Editions Abolished — One Component, Not a Community/Commercial Split
+
+* *Decision*: Abolish community/commercial edition splitting in favor of a single unified
+  `kotlin-invoice` codebase.
+* *Consequence*: Single build artifact, zero feature-toggle branch drift, and unified test coverage.
+
+include::decisions/009-editions-merged.adoc[leveloffset=+2]
+
+[[_adr_010_fault_tolerance_is_hand_implemented]]
+== ADR-010: Fault Tolerance Is Hand-Implemented, Not Framework-Driven
+
+* *Decision*: Hand-crafted retry, dead-letter, and heartbeat mechanics instead of heavy
+  general-purpose fault-tolerance frameworks.
+* *Consequence*: Minimal dependency footprint and transparent, inspectable queue error semantics.
+
+include::decisions/010-fault-tolerance-deferred.adoc[leveloffset=+2]
+
+[[_adr_011_flyway_baseline_direct_edit]]
+== ADR-011: Flyway Baseline Edited In Place Until a Live Instance Exists
+
+* *Decision*: Schema changes during greenfield development directly update `V1__baseline_schema.sql`
+  and `V2__baseline_seed.sql`.
+* *Consequence*: Zero migration sprawl or temporary patch scripts prior to public production
+  release.
+
+include::decisions/011-flyway-baseline-direct-edit.adoc[leveloffset=+2]
+
+[[_adr_012_docker_over_podman]]
+== ADR-012: Docker Engine, Not Podman, for Both Development and the Production Host
+
+* *Decision*: Standardize on Docker Engine for local development and target production servers.
+* *Consequence*: Consistent Compose engine semantics across macOS and Linux, avoiding daemonless
+  rootless edge-case bugs.
+
+include::decisions/012-docker-over-podman.adoc[leveloffset=+2]
+
+[[_adr_013_authentiks_own_database]]
+== ADR-013: Authentik Gets Its Own Database in the Same PostgreSQL Instance
+
+* *Decision*: Authentik runs with an isolated PostgreSQL database within the shared cluster.
+* *Consequence*: Clean operational boundary: invoice database restores never overwrite or roll back
+  user credentials.
+
+include::decisions/013-authentik-own-database.adoc[leveloffset=+2]
+
+[[_adr_014_invoice_document_size_budget]]
+== ADR-014: Invoice Document Size Budget — Early Guard Plus Export Backstop
+
+* *Decision*: Strict budget of 19 receipts max, 1 MiB per receipt, and 20 MiB total per invoice.
+* *Consequence*: Enforced early at UI upload and backstopped at rendering, guaranteeing compliance
+  with mail/e-invoice size limits.
+
+include::decisions/014-invoice-document-size-budget.adoc[leveloffset=+2]
+
+== ADR-015: The Mail Component Is a Self-Contained System
+
+* *Decision*: E-mail dispatch is an isolated bounded context (`little-trotter-email`) with separate
+  schema, queue contract, and forward-auth identity.
+* *Consequence*: Invoicing remains fully functional without email container; zero SMTP credentials
+  inside core application.
+
+include::decisions/015-mail-component-self-contained-system.adoc[leveloffset=+2]
+
+[[_adr_017_one_global_flyway_version_sequence]]
+== ADR-017: Flyway Versions Are One Global Sequence Across `ddl/` and `seed/`, Not Two Blocks
+
+* *Status*: Superseded by PO decision 2026-09-16 (maintain `V1` DDL and `V2` seed directly during
+  greenfield phase).
+
+include::decisions/017-flyway-one-global-version-sequence.adoc[leveloffset=+2]
+
+[[_adr_018_apache_poi_for_the_excel_export]]
+== ADR-018: Apache POI for the Excel Export, Not a Hand-Rolled or Commercial Alternative
+
+* *Decision*: Excel exports use Apache POI streaming (`SXSSFWorkbook`).
+* *Consequence*: Constant low memory consumption during large tabular exports, verified via
+  automated round-trip readback tests.
+
+include::decisions/018-poi-excel-export.adoc[leveloffset=+2]
+
+== ADR-020: NATS JetStream as the Event Backbone
+
+* *Decision*: NATS JetStream acts as the messaging backbone between application, worker, and
+  rendering engine.
+* *Consequence*: High-throughput event queues with small memory footprint, fully capable on mini
+  PCs.
+
+include::decisions/020-nats-event-backbone.adoc[leveloffset=+2]
+
+== ADR-021: Business Trip as One Invoice Position
+
+* *Decision*: A business trip (`TRIP`) is represented as a single parent invoice position grouping
+  child expenses and per-diems.
+* *Consequence*: Clean single-item presentation on customer invoice (BG-25) while preserving
+  detailed cost break-downs internally.
+
+include::decisions/021-business-trip-as-position.adoc[leveloffset=+2]
+
+== ADR-022: Wording Profile by Term Substitution
+
+* *Decision*: Instance-wide wording profiles (Handwerk/Handel/Beratung) resolve `{term:...}`
+  placeholders in translation bundles at runtime.
+* *Consequence*: Single localization bundle without file duplication; existing issued invoices
+  maintain immutable wording snapshots.
+
+include::decisions/022-wording-profile-term-substitution.adoc[leveloffset=+2]
+
+== ADR-023: VAT id Is One Field, VIES Is Queried Only on Request
+
+* *Decision*: VAT ID is a single input field with automated country prefix parsing; EU VIES
+  validation triggers only on explicit user click.
+* *Consequence*: External VIES outages never block data entry; verified trader names prefill notes
+  without schema bloating.
+
+include::decisions/023-vat-id-single-field-vies-on-request.adoc[leveloffset=+2]
+
+== ADR-024: Maintenance Wake-up Hints over Core NATS
+
+* *Decision*: Maintenance tasks persist durably in PostgreSQL; best-effort Core NATS notifications
+  trigger immediate processing.
+* *Consequence*: Low-latency execution without queue duplication; periodic database polling acts as
+  guaranteed fallback.
+
+include::decisions/024-maintenance-wakeup-hints.adoc[leveloffset=+2]
+
+== ADR-025: Invoice Aggregate Encapsulation and the Command/DTO Boundary
+
+* *Decision*: `Invoice.status` has private setter access; all child collections are read-only
+  `List`. Boundaries are enforced by ArchUnit (command boundary architecture rules).
+* *Consequence*: Eliminates domain state mutation bypassing aggregate rules and prevents entity
+  leaks to presentation layer.
+* *Amended by*: <<adr-027,ADR-027>> — the command entry points are the `*UseCase` input ports.
+
+include::decisions/025-command-aggregate-boundary.adoc[leveloffset=+2]
+
+== ADR-026: Catalogue Categories and X-Rechnung Units
+
+* *Decision*: The sellable catalog is partitioned into three explicit categories (Material, Unit
+  Price, Service) with bound X-Rechnung unit subsets.
+* *Consequence*: Prevents illegal unit combinations in e-invoice XML before positions reach the
+  invoice drafting stage.
+
+include::decisions/026-catalogue-categories-units.adoc[leveloffset=+2]
+
+[[_adr_027_dedicated_input_ports_per_use_case]]
+== ADR-027: Dedicated Input Ports per Use Case, No Composite Interfaces
+
+* *Decision*: UI and inbound adapters inject narrow role interfaces in
+  `application.<context>.port.inbound` — `*QueryPort` for reads, `*UseCase` (a `CommandEntryPoint`)
+  for writes; composite interfaces and `*Facade` types do not exist.
+* *Consequence*: Each caller depends only on the use cases it calls; ArchUnit
+  (`InputPortArchitectureTest`) enforces naming, the 12-method cap and the no-composite rule.
+
+include::decisions/027-role-interfaces-over-composite.adoc[leveloffset=+2]
+
+== ADR-028: Optimistic Concurrency, First Committed Writer Wins
+
+* *Decision*: Every aggregate write checks the caller's `expectedVersion` against the aggregate
+  root's `@Version` before mutating; invoice items and trips check `Invoice.version`, not their
+  own entity-level version column. A mismatch rejects before any row is touched.
+* *Consequence*: No lost updates across header, items, trips, recipient, article and reference
+  data; one conflict notion and one optimistic-lock notification UI-wide. See
+  <<_concurrent_editing,Concurrent Editing>> (Chapter 8) for the per-entity coverage table.
+
+include::decisions/028-optimistic-concurrency-first-writer-wins.adoc[leveloffset=+2]
+
+== ADR-029: A Single Injectable Time Source, Two Readings of One Moment
+
+* *Decision*: `TimeSource` replaces direct `now()` calls; points in time (`instant()`, `nowUtc()`)
+  are UTC, calendar dates (`today()`, `localNow()`) are read in `Europe/Berlin`. Database, event streams,
+  and RustFS store timestamps strictly in UTC, while UI presents local time (default `Europe/Berlin`).
+  Invoice numbers are drawn for the invoice's own business date, not the allocation instant.
+* *Consequence*: Year/month-boundary behavior is deterministically testable by fixing one clock;
+  business logic no longer depends on the container's `TZ`. The database never reads its own
+  clock: no time defaults, the audit trigger stamps from `app.now`. Multi-timezone operations for
+  branch offices are inherently enabled. Enforced by ArchUnit in every module.
+
+include::decisions/029-single-time-source.adoc[leveloffset=+2]
+
+== ADR-030: Typst as the Only Layout Engine
+
+* *Decision*: The base PDF is rendered by the Typst CLI, a pinned, checksum-verified binary
+  running as a sandboxed subprocess of `kotlin-xpdf` (`TypstCompiler`), never as a separate
+  service. Typst is the product's only layout engine: there is no engine switch, no second
+  engine and no uploadable template format. Templates are layout only and receive preformatted
+  data; output is byte-deterministic.
+* *Consequence*: The pipeline after the base document (Mustang, post-render mark, veraPDF) runs
+  on the Typst base document. Exactly one standard Typst template ships in the worker image;
+  layouts change in code only, and there is no template catalogue or administration tab. The
+  Typst fixtures are the only layout reference; an ArchUnit rule keeps `net.sf.jasperreports..`
+  out of `kotlin-xpdf`. Verified by `TypstCompileIT` against the containerised pinned CLI.
+
+include::decisions/030-typst-layout-engine.adoc[leveloffset=+2]
+
+== ADR-031: EXTENDED Profile Escalation for Cash-Discount Invoices
+
+* *Decision*: EN16931 remains the default B2B profile. An invoice carrying a cash discount on the
+  Mustang route is escalated to EXTENDED (opt-in via the admin feature flag
+  `feature.extended-profile.enabled`, off by default) so the discount travels as structured
+  `ApplicableTradePaymentDiscountTerms` in addition to the BR-DE-18 `#SKONTO#` text line. The
+  profile is resolved once in `kotlin-invoice` (`resolveExportProfileId`,
+  `Invoice.requiresExtendedProfile`) and consumed by both the finalization gate and the XML export.
+  XRechnung is never escalated; Factur-X engine is pinned to EN16931.
+* *Consequence*: Receivers without EXTENDED support may reject the profile, although the document
+  remains EN 16931 conformant. EXTENDED is an EN-16931-conformant extension, so escalation occurs
+  only where the data justifies the extra profile layer. XML-level validation confirms CII-XSD and
+  Factur-X EXTENDED Schematron conformance; the KoSIT stage is skipped for EXTENDED exports with a
+  dedicated `PROFILE` stage carrying a WARNING finding; overall validation stays VALID. The
+  `validation_profile` registry holds an EXTENDED row in state EXPERIMENTAL (Factur-X 1.09.2
+  Schematron, Mustang 2.26.0).
+
+include::decisions/031-extended-profile-escalation.adoc[leveloffset=+2]
+
+== ADR-032: One Receipt, One Embedding
+
+* *Decision*: A receipt is embedded exactly once in a produced e-invoice — as the BG-24
+  `AdditionalReferencedDocument`/`AttachmentBinaryObject` (Base64) inside the ZUGFeRD XML
+  (`MustangTransactionBuilder`). The rasterized annex pages and the separate PDF/A-3 embedded file
+  are both removed; `ReceiptAnnexBuilder` is deleted. Receipts are reduced at upload
+  (`ReceiptUploadService` → `ReceiptPdfReducer` → `PdfBoxReceiptPdfReducer`, PDFBox) towards
+  `ReceiptSizePolicy.TARGET_RECEIPT_SIZE` (768 KiB) instead of only being rejected when oversized;
+  the pool stores only the reduced derivative, never the original upload.
+* *Consequence*: A 19-receipt invoice's container size is bounded by one copy of each receipt
+  instead of the former three, keeping it well inside mail-gateway and archive-volume limits.
+  `Base64WithReserveEstimator` (`kotlin-shared`) sizes the budget on the Base64-encoded receipt
+  bytes plus a fixed reserve. Upload-time rasterisation (stage 2) loses a receipt's text layer; a
+  user may still decline reduction up to `MAX_UNREDUCED_RECEIPT_SIZE` (1 MiB), and the export
+  worker's backstop (`PdfExportServiceImpl.enforceSizeBackstop`) still refuses an oversized
+  container rather than truncating one.
+
+include::decisions/032-one-receipt-one-embedding.adoc[leveloffset=+2]
+
+include::decisions/033-quote-number-range-definition.adoc[leveloffset=+2]
+
+include::decisions/034-missing-original-document.adoc[leveloffset=+2]
+
+include::decisions/035-archiving-operator-responsibility.adoc[leveloffset=+2]
+
+include::decisions/036-offer-lifecycle-single-status.adoc[leveloffset=+2]
+
+include::decisions/037-archive-handover-smtp-journal-copy.adoc[leveloffset=+2]
+
+include::decisions/038-central-architecture-rules.adoc[leveloffset=+2]

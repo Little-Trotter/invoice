@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rep:report xmlns:rep="http://www.xoev.de/de/validator/varl/1" varlVersion="1.0.0" valid="false">
+    <rep:assessment>
+        <rep:reject>
+            <rep:explanation>Das geprüfte Dokument ist nicht konform (2 Regelverstöße).</rep:explanation>
+        </rep:reject>
+    </rep:assessment>
+    <rep:validationStepResult id="val-sch.1" valid="false">
+        <rep:message id="val-sch.1.1" level="error" xpathLocation="/rsm:CrossIndustryInvoice/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradePaymentTerms" code="BR-CO-25">[BR-CO-25]-In an Invoice with a positive amount due for payment, either the Payment due date (BT-9) or the Payment terms (BT-20) shall be present.</rep:message>
+        <rep:message id="val-sch.1.2" level="error" xpathLocation="/rsm:CrossIndustryInvoice/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:SellerTradeParty" code="BR-CO-26">[BR-CO-26]-In order for the buyer to automatically identify a supplier, the Seller identifier (BT-29), the Seller legal registration identifier (BT-30) and/or the Seller VAT identifier (BT-31) shall be present.</rep:message>
+    </rep:validationStepResult>
+</rep:report>

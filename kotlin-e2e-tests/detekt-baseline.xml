@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>VariableNaming:NatsPoisonDlqE2EIT.kt$NatsPoisonDlqE2EIT$private val NATS_DLQ_SUBJECT get() = NatsE2EExtension.JOBS_DLQ_SUBJECT</ID>
+    <ID>VariableNaming:RecipientSearchE2EIT.kt$RecipientSearchE2EIT$val müller = createTestRecipient("Müller GmbH", "KD-0001", "Köln")</ID>
+    <ID>VariableNaming:RecipientSearchE2EIT.kt$RecipientSearchE2EIT$val müller = createTestRecipient("Müller GmbH", "KD-0001", "München")</ID>
+  </CurrentIssues>
+</SmellBaseline>

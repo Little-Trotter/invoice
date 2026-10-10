@@ -1,0 +1,16 @@
+package specimen
+
+// Deliberately violating source text, read by UiSourceRulesTest as data (never compiled).
+fun violating(card: Div, label: Span, hint: Span, bar: Div, panel: Div) {
+    card.style.set("background", "#2196f3")
+    label.style.set("color", "rgba(0, 123, 255, 0.06)")
+    hint.element.style.set(
+        "margin",
+        "0",
+    )
+    bar.style.set("--lt-bar", "42%").set("gap", "1rem")
+    panel.getStyle().set("padding", "1rem")
+    panel.style.set(COLOR, "var(--lumo-primary-color)")
+    panel.style.set("border", "1px solid rgb(0 0 0)")
+    panel.style.set("fill", "#fff")
+}

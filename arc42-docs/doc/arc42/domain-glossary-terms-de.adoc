@@ -1,0 +1,160 @@
+[#ai-notice-glossar-de]
+[NOTE]
+====
+.Hinweise zu Transparenz, Testdaten und KI-Assistenz
+
+Transparenz und KI-Assistenz::
+Dieses Fachglossar und seine Begriffsdefinitionen wurden mit Unterstützung von generativen KI-Systemen erstellt, strukturiert und redaktionell gepflegt. Alle Begriffspaare, Rechtsnormen und Praxisdefinitionen spiegeln den tatsächlich implementierten Stand des Systems wider. Sämtliche in Beispielen verwendeten Firmennamen, Personen, Adressen und Währungsbeträge sind synthetische Testdaten (`datagen`).
+====
+
+== E-Rechnung, Rechnungsarten & Standards
+
+[cols="1,3", options="header"]
+|===
+|Fachbegriff |Bedeutung & Anwendungskontext
+
+|EN 16931
+|Europäische Norm für das semantische Datenmodell elektronischer Rechnungen: Definiert standardisierte Informationselemente (Business Terms / BT-Codes), die hersteller- und plattformunabhängig in XML-Syntaxen wie CII oder UBL abgebildet werden.
+
+|ZUGFeRD
+|Deutsches hybrides E-Rechnungsformat (Forum elektronische Rechnung Deutschland): Kombination aus visuell lesbarem PDF/A-3b und strukturierter, maschinenlesbarer XML-Rechnung gem. EN 16931.
+
+|XRechnung
+|Deutscher Standard für rein strukturierte, XML-basierte elektronische Rechnungen im Geschäftsverkehr mit der öffentlichen Verwaltung (B2G) auf Basis der europäischen Norm EN 16931.
+
+|Factur-X
+|Deutsch-französisches hybrides E-Rechnungsformat (PDF/A-3b mit eingebetteter EN 16931 CII-XML), technisch identisch zu ZUGFeRD ab Version 2.0. Verbindliche Schreibweise: Factur-X.
+
+|BT-Nummer
+|Eindeutige Kennung eines semantischen Datenelements („Business Term“) im Datenmodell der EN 16931 (z. B. BT-1 Rechnungsnummer, BT-10 Käuferreferenz, BT-25 Vorherige Rechnungsnummer).
+
+|KoSIT-Validator
+|Offizielles Referenzprüfwerkzeug der Koordinierungsstelle für IT-Standards zur syntaktischen und semantischen Schematron-Validierung von E-Rechnungen gegen EN 16931 und nationale Geschäftsregeln.
+
+|veraPDF
+|Offizieller Open-Source-Referenzvalidator zur Prüfung der Konformität von PDF/A-Dokumenten gem. ISO-Standards (hier PDF/A-3b).
+
+|Rechnungstyp 380
+|UNTDID 1001 Typcode für eine reguläre Handelsrechnung (Commercial invoice) über gelieferte Waren oder erbrachte Dienstleistungen.
+
+|Rechnungstyp 384
+|UNTDID 1001 Typcode für eine Rechnungskorrektur (Stornorechnung): Neutralisiert eine fehlerhafte oder stornierte Vorgängerrechnung rechnerisch unter Pflichtangabe der ursprünglichen Rechnungsreferenz (BT-25).
+
+|Rechnungstyp 389
+|UNTDID 1001 Typcode für eine Gutschrift im umsatzsteuerlichen Sinn (Self-billed invoice / Abrechnung durch den Leistungsempfänger).
+
+|Rechnungstyp 381
+|UNTDID 1001 Typcode für eine Gutschriftanzeige / kaufmännische Gutschrift (Credit note, z. B. nachträglicher Preisnachlass, Retoure oder Bonus).
+
+|Rechnungsstatus
+|Lebenszyklus eines Rechnungsbelegs: Vom unnummerierten, veränderlichen Entwurf (`DRAFT`) über die festgeschriebene, rechtsgültige Rechnung (`SENT`) bis zum Ausgleich (`PAID`) oder der Neutralisierung (`CANCELLED`).
+
+|Beleg
+|Kaufmännischer Nachweis über einen Geschäftsvorfall oder getätigte Auslagen (z. B. Bewirtungs-, Fahrt- oder Materialquittung), der als prüfbarer Nachweis einer Rechnungsposition beigefügt wird.
+
+|Beleg-Normalisierung
+|Verlustarme technische Bild- und Dateigrößenoptimierung eingebetteter Belege, um Übertragungs- und Größenbudgets von E-Rechnungs-Dateien sicher einzuhalten.
+
+|Dokumenten-Budget
+|Definierte Obergrenze für das Gesamtdatenvolumen einer elektronischen Rechnung samt aller integrierten Anlagen (z. B. 20 MiB Maximalgröße bei ZUGFeRD zur Sicherstellung der Mail- und Portalfähigkeit).
+
+|Geldwert-Typ
+|Typensicheres Value Object für Währungsbeträge: Verhindert Rundungsfehler und unzulässige Währungsvermischungen durch Kapselung von Skala, Rundungsmodus und Währungseinheit.
+
+|Finalisierungs-Schranke
+|Prüfschranke vor der Festschreibung: Verhindert die Vergabe einer Rechnungsnummer und den rechtsverbindlichen Versand, solange Konformitäts- oder Schematron-Validierungen fehlschlagen.
+
+|Größeneinheiten-Konvention
+|Exakte Trennung zwischen interner technischer Berechnung in Binärpräfixen (1 MiB = 1.048.576 Byte) und allgemeinverständlicher Ausgabe in Dezimalangaben (MB).
+|===
+
+== Steuerrecht, GoBD & Praxis
+
+[cols="1,3", options="header"]
+|===
+|Fachbegriff |Bedeutung & Anwendungskontext
+
+|Festschreibung (GoBD)
+|Zentraler Grundsatz der GoBD: Elektronische Rechnungsdaten müssen ab dem Versand bzw. der Bereitstellung gegen nachträgliche Veränderung oder Löschung manipulationssicher geschützt sein. Korrekturen erfolgen ausschließlich durch förmliche Stornierung.
+
+|Aufbewahrungsfrist
+|Gesetzliche Frist nach Abgabenordnung und Umsatzsteuerrecht: Seit dem Bürokratieentlastungsgesetz IV (BEG IV, ab 2025) beträgt die Aufbewahrungsfrist für Rechnungen und Buchungsbelege 8 Jahre (für Handelsbücher und Jahresabschlüsse weiterhin 10 Jahre).
+
+|Nummernkreis & Hash-Kette
+|Verfahren zum lückenlosen, chronologischen Nachweis erteilter Rechnungsnummern: Die kryptografische Hash-Verkettung schließt nachträgliche Einschübe oder Auslassungen manipulationssicher aus.
+
+|Storno (Rechnungskorrektur)
+|Förmliche Rücknahme einer bereits festgeschriebenen Rechnung durch Ausstellung eines eigenständigen Stornobelegs (Typ 384) mit betragsmäßiger Vorzeichenumkehr, unter Erhalt des unveränderten Originalbelegs.
+
+|Steuerschuldnerschaft des Leistungsempfängers
+|Verlagerung der Steuerschuld auf den Rechnungsempfänger (Reverse Charge) bei grenzüberschreitenden B2B-Lieferungen und -Dienstleistungen im EU-Binnenmarkt.
+
+|Umsatzsteuer-Identifikationsnummer (USt-IdNr.)
+|EU-weite Kennung eines Unternehmers zur steuerlichen Abwicklung grenzüberschreitender Lieferungen und Leistungen im EU-Binnenmarkt.
+
+|VIES / MIAS
+|Mehrwertsteuer-Informationsaustauschsystem (MIAS / VIES) der EU-Kommission zur automatisierten Bestätigungsabfrage über die Gültigkeit von ausländischen USt-IdNr. vor Ausstellung steuerfreier B2B-Rechnungen.
+
+|Leitweg-ID
+|Adressierungsmerkmal zur eindeutigen Identifikation des öffentlichen Auftraggebers in Deutschland (B2G) bei der Übermittlung von E-Rechnungen an Bundes-, Landes- und Kommunalportale (ZRE, OZG-RE).
+
+|B2B-Profil
+|Wiederverwendbare Konfiguration kaufmännischer und semantischer Anforderungen für spezifische Geschäftskunden (z. B. Pflicht zur Angabe von Bestellnummern BT-13 oder Lieferantennummern).
+
+|Privatkunden-Hinweis
+|Hinweispflicht auf Rechnungen an Privatpersonen über die gesetzliche zweijährige Aufbewahrungspflicht sowie Information über Steuerermäßigungen für Handwerker- und haushaltsnahe Dienstleistungen.
+
+|Dienstreise
+|Zusammenfassende Position zur Weiterberechnung beruflich veranlasster Auswärtstätigkeiten inklusive Fahrt-, Übernachtungs- und Verpflegungskosten an den Auftraggeber.
+
+|Verpflegungstag
+|Pauschale für den Verpflegungsmehraufwand je Kalendertag einer Auswärtstätigkeit, unter Berücksichtigung gesetzlicher Kürzungsbeträge bei gestellten Mahlzeiten.
+
+|Festpreis
+|Vereinbarter Pauschalbetrag für ein Leistungspaket oder eine Reise, der anstelle der detaillierten Einzelaufwände als Abrechnungsgrundlage auf der Rechnung ausgewiesen wird.
+
+|Posten
+|Einzelne Spesenausgabe oder Belegaufwendung im Rahmen einer Abrechnung (z. B. Hotelübernachtung, Fahrticket, Kilometergeld oder Nebenkosten).
+
+|Leistungsverzeichnis
+|Stammdatenkatalog standardisierter, wiederkehrend abrechenbarer Dienstleistungen, Stundensätze und Materialien mit hinterlegten Einheitspreisen und Steuersätzen.
+
+|Katalogkategorie
+|Fachliche Klassifikation von abrechenbaren Leistungen (z. B. Zeitaufwand/Stundensatz, Materialaufwand oder Pauschalpreise).
+
+|XRechnung-Einheitscode
+|International standardisierter Maßeinheitencode nach UNECE Recommendation 20 / 21 (z. B. `HUR` für Stunde, `C62` für Stück, `KGM` für Kilogramm), der im E-Rechnungsdatensatz verpflichtend ist.
+
+|Wording-Profil
+|Branchenspezifische Terminologieanpassung: Ermöglicht die flexible Ausrichtung von Benutzeroberfläche und Druckbelegen auf branchenübliche Begriffe (z. B. Handwerk, freie Berufe, Handel).
+
+|BSI IT-Grundschutz CON.3
+|Vorgabe des Bundesamts für Sicherheit in der Informationstechnik (BSI) für Datensicherungs- und Wiederanlaufkonzepte, basierend auf der 3-2-1-Regel (3 Kopien, 2 Medientypen, 1 räumlich getrennte Sicherung).
+
+|Generationenprinzip
+|Bewährtes Backup-Rotationsmodell (Großvater-Vater-Sohn): Gestaffelte Vorhaltung von Tages-, Wochen- und Monatssicherungen zur Abwehr von Datenverlusten durch unbemerkt fortschreitende Korruption oder Malware.
+
+|RPO (Maximaler Datenverlust)
+|Recovery Point Objective: Maximal tolerierbarer Zeitraum zwischen dem letzten konsistenten Sicherungsstand und einem Systemausfall (definiert den maximal zulässigen Datenverlust).
+
+|RTO (Wiederherstellungszeit)
+|Recovery Time Objective: Maximal zulässige Zeitspanne vom Auftreten eines Ausfalls bis zur vollständigen Wiederherstellung der operativen Systemfunktionalität.
+
+|WORM-Speicher
+|Write Once Read Many: Revisionssichere Speichertechnologie, die das unbemerkte oder vorzeitige Verändern und Löschen archivierter Steuer- und Buchungsdaten über die gesamte Aufbewahrungsfrist technisch ausschließt.
+
+|TCO (Gesamtbetriebskosten)
+|Total Cost of Ownership: Ganzheitliche kaufmännische Bewertung aller anfallenden Anschaffungs-, Betriebs-, Wartungs- und Energiekosten über den gesamten Lebenszyklus einer IT-Lösung.
+
+|Green IT / Energiebudget
+|Ganzheitliche ökologische Nachhaltigkeit: Konsequente Minimierung von Energie-, Material- und Rechenaufwand über den gesamten Systemlebenszyklus – vom ressourcensparenden Softwareentwurf bis zum bedarfsgerechten Betrieb.
+
+|Versandverlauf
+|Systeminterne, manipulationssichere Dokumentation jedes Belegversands per E-Mail: Protokolliert Sendeaufträge, SMTP-Übertragungsstatus (`QUEUED`, `SENT`, `FAILED`), kryptografische Prüfsummen und Vorlagenversionen.
+
+|Signiertes Archivpaket (`tar.gz`)
+|Deterministisch erstelltes, kryptografisch versiegeltes Archivierungsgebinde (`<id>.tar.gz`): Beinhaltet Originalbelege (`original/`), Ed25519-Einzelsignaturen (`signed/`) und ein normiertes Manifest (`manifest.json`) zur revisionssicheren Ablage.
+
+|Archivkopie
+|Inhaltsgleiche Kopie einer versendeten Kunden-E-Mail (inklusive PDF und XML), die automatisiert an eine dedizierte Archivadresse des betrieblichen E-Mail-Archivsystems übergeben wird.
+|===

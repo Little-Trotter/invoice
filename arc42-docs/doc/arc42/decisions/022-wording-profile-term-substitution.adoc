@@ -1,0 +1,115 @@
+[[adr-022]]
+= ADR-022: Wording Profile by Term Substitution
+
+== Status
+Accepted, 2026-09-13
+
+== Context
+The same domain concepts read differently depending on the kind of business an instance serves: a
+trade/craft business calls a purchased good "Material", a retail/trade business calls it "Artikel",
+and a consulting business calls it "Produkt(e)". A business trip, however, is called "Dienstreise"
+in every one of them — <<adr-021,ADR-021>>'s trip position is one concrete case, and it is the same
+label regardless of which of the three vocabularies is active. This is a wording choice for the
+whole instance, not per B2B relationship or sender profile, and it must never touch persisted
+texts, key names, route slugs or enum names — an already-issued document must render exactly as it
+did when it was produced.
+
+== Decision
+`WordingProfile` (`kotlin-shared`) is a three-value enum, `HANDWERK`/`HANDEL`/`BERATUNG` (persisted
+code `0`/`2`/`1` respectively, `HANDWERK` the default), resolved by `WordingSettingsGate`: an env
+default (`littletrotter.wording.profile`/`LITTLETROTTER_WORDING_PROFILE`, an unknown value falling
+back to `HANDWERK` with one logged warning) overridable live, without restart, by a
+`system_setting` row (`key='wording.profile'`) behind a 10-second cache — the same fail-open/
+short-cache shape `FeatureSettingsGate` and `ValidationSettingsGate` already use. Switching it is an
+admin-only action under System → Einstellungen (`AppPermission.SYSTEM_VIEW`, held only by
+`AppRole.ADMIN`).
+
+Only the sellable-position noun varies by profile (`Term.PRODUCT_SINGULAR`/`PLURAL` —
+Material/Artikel/Produkt(e)); a business trip is a plain, profile-independent i18n value
+("Dienstreise"/"Business trip") like any other bundle text, never resolved through `TermResolver`.
+
+The mechanism for the one remaining term is substitution, not a second bundle: a bundle value may
+carry a `{term:name}` marker (`Term.PRODUCT_SINGULAR`/`PLURAL` only),
+resolved against a small curated `wording-terms(_en).properties` pair by `TermResolver` and
+substituted by `TermSubstitution.apply` *before* any `MessageFormat` pass — a `{term:...}` marker is
+not a valid `MessageFormat` argument index and would otherwise throw. An unresolvable marker
+degrades to `!{term:name}!`, the same convention a missing i18n key already uses. `TermSubstitution`/
+`TermResolver` are invoked at three points: the UI/REST layer (`UiTranslations`, backing both
+`TranslationService` for Vaadin and `I18nBundleResource`'s `/api/i18n`, against the live gate on
+every lookup, and reaching the Artikelverwaltung view and every level of the invoice-position
+tables/exports the same way); the invoice/trip workbook export label builders, which take a
+`tr: (String) -> String` parameter and are substitution-aware whenever that parameter is
+`UiTranslations::tr` (the interactive trip-workbook download) or the job-publish-time
+`TripExportDtoMapper.documentLanguageTranslator`; and `kotlin-xpdf`'s print-label loader,
+`ReportFormatHelpers.Labels.label(key, language, profile)`, decoding the profile from the
+wire-carried `InvoiceMetaDto.wordingProfile` snapshot rather than a live gate, since an already-
+queued job must render with whichever profile was active when it was published. No
+`invoice-labels_*.properties` value carries a `{term:...}` marker today, so PDFs render identically
+under all three profiles — the overload exists for a future label to opt in, not because one uses it
+yet. `referenceData.group.reisekosten` ("Reisekosten-Sätze") stays a fixed reference-data term,
+deliberately outside this mechanism.
+
+=== Alternatives considered
+* *Per-B2B-profile or per-sender-profile wording.* Rejected: the vocabulary is a property of the
+  operating company, not of a business relationship — one company, one language, regardless of
+  which invoice recipient or issuer profile an invoice uses.
+* *A second, parallel bundle per profile* (e.g. `messages_handwerk.properties`). Rejected: it
+  doubles every translated string for what is, in practice, a handful of nouns, and the parity
+  check would need to cover a bundle × profile cross-product instead of one small term catalog.
+* *Keeping the trip label as a term.* Rejected: a business trip is called "Dienstreise" the same
+  way in every one of the three trades this project actually serves, so carrying it through
+  `TermResolver` would add an indirection with no real variation behind it — a plain i18n value
+  degrades more simply (a missing key renders `!{key}!`, no separate unresolved-placeholder path to
+  reason about) and needs no entry in `wording-terms*.properties`.
+
+== Consequences
+
+=== Positive
+* One indirection for the one term that actually varies, reused by the UI/REST layer and the
+  workbook export lambda that already existed, rather than a fourth lookup mechanism;
+  `I18nBundleParityTest` fails the build if a marker used in either bundle has no curated text for
+  all three profiles and both locales.
+* Live switching needs no restart and no redeploy, and every already-issued document keeps
+  rendering with whatever profile was active when it was produced, by construction.
+* With no trip term, a whole dimension of failure is absent (a workbook cover subtitle carrying an
+  unresolved `{term:trip.singular}` marker into `MessageFormat`, which throws), and no real
+  per-instance variation is lost — the trip wording never varies.
+
+=== Negative
+* Three call sites, not one, mean a future fourth writer of a translated label can reintroduce a gap
+  by copying the wrong one — the job-publish path (`TripExportDtoMapper.documentLanguageTranslator`)
+  and the interactive download path (`UiTranslations::tr`) are two independent implementations of
+  the same substitution contract, not one shared function.
+* `ResourceBundle.getBundle(baseName, locale)` without an explicit no-fallback `Control` silently
+  resolves to a *different* locale-suffixed sibling bundle when the JVM's own default locale matches
+  that sibling instead of the requested locale — e.g. an English request resolving to
+  `messages_de.properties` on a JVM whose default locale is German, because the JDK's default
+  fallback-locale search consults `Locale.getDefault()` before giving up. `TranslationService`,
+  `TermResolver`, `B2bTermTexts`, `ReceiptService` and
+  `TripExportDtoMapper.documentLanguageTranslator` therefore all guard against this with
+  `ResourceBundle.Control.getNoFallbackControl(...)`; a call site without the guard is silently
+  correct only while no bundle value it reads differs between the German and the
+  (fallen-back-to) English bundle.
+
+=== Mitigation
+* The interactive download path proves the mechanism itself is correct, so closing the three-call-
+  site gap above is confined to wiring each job-publish-time label function the same way, not to the
+  resolver; `Term`/`TermResolver` stay the one place a new writer calls, never re-implements.
+* Any new `ResourceBundle.getBundle` call site for `i18n.messages` or `i18n.wording-terms` must pass
+  `ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES)` — there is
+  no legitimate reason for this project's bundle lookups to ever consult the JVM's default locale.
+
+The catalogue wording follows the same profile-independent vocabulary contract: the subject is
+shown as "Leistungsverzeichnis" in German (the default catalogue name is "Katalog"); its categories
+and units are defined in <<adr-026,ADR-026>>.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/wording/` (`WordingProfile`, `Term`,
+`TermResolver`, `TermSubstitution`),
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/settings/WordingSettingsGate.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/ui/i18n/` (`UiTranslations`, `TranslationService`,
+`I18nBundleResource`),
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/TripExportDtoMapper.kt`
+(`documentLanguageTranslator`),
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/ReportFormatHelpers.kt`._

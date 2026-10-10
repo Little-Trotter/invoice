@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>de.littletrotter</groupId>
+    <artifactId>little-trotter-invoice-parent</artifactId>
+    <version>0.9.33-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+  <groupId>de.littletrotter</groupId>
+  <artifactId>kotlin-shared</artifactId>
+  <packaging>jar</packaging>
+
+  <properties>
+    <!-- kotlin-shared contains mostly interfaces, DTOs and shared ports; lower coverage threshold -->
+    <jacoco.line.coverage>0.90</jacoco.line.coverage>
+    <jacoco.branch.coverage>0.90</jacoco.branch.coverage>
+    <!-- A2 — ArchUnit layer test (see kotlin-invoice for the same pin). -->
+    <!-- AP-M6 — same version as kotlin-invoice/kotlin-xpdf, for a consistent testcontainers
+         version across the reactor. Test-scoped only: PayloadExchangeTest exercises a real
+         Valkey container, same pattern as kotlin-invoice's ValkeyInvoiceCacheClientIT. -->
+  </properties>
+
+  <profiles>
+    <profile>
+      <id>release</id>
+      <properties>
+        <!-- Release profile (PO decisions 2026-09-23, 2026-09-28): this is the one module
+             published to the Forgejo Maven registry (root pom.xml distributionManagement), so it
+             opts back into "mvn deploy" against the root POM's default-deny (root pom.xml
+             maven.deploy.skip=true). The 90% line / 90% branch gate above (already the module's
+             normal setting, not new) still enforces before "deploy" runs, since it is bound to
+             the "verify" phase and the Maven lifecycle runs verify before deploy. -->
+        <maven.deploy.skip>false</maven.deploy.skip>
+      </properties>
+    </profile>
+  </profiles>
+
+  <dependencies>
+    <!-- Shared DTOs and lightweight ports only. Keep this module free of heavy PDF/KosIT deps.
+         No JPA/CDI here: persistence base classes (BasePanacheRepository, OrdinalEnumConverter)
+         live in kotlin-invoice. -->
+
+    <dependency>
+      <groupId>com.fasterxml.jackson.module</groupId>
+      <artifactId>jackson-module-kotlin</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
+    <!-- NATS Java client, needed for the shared JetStream stream definition (NatsStreamSetup). -->
+    <dependency>
+      <groupId>io.nats</groupId>
+      <artifactId>jnats</artifactId>
+      <version>${jnats.version}</version>
+    </dependency>
+    <!-- AP-M3 — NatsStreamSetup now logs drift-reconciliation decisions (INFO/ERROR); version
+         managed by the imported Quarkus BOM, same as every other module's slf4j-api use. -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <!-- AP-M6 — PayloadExchange's Jedis 8 usage. Version managed in the root pom
+         (${jedis.version}) — shared with kotlin-invoice/kotlin-xpdf. -->
+    <dependency>
+      <groupId>redis.clients</groupId>
+      <artifactId>jedis</artifactId>
+    </dependency>
+    <!-- H27-12 — AbstractS3DocumentStore's AWS SDK v2 S3 client usage. Version managed by the
+         awssdk BOM imported in the root pom (${awssdk.version}) — shared with kotlin-invoice/
+         kotlin-xpdf, both of which carry the actual client construction/CDI wiring. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+    </dependency>
+    <!-- RS-9 — ArchivePackageBuilder's deterministic tar.gz packaging (sorted entries, normalised
+         mtimes/owner). Version managed by the imported Quarkus BOM (1.28.0, the current stable
+         release on Maven Central as of this task — "never downgrade" dependency rule), no local
+         override needed. Not used anywhere else in the reactor before this task. -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
+    </dependency>
+    <!-- FreeTextMarkup.fromHtml's allowlist sanitizer for pasted/editor HTML. Version managed
+         in the root pom (${jsoup.version}). -->
+    <dependency>
+      <groupId>org.jsoup</groupId>
+      <artifactId>jsoup</artifactId>
+    </dependency>
+
+    <!-- Test dependencies moved to parent -->
+    <!-- A2 — layer test that kotlin-shared stays free of de.littletrotter.domain (kotlin-invoice). -->
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Shared time rules for this module's TimeSourceArchitectureTest; test scope only. -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-architecture-rules</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- AP-M6 — real Valkey container for PayloadExchangeTest. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
+    <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-maven-plugin</artifactId>
+        <version>${kotlin.version}</version>
+        <configuration>
+          <jvmTarget>${maven.compiler.release}</jvmTarget>
+          <!-- Kotlin-only call sites: no DefaultImpls compatibility classes for interface defaults
+               (dead forwarders that JaCoCo counted as missed lines). -->
+          <args>
+            <arg>-jvm-default=no-compatibility</arg>
+          </args>
+        </configuration>
+        <executions>
+          <!-- Qodana KotlinMavenPluginPhase — explicit phases (matching kotlin-xpdf's pom) so the
+               Kotlin compiler is guaranteed to run ahead of any javac step in this lifecycle,
+               rather than relying on the plugin's implicit default phase binding. -->
+          <execution>
+            <id>compile</id>
+            <phase>process-sources</phase>
+            <goals><goal>compile</goal></goals>
+          </execution>
+          <execution>
+            <id>test-compile</id>
+            <phase>process-test-sources</phase>
+            <goals><goal>test-compile</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${maven-compiler-plugin.version}</version>
+        <configuration>
+          <!-- Mixed Kotlin+Java module (protobuf-generated Java): javac's incremental rebuild
+               ("Recompiling the module because of added or removed source files") wipes the whole
+               target/classes directory — deleting the Kotlin classes the kotlin plugin already
+               wrote in the earlier process-sources phase. Disabling incremental compilation makes
+               javac recompile its few generated sources every time without ever cleaning the
+               shared output directory. -->
+          <useIncrementalCompilation>false</useIncrementalCompilation>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>kr.motd.maven</groupId>
+        <artifactId>os-maven-plugin</artifactId>
+        <version>1.7.1</version>
+        <extensions>true</extensions>
+        <executions>
+          <execution>
+            <goals>
+              <goal>detect</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.xolstice.maven.plugins</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <version>0.6.1</version>
+        <configuration>
+          <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+          <!-- keep dependency expansion path stable and explicit to avoid transient non-directory path errors -->
+          <temporaryProtoFileDirectory>${project.build.directory}/protoc-dependencies</temporaryProtoFileDirectory>
+          <hashDependentPaths>false</hashDependentPaths>
+          <checkStaleness>true</checkStaleness>
+          <clearOutputDirectory>true</clearOutputDirectory>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+      <!-- AP-M6 — binds PayloadExchangeIT (and any future kotlin-shared IT) into the
+           integration-test/verify phases, same pattern as kotlin-invoice and kotlin-xpdf. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>${maven-failsafe-plugin.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <configuration>
+          <!-- H27-52: coverage targets apply to hand-written code; the protobuf
+               wire classes are generated (target/generated-sources) and excluded.
+               BTE-3: B2bCodeListValuesEn16931/Extended are likewise generated
+               (scripts/codegen/facturx_codedb_gen.py) — coverage of raw Set<String> constant
+               declarations is not meaningful, B2bCodeList (hand-written) carries the gate. -->
+          <excludes>
+            <exclude>de/littletrotter/shared/proto/**</exclude>
+            <!-- Patterns must match the full class-file path incl. ".class" — a bare class name
+                 silently matches nothing and the ~30k generated lines crash the bundle ratio. -->
+            <exclude>de/littletrotter/shared/b2b/codes/B2bCodeListValuesEn16931*.class</exclude>
+            <exclude>de/littletrotter/shared/b2b/codes/B2bCodeListValuesExtended*.class</exclude>
+          </excludes>
+        </configuration>
+        <version>${jacoco-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+          <!-- AP-M10 — 100 % line+branch on the messaging classes this module owns (plan §5).
+               Module bundle threshold above (0.35/0.28) is unchanged; this is a second,
+               narrower CLASS-scoped rule for exactly the critical classes.
+
+               `de.littletrotter.shared.PayloadExchange` arrived with AP-M6 (payload offload to
+               Valkey) — added below together with its own 100 % tests (PayloadExchangeIT).
+
+               PayloadExchangeIT is a failsafe IT (needs a Docker daemon for its Valkey
+               Testcontainer), so this check is skipped when -DskipITs is set — that flag means
+               the IT did not run and its coverage would be genuinely absent, not that the gate
+               was weakened. A plain "mvn verify" (skipITs=false by default, see the property
+               above) still enforces the 100 % once failsafe has produced that coverage. -->
+          <execution>
+            <id>check-messaging-core</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <skip>${jacoco.gates.skip}</skip>
+              <rules>
+                <rule>
+                  <element>CLASS</element>
+                  <includes>
+                    <include>de.littletrotter.shared.NatsStreamSetup</include>
+                    <include>de.littletrotter.shared.NatsUrlsKt</include>
+                    <include>de.littletrotter.shared.NatsConnections</include>
+                    <include>de.littletrotter.shared.PayloadExchange</include>
+                  </includes>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+          <!-- ══ H27-52 — Deckungs-Gate für den Rechenkern (Geld-Wertobjekt) ═════════════════
+               Zweite eigenständige Prüfung neben check-messaging-core: 100 % Line UND Branch auf
+               Money, dem einen Typ, den jede Rechnungssumme in kotlin-invoice und kotlin-xpdf
+               durchläuft (task-Anweisung §11 v2, "Kern-100"; H27-52 Schritt 1). Phase
+               post-integration-test wie kotlin-invoices Geschwister-Gates: vor der modulweiten
+               Prüfung in `verify`, damit ein dort rot laufendes Gate dieses hier nicht verdeckt.
+
+               WARUM 0.9285/0.9736 UND NICHT 1.0/1.0 — nach H27-52/RG-2s Schließungsrunde
+               (MoneyTest: `times(factor, scale)` ohne explizites `rounding` schließt die
+               `times$default`-Lücke) bleibt in `Money.allocate(weights: List<BigDecimal>)`
+               (Money.kt:200-215) genau EIN Zweig offen, und der ist mathematisch bewiesen
+               unerreichbar, nicht bloß unglücklich getestet:
+
+               Die Methode rundet jeden exakten Anteil auf 10 Nachkommastellen (HALF_UP), bevor sie
+               `FLOOR`t (Money.kt:189-191). Für jeden Index, dessen gerundeter `floor()` dadurch um
+               +1 über seinem *wahren* `floor()` liegt ("Inflation"), liegt sein wahrer Bruchteil
+               zwingend bei `1 - δ` mit `δ < 5·10⁻¹¹` — er trägt also fast genau 1 zur Summe `S`
+               aller wahren Bruchteile bei. Da `S` als Summe von Werten in `[0,1)`, deren
+               floor-Summe sich exakt zum ganzzahligen `amount` addiert, selbst ganzzahlig sein MUSS
+               (elementare Beweisführung, siehe H27-52-Abschlussbericht), gilt für `m` inflationierte
+               Indizes zwingend `S ≥ m`. Der Rest, den `allocate` am Ende verteilt, ist
+               `remaining = S − m ≥ 0` — die `while (remaining.signum() < 0)`-Schleife
+               (Money.kt:207-211, "andersrum" für negative Beträge) kann für **kein** `Money`/
+               `weights`-Paar je einen negativen Wert sehen. Eine erschöpfende Zufallssuche über
+               tausende negative Beträge × Gewichtsvektoren (auch mit absichtlich pathologischen,
+               nahe der 10-Dezimalstellen-Grenze liegenden Verhältnissen) fand ebenfalls keinen
+               Gegenbeweis — konsistent mit dem Beweis oben.
+
+               Diesen einen Zweig künstlich zu erreichen bräuchte einen `weights`-Vektor mit einer
+               Gesamtsumme im zweistelligen Milliardenbereich (die Herleitung im Abschlussbericht
+               zeigt, warum) — kein Rechnungsszenario dieser Anwendung, sondern ein Alibi-Test
+               gegen eine bewiesen tote Zeile. Die Schwellen unten sind deshalb die tatsächlich
+               gemessenen Werte (52 von 56 Lines, 37 von 38 Branches) nach der Schließungsrunde,
+               nicht eine gerundete Wunschzahl — exakt das Muster aus kotlin-invoices
+               check-b2b-strand/check-domain-core für strukturell unerreichbare Zweige. PO-Entscheid 28.08.2026: Kalibrierung GENEHMIGT; wer den Beweis widerlegt oder die
+               Rundungsstufe von `allocate` ändert, hebt die Schwelle wieder auf 1.0/1.0.
+
+               Skip: jacoco.gates.skip=true (= skipITs=true) unterbricht den Sonar-CI-Job nicht —
+               Money wird von Unit-Tests vollständig abgedeckt, der Gate hätte nie rot sein sollen.
+               Konsistent mit check-messaging-core, check-b2b-term-core und check-b2b-codelist-core. -->
+          <execution>
+            <id>check-catalogue-rules</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <skip>${jacoco.gates.skip}</skip>
+              <rules>
+                <rule>
+                  <element>CLASS</element>
+                  <includes>
+                    <include>de.littletrotter.shared.catalogue.LeistungsverzeichnisRules</include>
+                  </includes>
+                  <limits>
+                    <limit><counter>LINE</counter><value>COVEREDRATIO</value><minimum>1.0</minimum></limit>
+                    <limit><counter>BRANCH</counter><value>COVEREDRATIO</value><minimum>1.0</minimum></limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+          <execution>
+            <id>check-money-core</id>
+            <phase>post-integration-test</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <skip>${jacoco.gates.skip}</skip>
+              <rules>
+                <rule>
+                  <element>CLASS</element>
+                  <includes>
+                    <include>de.littletrotter.shared.Money</include>
+                    <include>de.littletrotter.shared.Money$Companion</include>
+                  </includes>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.9285</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.9736</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+          <!-- BTE-1 — 100 % line+branch on B2bTerm, the EN 16931 business-term taxonomy
+               (H27 conventions §11 / docs/bt-enum/README.md: "kritische Komponente"). The
+               binding-target invariant (replaces DB CHECK chk_b2b_field_catalog_binding_target)
+               lives in the top-level assertB2bTermBindingInvariant function (B2bTermKt facade
+               class, included below) rather than inline in `init`, precisely so its throwing
+               branch stays reachable: every real B2bTerm constant is valid by construction, so a
+               fixed, correct enum body alone could never exercise the failing path (the same
+               reachability gap Money.allocate's proven-dead rounding branch has, H27-52) — the
+               test suite instead calls the function directly with deliberately invalid arguments,
+               so this gate stays at the full 1.0/1.0, no calibration needed. -->
+          <execution>
+            <id>check-b2b-term-core</id>
+            <phase>post-integration-test</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <skip>${jacoco.gates.skip}</skip>
+              <rules>
+                <rule>
+                  <element>CLASS</element>
+                  <includes>
+                    <include>de.littletrotter.shared.b2b.B2bTerm</include>
+                    <include>de.littletrotter.shared.b2b.B2bTerm$Companion</include>
+                    <include>de.littletrotter.shared.b2b.B2bTermKt</include>
+                  </includes>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+          <!-- BTE-3 — 100 % line+branch on B2bCodeList/FacturXProfile, the Factur-X code-list API
+               (docs/bt-enum/bte-3-code-lists.md acceptance: "B2bCodeList API 100 % covered").
+               B2bCodeListDriftTest exercises values()/contains() for every constant under both
+               profiles, so the values()/contains() `if` branch and every constructor lambda are
+               covered without any calibration. The generated raw value objects are excluded above
+               (not this module's hand-written code). -->
+          <execution>
+            <id>check-b2b-codelist-core</id>
+            <phase>post-integration-test</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <skip>${jacoco.gates.skip}</skip>
+              <rules>
+                <rule>
+                  <element>CLASS</element>
+                  <includes>
+                    <include>de.littletrotter.shared.b2b.codes.B2bCodeList</include>
+                    <include>de.littletrotter.shared.b2b.codes.FacturXProfile</include>
+                  </includes>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.cyclonedx</groupId>
+        <artifactId>cyclonedx-maven-plugin</artifactId>
+        <configuration>
+          <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+          <includeCompileScope>true</includeCompileScope>
+          <includeProvidedScope>false</includeProvidedScope>
+          <includeRuntimeScope>true</includeRuntimeScope>
+          <includeSystemScope>false</includeSystemScope>
+          <includeTestScope>false</includeTestScope>
+        </configuration>
+        <executions>
+          <execution>
+            <id>make-bom</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>makeBom</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- H27-42: ktlint and detekt linter gates (inherited from parent pluginManagement) -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <!-- Inherits ktlint-check and detekt-check executions from parent -->
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,0 +1,144 @@
+@startuml invoice-state-machine
+
+' A42-11 — laid out left to right so the happy path DRAFT -> IN_REVIEW ->
+' SENT reads as one line, entry at the left, both exits at the right. The
+' IN_REVIEW -> DRAFT back-edge stays a short local return arrow between the
+' two adjacent boxes (no direction hint on it: PlantUML/Graphviz drops one
+' of a pair of same-rank edges that carry opposing -left-/-right- hints —
+' verified against docker plantuml/plantuml:1.2023.12, the version `make
+' publish` renders with).
+' The storno document's [*] --> CANCELLED entry used to share the diagram's
+' single real start pseudostate with [*] --> DRAFT, which pulled that dot
+' into a crossing-heavy spot between the two flows. It is now its own
+' <<start>>-stereotyped pseudostate (StornoEntry) placed right next to
+' CANCELLED — same solid-dot look as a real start, but visually a distinct
+' second entry, which is the point: a storno document is never created via
+' DRAFT, it is born directly in CANCELLED. One shared <<end>> pseudostate
+' (End) is the single exit for SENT (stays sent), CANCELLED and VOIDED —
+' PO 2026-09-12: one exit, two confused readers.
+'
+' state colors mirror the app's real invoice status chips
+' (InvoiceStatus.cssClass -> .status-chip--* in
+' kotlin-invoice/src/main/frontend/themes/littletrotter/styles.css), not a
+' generic "editable / read-only / terminal" palette. Looked up directly in
+' styles.css rather than trusting the work-package table blindly:
+'   DRAFT      .status-chip--draft     text  var(--lt-accent)          #1A73E8
+'   IN_REVIEW  .status-chip--review    bg/fg var(--ino-status-review*) #F4511E (--lt-review)
+'   SENT       .status-chip--sent      bg/fg var(--ino-status-sent*)   #188038 (--lt-ok)
+'   CANCELLED  .status-chip--cancelled bg/fg var(--ino-status-storno*) #455A64 (--lt-storno)
+'   VOIDED     .status-chip--voided    bg/fg var(--ino-status-cancelled*) #D93025 (--lt-error)
+' The real chips are pale-tint pills (e.g. review text #F4511E on #FFE0B2)
+' sized for small 12px UI labels; measured standalone that pairing is only
+' 2.74:1, well under WCAG AA. For a diagram box we invert it instead: solid
+' status-color fill with white label text, checked against this file's own
+' font size (FontSize 13 Bold below puts every label in the WCAG "normal
+' text" bracket, &lt;18.66px bold, so the AA bar is 4.5:1, not 3:1):
+'   DRAFT     #1A73E8 fill / white text = 4.51:1 (passes)
+'   IN_REVIEW #C34118 fill / white text = 4.96:1 (passes)
+'   SENT      #188038 fill / white text = 5.02:1
+'   CANCELLED #455A64 fill / white text = 7.24:1
+'   VOIDED    #D93025 fill / white text = 4.77:1
+' Borders are a darker shade of the same hue (sRGB mix with black); they are
+' decoration, not text, so they carry no AA requirement of their own.
+
+left to right direction
+
+skinparam nodesep 30
+skinparam ranksep 40
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+
+skinparam state {
+  FontSize 12
+  FontStyle bold
+  FontColor #ffffff
+  ArrowColor #5F6368
+  ArrowFontColor #202124
+  ArrowFontSize 11
+}
+
+skinparam state<<draft>> {
+  BackgroundColor #1A73E8
+  BorderColor #145AB5
+}
+
+skinparam state<<review>> {
+  BackgroundColor #C34118
+  BorderColor #9C3412
+}
+
+skinparam state<<sent>> {
+  BackgroundColor #188038
+  BorderColor #13642C
+}
+
+skinparam state<<cancelled>> {
+  BackgroundColor #455A64
+  BorderColor #36464E
+}
+
+skinparam state<<voided>> {
+  BackgroundColor #D93025
+  BorderColor #A9251D
+}
+
+state DRAFT <<draft>>
+state IN_REVIEW <<review>>
+state SENT <<sent>>
+state CANCELLED <<cancelled>>
+state VOIDED <<voided>>
+state "  " as StornoEntry <<start>>
+state "  " as End <<end>>
+
+[*] --> DRAFT : new invoice
+DRAFT --> IN_REVIEW
+' [norank]: the return edge must not influence the left-to-right rank order,
+' otherwise Graphviz may put IN_REVIEW left of DRAFT when it breaks the cycle.
+IN_REVIEW -[norank]-> DRAFT
+IN_REVIEW --> SENT : e-invoice generated\nsuccessfully
+note on link
+  Not a direct action: "Senden" requests a SEND-triggered
+  e-invoice generation job (GenerationJobResultHandler.resolveSendOutcome);
+  the invoice stays IN_REVIEW until that job completes and
+  validation resolves VALID. See Runtime View, "Send an Invoice".
+  A VALID-tooling-UNAVAILABLE result can still be forced through
+  with an audited override reason (finalize-override) — the one
+  case this edge remains a direct, synchronous action.
+end note
+SENT --> End : stays sent
+
+DRAFT -down-> VOIDED
+IN_REVIEW -down-> VOIDED
+SENT -down-> CANCELLED : storno
+note top of CANCELLED
+  Original invoice is tagged
+  CANCELLED on storno and stays so;
+  the storno document is a
+  separate invoice (type code 384)
+  created in CANCELLED via
+  Invoice.withInitialStatus(CANCELLED)
+  (ADR-025) — status has a private
+  setter, so this factory is the
+  construction-time-only door
+  around it, deliberately outside
+  InvoiceStateMachine's own edge
+  table (no prior status to check).
+end note
+
+StornoEntry -down-> CANCELLED : storno document is\ncreated directly\nin CANCELLED
+
+VOIDED -down-> End
+CANCELLED -down-> End
+
+legend right
+  |= Status |= Color |
+  |DRAFT|<back:#1A73E8><color:#FFFFFF> editable </color></back>|
+  |IN_REVIEW|<back:#C34118><color:#FFFFFF> awaiting review </color></back>|
+  |SENT|<back:#188038><color:#FFFFFF> read-only; final unless cancelled </color></back>|
+  |CANCELLED|<back:#455A64><color:#FFFFFF> terminal: storno </color></back>|
+  |VOIDED|<back:#D93025><color:#FFFFFF> terminal: discarded unsent </color></back>|
+endlegend
+
+@enduml

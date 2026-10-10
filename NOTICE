@@ -1,0 +1,26 @@
+Little Trotter
+Copyright (c) 2026 Stefan Zils and contributors (https://github.com/little-trotter)
+
+This product includes software developed by Little Trotter
+under the Apache License 2.0, and design, concept, and documentation assets
+licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0).
+
+ATTRIBUTION REQUIREMENT:
+Any use, reproduction, redistribution, modification, hosting, or embedding
+of this software, its concept, or derivative works—in source, binary, hosted,
+or documented form, including commercial use—must prominently display attribution to:
+"Little Trotter (https://github.com/little-trotter)"
+and retain this NOTICE file, copyright notices, and license terms.
+
+---
+
+Bundled third-party fonts
+
+  Liberation Sans (Regular, Bold, Italic, Bold Italic)
+  Location: kotlin-xpdf/src/main/resources/fonts/
+  Copyright (c) Red Hat, Inc. — Liberation is a trademark of Red Hat, Inc.
+  Licensed under the SIL Open Font License, Version 1.1:
+  https://openfontlicense.org/
+
+  Embedded into generated invoice PDFs, which the SIL OFL permits (document
+  embedding is not "selling the fonts" under clause 1).

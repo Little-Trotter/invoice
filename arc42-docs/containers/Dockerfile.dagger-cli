@@ -1,0 +1,21 @@
+# Throwaway image for running the Dagger CLI in a container (make build DAGGER=container),
+# for a machine with Docker but no locally installed Dagger CLI.
+#
+# The official registry.dagger.io/engine image ships the `dagger` binary but not a `docker`
+# client: the CLI provisions/connects to the engine by running `docker` itself against the
+# mounted host socket, so without that binary it times out ("start engine: new client:
+# context deadline exceeded") instead of finding the engine. docker:cli already has the
+# client; this only adds the Dagger CLI on top, pinned to the same version as the rest of
+# the toolchain.
+ARG DAGGER_VERSION=0.21.9
+
+FROM docker:29-cli
+
+ARG DAGGER_VERSION
+
+RUN apk add --no-cache curl \
+    && curl -fsSL https://dl.dagger.io/dagger/install.sh \
+        | DAGGER_VERSION=${DAGGER_VERSION} BIN_DIR=/usr/local/bin sh \
+    && apk del curl
+
+ENTRYPOINT ["dagger"]

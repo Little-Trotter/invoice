@@ -1,0 +1,61 @@
+[[adr-002]]
+= ADR-002: EN 16931 Business Terms as a Kotlin Enum, Not a Seeded Catalog Table
+
+== Status
+Accepted
+
+== Context
+The original B2B-term catalog (`b2b_field_catalog`) was a Flyway-seeded database table: every
+EN 16931 business term (`BT-n`) a `B2bProfile` could require was a row, inserted by the baseline
+seed migration and validated at runtime by a DB `CHECK` constraint
+(`chk_b2b_field_catalog_binding_target`). Extending coverage beyond the original ~15 curated
+terms to the full EN 16931 / Factur-X EXTENDED business-term set (over 200 terms) by adding rows
+would have meant growing an unreviewable SQL `INSERT` block and re-deriving the same invariants
+(binding requires an XPath or a bound property; an enum-kind term requires a value domain) as ad
+hoc `CHECK` constraints, with no compile-time verification that a term's metadata was internally
+consistent.
+
+== Decision
+The business-term taxonomy is a Kotlin enum, `B2bTerm` (`kotlin-shared`), one constant per BT
+number. Each constant carries its EN 16931 level, field kind, and — where applicable — a
+binding (`BOUND` to an existing domain property, or `FREE` with a documented XPath into the CII
+export). Two `init`-time invariant checks
+(`assertB2bTermBindingInvariant`, `assertB2bTermValueDomainInvariant`) enforce these rules in
+the domain model; the schema carries no `CHECK` constraint for them. The persisted form is a
+SMALLINT column holding the term's official BT number (`B2bTerm.code`), via a hand-written JPA
+converter (`B2bTermConverter`) rather than the enum's ordinal, because declaration order and BT
+numbering do not coincide. Display text (short name, definition) is resolved per locale from a
+shared i18n resource bundle keyed by the term, not embedded in the enum itself, so it is loaded
+lazily rather than sitting on the heap permanently for every term in every language.
+
+== Consequences
+
+=== Positive
+* Every term's metadata is checked by the compiler and by unit tests, not only by a runtime
+  `CHECK` constraint discovered on write.
+* Coverage of the full ~200-term EN 16931/EXTENDED business-term set is tractable: most new
+  entries are pure reference terms with no capture logic, generated once and reviewed as code.
+* A term already carried by an existing domain property (`BOUND`) needs no new UI capture
+  widget at all — the existing property is read reflectively at rule-evaluation time.
+
+=== Negative
+* The enum is large (~250 entries) and a regenerated block is only as trustworthy as the
+  generator and its review, not hand-verified per entry.
+* Persisting by an explicit numeric code rather than ordinal means the converter must be kept in
+  sync by hand if a term's numbering scheme changes — a mismatch the code round-trip test in
+  `B2bTermTest` guards against.
+
+=== Mitigation
+* `B2bTerm.BT_151` (the line's VAT category code) is the one deliberate exception
+  (`catalogExcluded`): the VAT category is a tax decision that follows from the position's tax
+  rule, so no buyer profile may require or override it; the exporter derives the value from the
+  tax snapshot. An architectural guard test (`B2bProfileMigrationIT`) enforces the exclusion
+  rather than leaving it as a convention.
+* A schema-range test (`B2bTermSchemaRangeTest`, `kotlin-invoice`) checks the SMALLINT column can
+  hold every allocated code, including the reserved `10000 + n` block for `BT-X-n` extension
+  terms.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/b2b/B2bTerm.kt`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/reference/converters/B2bTermConverter.kt`_

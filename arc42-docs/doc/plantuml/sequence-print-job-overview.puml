@@ -1,0 +1,27 @@
+@startuml sequence-print-job-overview
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+database "PostgreSQL\n<size:10>[Database]</size>" as DB
+participant "little-trotter-job-worker" as Worker
+
+OfficeManager -> WebApp: open job overview
+WebApp -> DB: query day summaries & jobs
+DB --> WebApp: day summaries & rows
+WebApp --> OfficeManager: render tree grid
+
+== Live Updates (Dual-Channel) ==
+alt Fast Path (same JVM)
+  WebApp -> WebApp: UiEventBus (JobFinishedEvent)
+  WebApp -> DB: count new jobs
+  WebApp --> OfficeManager: update new-count badge
+else Guaranteed Path (separate worker / dropped push)
+  WebApp -> DB: poll counts (active jobs in set, interval <= 2 s)
+  DB --> WebApp: updated counts
+  WebApp --> OfficeManager: update new-count badge
+end
+
+$SequenceStorageLegend()
+@enduml

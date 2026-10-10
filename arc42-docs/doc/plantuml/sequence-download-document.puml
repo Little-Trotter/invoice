@@ -1,0 +1,17 @@
+@startuml sequence-download-document
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+database "RustFS\n<size:10>[Object Store]</size>" as S3 <<storage>>
+
+OfficeManager -> WebApp: click "Download PDF"
+WebApp -> S3: get document
+S3 --> WebApp: bytes
+WebApp --> OfficeManager: file downloads
+OfficeManager -> WebApp: view validation report
+WebApp --> OfficeManager: report shown
+
+$SequenceStorageLegend()
+@enduml
