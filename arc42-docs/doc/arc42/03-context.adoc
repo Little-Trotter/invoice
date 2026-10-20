@@ -1,0 +1,226 @@
+= System Scope and Context
+
+This chapter defines the system's boundaries: which actors and external systems interact with Little Trotter X-Invoice, and which parts of the invoicing process are out of scope.
+
+== Business Context
+
+The C4 system context (level 1) is the business view: who exchanges what with the system, in
+business terms. Channels, protocols, ports and formats are deliberately absent from the picture
+and listed once in <<_technical_context,Technical Context>> below.
+
+.Business context (C4 system context)
+image::c4-system-context.svg[C4 system context: Little Trotter X-Invoice with its people and neighboring systems]
+
+*Legend*: <<c4-reference,C4 Notation Reference>>
+
+*Canvas Views*: link:architecture-communication-canvas.html[Architecture Communication Canvas]
+and link:architecture-inception-canvas.html[Architecture Inception Canvas]
+
+[cols="2,2,4", options="header"]
+|===
+|Neighbor |Role |Exchanged Artifacts
+
+|Office Manager / Product Owner
+|Person
+|Master data, invoices, and receipts entered/reviewed via the web UI.
+
+|Tax advisor / auditor, invoice recipients
+|Person
+|Generated e-invoice XML (X-Rechnung / ZUGFeRD) and PDF/A-3b documents. The
+invoicing application never sends them; where an instance runs the optional mail dispatch
+component, delivery is that component's responsibility, otherwise documents are handed over
+out-of-band.
+
+|Mail dispatch component (`kotlin-email`)
+|Neighboring system — its own bounded context, deployed separately, optional per instance
+|Receives one compose request per send (document family, reference key, recipient, placeholder
+values, presigned attachment links) and returns one dispatch result event. It owns the
+composed mail, the send journal, and the signed archive packages; this system only keeps the
+fact that a document was sent.
+
+|Quote module (`kotlin-quote`)
+|Neighboring system — its own bounded context, deployed separately, optional per instance
+|Creates, reviews and sends quotes and records their acceptance or rejection on replicas of the invoicing master data. Hands an
+explicit invoice order over as the event `quote.invoice-order.requested` and receives `invoice.created-from-quote` in
+return; sends quotes through the mail dispatch component.
+
+|Mailbox / SMTP provider
+|External system
+|Accepts the submitted message and archives outgoing mail on the provider side. Reached *only*
+by the mail dispatch component — the invoicing application holds no SMTP credentials.
+
+|Operator's mail archive
+|External system, operated by the business, optional per instance
+|Receives a byte-identical copy of every dispatched invoice and quote mail by SMTP as an
+additional envelope recipient (journal copy, <<adr-037,ADR-037>>); returns only the SMTP
+acceptance, which the mail component records as handover status. Reached *only* by the mail
+dispatch component. Archiving and retention stay with the operator (<<adr-035,ADR-035>>).
+
+|Authentik
+|External system
+|Identity provider for Office Manager login (OIDC, authorization code flow); the application
+never sees a password, only the resulting ID token.
+
+|EU VIES REST API
+|External system
+|Official VAT information exchange system of the European Commission; queried on explicit demand ("VIES prüfen") to confirm foreign recipient VAT-IDs prior to tax-exempt cross-border invoicing (<<adr-023,ADR-023>>).
+
+|DevOps
+|Person
+|Reviews dashboards and alerts from the monitoring stack; provisions, deploys, and maintains
+the server (see <<_deployment_view,Deployment View>>).
+
+|Monitoring (Prometheus/Grafana)
+|External system
+|Scrapes application and infrastructure metrics, reviewed by DevOps; optional, operated via
+`admin-tools/monitoring`.
+
+|Backup Storage
+|External system
+|Receives age-encrypted database and object-storage backup archives copied off-site by DevOps
+(Phase 1 scripts under `admin-tools/scripts/backup/backup.sh`, Phase 2 `lt backup`), never by the Office Manager.
+|===
+
+== Technical Context
+
+The table below is the technical view of the context: it has the same neighbors as the business
+context above and adds the channel, protocol and format behind every relationship. See
+<<_building_block_view,Building Block View>> for how the system is composed inside those
+boundaries, from the container landscape (level 1) down to the components (level 2).
+
+[cols="3,2,1,4", options="header"]
+|===
+|Interface |Protocol |Direction |Purpose
+
+|Browser → Caddy → application
+|HTTPS
+|Inbound
+|Caddy terminates TLS in front of the Vaadin/Quarkus application (`little-trotter-invoice`);
+it is the stack's only externally exposed service (ports 80/443).
+
+|Application ↔ PostgreSQL
+|JDBC
+|Bidirectional
+|Primary relational persistence (master data, invoices, receipts, jobs), schema/seed managed
+by an editable Flyway baseline.
+
+|Application ↔ RustFS
+|S3 API
+|Bidirectional
+|Object storage (S3-compatible) for receipts and generated PDF/XML documents.
+
+|Application ↔ NATS JetStream
+|NATS
+|Bidirectional
+|Carries small job envelopes between the interactive app, the scheduler-driven job worker
+(`little-trotter-job-worker`, same artifact, `QUARKUS_PROFILE=worker`), and the `kotlin-xpdf`
+renderer. Text payloads live in Valkey and PDFs/receipts in RustFS, so NATS messages stay
+small.
+
+|Application ↔ Valkey
+|Redis protocol
+|Bidirectional
+|Cache and text-payload store (PDF/query cache, trip-workbook references) shared by the app and
+the `kotlin-xpdf` renderer.
+
+|`kotlin-xpdf` (renderer/worker) ↔ NATS / RustFS / Valkey
+|NATS / S3 API / Redis protocol
+|Bidirectional
+|Consumes generation jobs, renders PDF/A-3b via Typst, generates and validates
+ZUGFeRD/X-Rechnung XML (Mustang Project, embedded KoSIT validator), publishes results back.
+
+|Application → Authentik
+|OIDC (authorization code)
+|Outbound
+|Office Manager login: the application redirects to Authentik's authorization endpoint and exchanges
+the resulting code for tokens (`quarkus.oidc.*`); the human-readable username from the token
+is also stamped onto audit fields.
+
+|Application → EU VIES REST API
+|HTTPS REST
+|Outbound
+|Explicit on-demand recipient VAT ID verification (`VatIdVerificationPort`, `ViesHttpClient`); called only on explicit user button click, never scheduled or automated (<<adr-023,ADR-023>>).
+
+|Monitoring (Prometheus/Grafana) → application and infrastructure
+|Metrics scrape
+|Inbound (pull)
+|Optional stack that scrapes metrics from the application and infrastructure; not fronted by
+Caddy, reached only via the internal `invoice-net` network.
+
+|Application → mail dispatch component
+|HTTPS, `POST /mail/api/compose`
+|Outbound
+|The only call this system makes towards mail dispatch: hands over the values for one mail and
+receives a draft id plus the URL of the component's compose view, which the browser opens.
+Internal-only, authenticated with an integration token, and used only while the feature is
+enabled for the instance.
+
+|Mail dispatch component → application
+|NATS JetStream, `mail.send.result`
+|Inbound (event)
+|The single return path: a fire-and-forget result envelope (journal id, reference key, status,
+message id, dispatch timestamp) projected onto the invoice as a "sent" flag. The component
+never calls into the invoicing application, so no service here has to be reachable for a mail
+to be sent.
+
+|Application → quote module
+|HTTPS, `/quote/api/*`
+|Outbound
+|The invoicing application's quote screens call the module's REST API over the instance network
+with an integration token; Caddy answers 404 for it from outside.
+
+|Quote module → application
+|NATS JetStream, `quote.invoice-order.requested`
+|Inbound (event)
+|Invoice order for a quote as a reference event (order id, quote reference, optional delivery date or service period); the application creates the invoice draft and answers with
+`invoice.created-from-quote` or `invoice.creation-from-quote.rejected`. In the other direction the
+application publishes master data (`masterdata.>`) to the quote module's replicas.
+
+|Administration (`little-trotter-admin` / `admin-tools`)
+|Operational scripts (Phase 1) / Go CLI & TUI (`lt`, `lhorse`, Phase 2)
+|Operational
+|Staged DevOps tooling for server provisioning, deployment, database maintenance, and
+age-encrypted backup/restore (`admin-tools/`): Phase 1 shell automation (MVP until Q4/2027); Phase 2
+consolidated Go CLI (`lt`) and TUI (`lhorse`) (Q4/2027–Q1/2028 after phase-gate hardening). Not part
+of the core application build.
+|===
+
+== Bounded Context Relationship: Mail Dispatch
+
+Little Trotter X-Invoice (Invoicing) and the mail dispatch component (`kotlin-email`) are
+two separate bounded contexts related through a *Published Language*: `kotlin-mail-contract`
+(`de.littletrotter.shared.mail`), a small, independently versioned module both sides depend on
+instead of either depending on the other's domain model. Neither context ever imports the other's
+own types; each translates the shared contract into its own local model at exactly one adapter
+boundary — an *Anti-Corruption Layer (ACL)* on both sides.
+
+* *Invoicing is upstream* for the compose command: it calls `POST /mail/api/compose` with a
+`MailComposeRequest`; the mail component's own `acl` adapter package translates that into its
+local `ComposeMailCommand` — the mail component never sees an Invoicing domain type.
+* *Mail dispatch is upstream* for the result: it publishes one dispatch-result event per send
+attempt over NATS JetStream (`mail.send.result`), which Invoicing's own adapter translates into the
+"sent" flag it projects onto the invoice — Invoicing never sees a mail-journal row or template.
+
+The relationship is therefore a bidirectional Published Language, not a single upstream/downstream
+pair: each context is upstream for the one interaction it owns and downstream for the other. The
+mail component is its own self-contained system with an independent release cycle (see
+<<adr-015,ADR-015>> and the Self-Contained System glossary entry); Invoicing keeps functioning with
+the feature switched off (`LT_MAIL_ENABLED=false`), and the compose call is the only synchronous
+dependency it has on the mail component even while the feature is enabled.
+
+=== Archive of the Operator as a Neighbor
+
+The archive is a neighboring system of the mail dispatch component, not of the invoicing
+application. After a mail is sent, the component delivers the same message bytes to the
+configured archive address (envelope recipient, no header entry) and keeps the result in its
+journal as `MailArchiveHandoverStatus`. Invoicing only reads that status through the shared
+contract. The component's signed archive package is an evidence artifact, not a copy that
+replaces the operator's archive.
+
+== Out of Scope
+
+* Peppol network transmission and transport channels outside the optional
+  `kotlin-email` contract. This system generates and stores invoices; mail composition and
+  SMTP delivery remain in the separate mail system.
+* Bookkeeping / general-ledger accounting.
+* Multi-tenancy — one operator per deployment.

@@ -1,0 +1,53 @@
+@startuml archive-handover-example
+
+' Reader-facing time sequence for the German archive handover guide: one invoice
+' dispatch from commit to the archive's acknowledgement, with clock times.
+' The status feedback sits below a separator so the delivery part stays compact.
+' All names and times are fictitious.
+
+skinparam defaultFontName sans-serif
+skinparam defaultFontSize 11
+skinparam shadowing false
+skinparam roundCorner 0
+skinparam sequenceMessageAlign left
+skinparam participant {
+  BackgroundColor #1A73E8
+  FontColor #ffffff
+  BorderColor #2D66B0
+}
+skinparam actor {
+  BackgroundColor #ffffff
+  BorderColor #2D66B0
+}
+skinparam sequence {
+  LifeLineBorderColor #3C4043
+  LifeLineBorderThickness 1.5
+  ArrowColor #202124
+  ArrowThickness 1.5
+}
+
+actor "Frau Brandner\n(Büro)" as User
+participant "Little Trotter\nX-Invoice" as App
+participant "Postausgangsserver (SMTP)\n(Anbieter Brandner)" as Smtp #188038
+participant "Bäckerei Steinmetz\n(Empfänger)" as Customer #5F6368
+participant "E-Mail-Archiv\n(Anbieter Brandner)" as Archive #188038
+
+User -> App : 09:12 Finale E-Rechnung
+App --> App : PDF mit XML und Archivpaket der Rechnung erzeugt,\nZeitpunkt protokolliert
+User -> App : 09:14 E-Mail senden
+
+== Übertragung 1: Kundenversand (SMTP) ==
+App -> Smtp : 09:14 SMTP-Übertragung (STARTTLS)
+Smtp --> App : 09:14:08 SMTP-Quittung (250 OK)
+Smtp -> Customer : 09:14:09 Zustellung
+
+== Übertragung 2: Archivübergabe (SMTP, Option B) ==
+App -> Smtp : 09:14:10 Separate SMTP-Übertragung (STARTTLS)\nRCPT TO: archiv@...
+Smtp --> App : 09:14:15 SMTP-Quittung (250 OK)
+Smtp -[#188038]> Archive : 09:14:16 Einlieferung in Archivpostfach
+
+== Status & Archivpaket ==
+App --> User : 09:14:15 Status „Übergeben“ (aus SMTP-Quittung)
+App --> App : 09:16 Archivpaket der E-Mail bereit
+
+@enduml

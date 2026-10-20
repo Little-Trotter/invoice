@@ -1,0 +1,442 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>de.littletrotter</groupId>
+    <artifactId>little-trotter-invoice-parent</artifactId>
+    <version>0.9.59-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+  <groupId>de.littletrotter</groupId>
+  <artifactId>kotlin-xpdf</artifactId>
+  <packaging>jar</packaging>
+
+  <name>kotlin-xpdf</name>
+  <description>Microservice prototype: KoSIT validator + document generator (Quarkus/Kotlin)</description>
+
+  <properties>
+    <!-- Same version as kotlin-invoice/pom.xml, for a consistent testcontainers version across the reactor. -->
+    <!-- Money refactor — ArchUnit layer test (same pin as kotlin-shared/kotlin-invoice). -->
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Money refactor — layer test that no money-named field/param/return type is a raw BigDecimal. -->
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Shared time rules for this module's TimeSourceArchitectureTest; test scope only. -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-architecture-rules</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Testcontainers for NATS ITs -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest-jackson</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-kotlin</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-smallrye-health</artifactId>
+    </dependency>
+    <!-- ADM-11 — Micrometer metrics + Prometheus registry, scraped at /q/metrics by
+         admin-tools/monitoring (Caddy blocks /q/* externally, see docker/caddy/Caddyfile). -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-micrometer</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-shared</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- Document job contract (wire DTOs, subjects, codec). -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-document-job-contract</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- SBOM spec review finding — reuses sbom-postprocess's CycloneDxSchemaValidator so
+         SbomSchemaValidityIT can validate the post-processed bom.json against the real CycloneDX
+         1.6 JSON schema. Test scope only: cyclonedx-maven-plugin's own includeTestScope=false
+         config already keeps this (and its cyclonedx-core-java dependency) out of the generated
+         document, exactly like every other test-only dependency. -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>sbom-postprocess</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-logging-json</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.nats</groupId>
+      <artifactId>jnats</artifactId>
+      <version>${jnats.version}</version>
+    </dependency>
+    <!-- AWS SDK v2 S3 client -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+    </dependency>
+    <!-- AP-M6 — PayloadExchange's (kotlin-shared) Jedis 8 usage; also used directly by
+         DocumentJobPipelineIT to flush/assert against the Valkey Testcontainer. Version managed
+         in the root pom (${jedis.version}) — shared with kotlin-invoice/kotlin-shared. -->
+    <dependency>
+      <groupId>redis.clients</groupId>
+      <artifactId>jedis</artifactId>
+    </dependency>
+
+    <!-- PDF / rendering / templating -->
+    <dependency>
+      <groupId>org.mustangproject</groupId>
+      <artifactId>validator</artifactId>
+      <version>2.26.0</version>
+    </dependency>
+
+    <!-- KoSIT Validator library (embedded mode) -->
+    <dependency>
+      <groupId>org.kosit</groupId>
+      <artifactId>validator</artifactId>
+      <version>1.6.3</version>
+    </dependency>
+    <!-- KoSIT declares jaxb-runtime as optional, we need it -->
+    <dependency>
+      <groupId>org.glassfish.jaxb</groupId>
+      <artifactId>jaxb-runtime</artifactId>
+      <version>4.0.9</version>
+    </dependency>
+
+    <!-- CiiSchematronValidator runs the compiled Schematron (XSLT 2.0) with Saxon directly. -->
+    <dependency>
+      <groupId>net.sf.saxon</groupId>
+      <artifactId>Saxon-HE</artifactId>
+      <version>${saxon.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>${pdfbox.version}</version>
+    </dependency>
+    <!-- GiroCode (EPC QR, EPC069-12 v002) in the Typst payment block: QR matrix generation
+         (core) plus a decoder (javase, test-only) for the render-then-scan IT round trip. -->
+    <dependency>
+      <groupId>com.google.zxing</groupId>
+      <artifactId>core</artifactId>
+      <version>${zxing.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.zxing</groupId>
+      <artifactId>javase</artifactId>
+      <version>${zxing.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.module</groupId>
+      <artifactId>jackson-module-kotlin</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
+    <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>${quarkus.platform.group-id}</groupId>
+        <artifactId>quarkus-maven-plugin</artifactId>
+        <version>${quarkus.platform.version}</version>
+        <extensions>true</extensions>
+        <executions>
+          <execution>
+            <goals>
+              <goal>build</goal>
+              <goal>generate-code</goal>
+              <goal>generate-code-tests</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-maven-plugin</artifactId>
+        <version>${kotlin.version}</version>
+        <configuration>
+          <jvmTarget>${maven.compiler.release}</jvmTarget>
+          <!-- Kotlin-only call sites: no DefaultImpls compatibility classes for interface defaults
+               (dead forwarders that JaCoCo counted as missed lines). -->
+          <args>
+            <arg>-jvm-default=no-compatibility</arg>
+          </args>
+        </configuration>
+        <executions>
+          <execution>
+            <id>compile</id>
+            <phase>process-sources</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>test-compile</id>
+            <phase>process-test-sources</phase>
+            <goals>
+              <goal>test-compile</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <!-- Pre-existing plugin-wide <configuration> (CLASS/LINE 0.80, no <includes>) stays
+             completely untouched below — do not fold it into <executions>. Measured while
+             wiring AP-M10 (23.08.2026): with no <executions> element of its own, this
+             plugin-wide config is inert dead configuration — it is never actually merged into
+             the "check" goal execution inherited from the root pom's <pluginManagement> (proof:
+             several long-standing classes sit at 0.00/0.64/0.75 LINE today and the baseline
+             `verify` is green regardless). Giving the inherited "check" execution its own
+             explicit id here — even just to "make it real" — was tried and immediately turned
+             that dormant rule into an enforced one, failing the build on pre-existing,
+             out-of-scope classes (ProblemDetails, ValidationResource, RenderWarmup, …). Fixing
+             that latent gap is not this AP's job (AP-M10 scope is the messaging-core classes
+             below); reactivating it as an unplanned side effect would be. Left as-is, with this
+             note so it isn't "fixed" by accident again.
+
+             BTE-10: the "**/*_" exclude text below was normalized to "**/*_.class" (the mandatory
+             suffix on class-name patterns, JacocoExcludePatternTest in kotlin-shared enforces this
+             repo-wide) — text only, this rule's wiring stays exactly as inert as described above. -->
+        <configuration>
+          <rules>
+            <rule>
+              <element>CLASS</element>
+              <excludes>
+                <exclude>**/*_.class</exclude>
+                <exclude>**/db/migration/**</exclude>
+                <exclude>**/*$$*</exclude>
+                <exclude>**/de/littletrotter/shared/proto/**</exclude>
+                <exclude>**/dagger/**</exclude>
+                <exclude>**/*Dagger*.class</exclude>
+              </excludes>
+              <limits>
+                <limit>
+                  <counter>LINE</counter>
+                  <value>COVEREDRATIO</value>
+                  <minimum>0.80</minimum>
+                </limit>
+              </limits>
+            </rule>
+          </rules>
+        </configuration>
+        <executions>
+          <!-- AP-M10 — 100 % line+branch on the messaging classes this module owns (plan §5).
+               A distinct execution id (not "check") on purpose: reusing "check" merges this
+               module's config with the "check" execution inherited from the root pom's
+               <pluginManagement> (BUNDLE 0.75/0.60) — see the note above on the plugin-wide
+               <configuration> for the measured proof of that merge behavior. A separate id keeps
+               this rule independent of both the root BUNDLE rule and the dormant CLASS/0.80
+               rule above.
+
+               de.littletrotter.xpdf.infrastructure.messaging.ResultPublisher is only fully covered together with its
+               failsafe ITs (ResultPublisherDedupIT, ResultPublishRedeliveryIT), so this check is
+               skipped when -DskipITs is set — same reasoning and same property as
+               kotlin-shared's check-messaging-core (see kotlin-shared/pom.xml): the ITs did not
+               run there, so their coverage is genuinely absent, not a weakened gate. A plain
+               "mvn verify" (skipITs=false by default, root pom) still enforces the 100 %. -->
+          <execution>
+            <id>check-messaging-core</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <skip>${jacoco.gates.skip}</skip>
+              <rules>
+                <rule>
+                  <element>CLASS</element>
+                  <includes>
+                    <include>de.littletrotter.xpdf.infrastructure.messaging.JobConsumer</include>
+                    <include>de.littletrotter.xpdf.infrastructure.messaging.ResultPublisher</include>
+                    <include>de.littletrotter.xpdf.infrastructure.messaging.NatsConnectionProducer</include>
+                  </includes>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                    <limit>
+                      <counter>BRANCH</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>1.00</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+
+      <!-- ── Integration Tests ─────────────────────────────────────────────
+           V2 — bis hierher hatte kotlin-xpdf kein Failsafe: die vorhandenen *IT-Klassen
+           (KositValidationIT, DocumentJobPipelineIT) wurden zwar kompiliert, aber von keinem
+           Build ausgeführt — Surefires Standardmuster erfassen *IT nicht. Ein Test, der nie
+           läuft, ist schlimmer als keiner: er sieht nach Absicherung aus und ist keine. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>${maven-failsafe-plugin.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.cyclonedx</groupId>
+        <artifactId>cyclonedx-maven-plugin</artifactId>
+        <configuration>
+          <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+          <includeCompileScope>true</includeCompileScope>
+          <includeProvidedScope>false</includeProvidedScope>
+          <includeRuntimeScope>true</includeRuntimeScope>
+          <includeSystemScope>false</includeSystemScope>
+          <includeTestScope>false</includeTestScope>
+        </configuration>
+        <executions>
+          <execution>
+            <id>make-bom</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>makeBom</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- H27-42: ktlint and detekt linter gates (inherited from parent pluginManagement).
+           SBOM spec S3 — also fills in the BSI TR-03183-2 § 5.2 fields cyclonedx-maven-plugin
+           does not itself emit, right after the cyclonedx-maven-plugin block above produces
+           target/classes/bom.json (same phase, declared right after it — see kotlin-invoice's
+           pom for the full reasoning on why same-phase declaration order is what makes this
+           safe). kotlin-xpdf has no frontend of its own, so unlike kotlin-invoice this is the
+           only sbom-postprocess execution it needs. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <!-- Inherits ktlint-check and detekt-check executions from parent -->
+        <dependencies>
+          <!-- Plugin dependency, NOT a project dependency — keeps sbom-postprocess off this
+               module's own resolved dependency graph and out of the cyclonedx scan above. -->
+          <dependency>
+            <groupId>de.littletrotter</groupId>
+            <artifactId>sbom-postprocess</artifactId>
+            <version>${project.version}</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <id>sbom-enrich</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>java</goal>
+            </goals>
+            <configuration>
+              <includeProjectDependencies>false</includeProjectDependencies>
+              <includePluginDependencies>true</includePluginDependencies>
+              <mainClass>de.littletrotter.sbom.SbomPostProcessMainKt</mainClass>
+              <systemProperties>
+                <systemProperty>
+                  <key>sbom.timestamp</key>
+                  <value>${project.build.outputTimestamp}</value>
+                </systemProperty>
+              </systemProperties>
+              <arguments>
+                <argument>${project.build.outputDirectory}/bom.json</argument>
+                <argument>${project.url}</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>native</id>
+      <activation>
+        <property>
+          <name>native</name>
+        </property>
+      </activation>
+      <properties>
+        <skipITs>false</skipITs>
+        <quarkus.package.type>native</quarkus.package.type>
+      </properties>
+    </profile>
+  </profiles>
+</project>

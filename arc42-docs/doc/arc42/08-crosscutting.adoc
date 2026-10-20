@@ -1,0 +1,1772 @@
+= Cross-Cutting Concepts
+
+This chapter covers the domain concepts, design patterns, and architectural rules that span multiple
+modules: money and tax arithmetic, EN 16931 compliance semantics, messaging conventions, and the
+invoice state machine that governs the lifecycle.
+
+== Money and Tax Domain Model
+
+All monetary arithmetic is strictly encapsulated by the `Money` value object (`kotlin-shared`). Raw
+`BigDecimal` is reserved exclusively for non-monetary quantities, percentages, and weighting
+factors.
+
+.Architecture Pipeline: Money Precision and Storage
+image::money-precision-pipeline.svg[Pipeline showing how Money values keep exact precision from calculation through to PostgreSQL storage]
+
+=== Two Precision Worlds
+
+[cols="1,2,2", options="header"]
+|===
+|Dimension |`Money.of(...)` (Normalized) |`Money.exact(...)` (Accumulation)
+
+|*Scale and Rounding*
+|Fixed 2 decimals (`HALF_UP`)
+|Caller-defined scale (typically 4) without intermediate rounding
+
+|*Application*
+|Quoted line amounts, totals, UI display, receipts
+|Intermediate tax proportion breakdowns across multiple line items
+
+|*Conservation*
+|Standard arithmetic (`+`, `-`, `*`, `/`)
+|`allocate()`: splits amounts via largest-remainder distribution without rounding loss
+|===
+
+[[_key_invariants_enforcement]]
+=== Key Invariants and Enforcement
+
+* *Value Semantics*: Equality compares `amount` via `compareTo` (`1.50 == 1.5`). `hashCode` strips
+  trailing zeros to preserve the contract across scales. `toString()` renders two fixed decimals
+  (`1.50`).
+* *Compile and Architecture Gate*: `MoneyArchitectureTest` (ArchUnit in `kotlin-shared`,
+  `kotlin-invoice`, `kotlin-xpdf`) forbids raw `BigDecimal` for any property/method matching
+  `amount|price|total|sum`.
+* *Persistence Guarantee*: `MoneyConverter` (`AttributeConverter<Money, BigDecimal>`) normalizes all
+  values to scale 2 on write. PostgreSQL maps amounts to exact `NUMERIC(14,2)` base-10 storage (zero
+  IEEE-754 binary floating-point drift).
+* *Tax Consistency*: VAT is modeled per invoice line (`InvoiceItem.taxRule`). The cross-border
+  `Invoice.reverseCharge` toggle cascades rules to all lines and is enforced as a blocking gate at
+  invoice finalization (<<adr-003,ADR-003>>).
+
+=== Country Reference Tax Rates
+
+`TaxRate.isReference` identifies the standard reference rate of a country independently
+of the global `isDefault` UI preference. A partial unique database index permits at most
+one marked rate per country; a CHECK constraint requires an active, selectable, positive
+category-S rule that is not a hotel rate. The application rejects conflicting assignments
+before persistence. Switching a reference requires clearing the previous marker first.
+
+`TaxRateRepository.requireReferenceTaxRate(country, date)` performs an unpaged, uncached
+lookup and checks inclusive validity boundaries. Missing or ambiguous references are
+errors, never a reason to select another rule by list order. The greenfield seed marks
+DE 19%, FR 20%, BE 21%, NL 21%, and LU 17% from the existing standard rules.
+
+`selectTripTaxRate` is shared by trip persistence and the Vaadin preview. A fixed-price
+trip uses the reference for the invoice's seller VAT registration and invoice date;
+the domestic registration represented by `null` means DE. Reverse charge takes priority
+and retains main-service inheritance, as do trips without a fixed price. Header saves
+refresh fixed-price trip taxes after country/date changes; switching reverse charge off
+restores references. Existing issued invoice snapshots are not rewritten by reference
+data edits. This implements the reference tax rate working scope.
+
+== Document Size Budget
+
+A produced e-invoice may not exceed 20 MiB (see Chapter 2, Architecture Constraints, and
+<<adr-014,ADR-014>> for the decision record). One policy, `ReceiptSizePolicy` (`kotlin-shared`,
+`de.littletrotter.shared.receipt`), is the single source of truth for every number involved, so
+every enforcement point reads from it rather than keeping its own copy:
+
+* `TARGET_RECEIPT_SIZE` (440 KiB) — the size a receipt is reduced to at upload.
+* `MAX_UNREDUCED_RECEIPT_SIZE` (1 MiB) — the hard cap a user may still decline reduction up to.
+* `MAX_UPLOAD_SIZE` (10 MiB) — the largest raw upload accepted at all; reduction is applied.
+* `MAX_RECEIPTS_PER_INVOICE` (19) — distinct receipts, deduplicated by object key, per invoice.
+* `MAX_INVOICE_DOCUMENT_SIZE` (20 MiB) — the produced e-invoice's hard limit.
+* `INVOICE_DOCUMENT_RESERVE` (512 KiB) — the invoice document's own share of that limit.
+
+`ReceiptSizePolicy.uploadDecision(size)` turns a raw upload's size into one of three outcomes:
+`ACCEPT_AS_IS` at or below the target, `OFFER_REDUCTION` up to the 10 MiB upload cap, `REJECT`
+above it. The numbers add up on purpose:
+19 × `TARGET_RECEIPT_SIZE`, counted once as Base64 (XML) and once as rasterised pages (PDF), plus the
+512 KiB reserve fit into 20 MiB and a 20th receipt would not — a future edit to one constant that breaks this invariant
+fails `ReceiptSizePolicyTest`.
+
+=== One Receipt, One Embedding
+
+A receipt is attached once as a file: as a BG-24 `AdditionalReferencedDocument` /
+`AttachmentBinaryObject` (Base64-encoded) inside the ZUGFeRD XML, built by
+`MustangTransactionBuilder` (BT-123 `Name` is the receipt description, the file name if there is
+none). The produced PDF holds exactly one embedded file, the ZUGFeRD XML itself. Additionally the
+PDF shows each receipt as rasterised pages behind the invoice pages, with a header band
+"Anlage n/m – file name" (`ReceiptAnnexBuilder`, list and order from `orderedDistinctReceipts`,
+shared with the XML); a receipt that cannot be read fails the export. The reasoning is in
+<<adr-039,ADR-039>> and, for the single XML copy and the size reasoning, <<adr-032,ADR-032>>.
+
+The estimator, `CombinedDocumentSizeEstimator`, sizes a receipt set on both channels it travels over:
+the sum of each distinct receipt's Base64-encoded size (`ceil(bytes / 3) * 4`,
+`DocumentSize.base64Encoded()`, XRechnung carries every receipt as uncompressed Base64 text inside
+the invoice XML) plus its rasterised pages in the PDF (the same size again, measured 0.99 for
+scan-like receipts reduced at upload to the resolution the export rasterises with), plus the
+`INVOICE_DOCUMENT_RESERVE`. The estimator remains a replaceable seam (`InvoiceDocumentSizeEstimator`);
+the reserve is a fixed allowance for the invoice body, surrounding XML text and embedded fonts, not
+a per-invoice measurement. With 19 scan-like receipts of 440 KiB the measured document (XML Base64 plus pages) is 18.1 MiB
+(<<adr-039,ADR-039>>).
+
+Deduplication is by object key, not by receipt id, and is applied consistently everywhere a
+receipt set is sized: the same document commonly hangs on a position *and* on the invoice as a
+whole, and the export path deduplicates the same way (`orderedDistinctReceipts`, the one function behind both the
+receipt pages and `MustangExportModelMapper.collectReceipts`). A budget that counted a shared receipt twice would refuse an
+invoice the exporter handles fine.
+
+Quotes follow the same page rule (<<adr-042,ADR-042>>): the PDF customer files of a quote are shown as
+rasterised pages behind the quote pages through `ReceiptAnnexBuilder`. The UBL Quotation XML does not
+embed them; it references every customer file by name and SHA-256 (`cac:AdditionalDocumentReference`),
+because the files travel as mail attachments.
+
+The rule is enforced at four points, deliberately layered rather than checked once:
+
+* *Upload* (`ReceiptUploadService`, outbound port `application.invoice.port.outbound
+  .ReceiptPdfReducer`, adapter `infrastructure.receipt.PdfBoxReceiptPdfReducer`, PDFBox) reduces an
+  oversized upload towards `TARGET_RECEIPT_SIZE` before it ever enters the pool — see
+  <<_receipt_normalisation_at_upload,Receipt Normalization at Upload>> below.
+* *Linking* (`ReceiptLinkService.setReceiptsForItem`/`setReceiptsForInvoice`, via
+  `ReceiptBudgetService.requireWithinBudget`) reconstructs the invoice's whole resulting receipt
+  set — invoice-level receipts plus every item's receipts, after the write — and judges it against
+  `InvoiceDocumentBudget`. Only the receipt count breaking `MAX_RECEIPTS_PER_INVOICE` refuses the
+  write; an estimated size above 20 MiB does not block linking, it surfaces as a warning banner in
+  the invoice editor's receipts tab with a link to the receipt pool, so the user can shrink
+  individual receipts without losing the position they were building.
+* *Document generation* (`GenerationJobCreationService.createJob`) re-checks the same budget: an
+  estimate above 20 MiB throws `InvoiceDocumentSizeExceededException` and no `GenerationJob` is
+  created, so a set that only warned at linking time cannot silently reach the export worker.
+* *Export*, as a backstop (`PdfExportServiceImpl.enforceSizeBackstop`, `kotlin-xpdf`), independently
+  refuses a produced container whose actual bytes exceed 20 MiB with
+  `InvoiceDocumentTooLargeException` — the guard that fires if a receipt set ever reaches export
+  without having passed the earlier checks, or if the estimate undercounts the true artifact size.
+  It never truncates a document to fit.
+
+`InvoiceDocumentBudget` reports a `BudgetVerdict` as data — `Accepted`, `TooManyReceipts`, or
+`DocumentTooLarge` — never as a thrown exception. `kotlin-shared` deliberately does not decide how
+a refusal surfaces: `ReceiptBudgetService` (application layer) maps `TooManyReceipts` to
+`ReceiptCountLimitExceededException` for the server-side guard and leaves `DocumentTooLarge` to the
+UI's warning banner, so each layer phrases its own refusal in its own vocabulary, from one shared
+judgment.
+
+[[_receipt_normalisation_at_upload]]
+=== Receipt Normalization at Upload
+
+`PdfBoxReceiptPdfReducer` delegates to the reducer in `kotlin-shared` (`shared.receipt.reduce.PdfReceiptReducer`), the same one the
+quote component uses for quote attachments (<<adr-042,ADR-042>>). It tries two stages in order, stopping as soon as the result meets
+`TARGET_RECEIPT_SIZE`, and a file already at or below the target is stored unchanged
+(`ReceiptNormalisationStage.NONE`):
+
+* *Stage 1 — `IMAGES_DOWNSAMPLED`*: walks each page's content stream, finds every embedded image's
+  actual displayed size (from the CTM in effect at its paint operation, not its raw pixel count),
+  and re-encodes any image whose effective DPI exceeds 150 as a JPEG at quality 0.75. Text, vectors
+  and metadata are untouched — a receipt that is mostly a scanned photo with vector or text
+  overlays often meets the target at this stage alone.
+* *Stage 2 — `RASTERISED`*: renders every page to a single 150 dpi image and rebuilds the PDF from
+  those images. The text layer is lost, which is why this only runs once stage 1 alone is not
+  enough; the receipt is still legible for a human reviewer, which is what the pool needs to keep
+  proving an expense.
+* A result still above the target after both stages is rejected outright, the rejection naming the
+  page count so the user understands why (e.g. a long multi-page statement).
+
+150 dpi is the chosen ceiling because a receipt only needs to stay legible for human review and for
+OCR-assisted bookkeeping, not for print reproduction; typical phone/scanner captures arrive at
+200–300+ dpi, so downsampling to 150 dpi already recovers most of the size without a visible
+legibility loss, and JPEG quality 0.75 is the point past which further compression buys little size
+back for a text-dominated scan while starting to show artifacts. Color is kept unless the source
+page samples as gray (checked on a coarse pixel grid): most receipts are color scans/photos even
+when their content is effectively monochrome, and guessing "no color needed" wrong would discard
+information (e.g. a highlighted total, a stamp) the derivative can never recover, whereas a page
+that genuinely has no color information is safely re-encoded as 1-component gray for the size win.
+
+No original is kept (<<adr-032,ADR-032>>): the reducer's output — never the uploaded bytes — is what
+the pool checksums, deduplicates and stores. The stored version is the one chosen
+at upload and is final (<<adr-042,ADR-042>>); there is no later reduction of a pooled receipt.
+`Receipt.normalisationStage` and
+`Receipt.originalSizeBytes` record which stage (if any) produced the stored bytes.
+
+*Green IT rationale*. The budget is not only a gateway constraint. Every receipt is copied
+along the whole processing chain (sender store and backup, receiver archive and backup) and
+transferred over several hops, and each stored copy occupies hardware for the retention
+period (invoices are kept for 8 years by the operator's archive, <<adr-035,ADR-035>>). Storage therefore dominates the footprint by two to three orders of magnitude over
+transfer. The German user guide explains this to operators with figures estimated from published
+agency data (UBA, LWF, EEA) — see the German user guide, appendix "Datenvolumen und Klimawirkung
+von Belegen". Those figures are an orientation for users, not a measurement of this system.
+
+== EN 16931 Mapping
+
+The EN 16931 / ZUGFeRD business-term taxonomy (`BT-n`, plus Factur-X EXTENDED `BT-X-n`) is a
+Kotlin enum, `B2bTerm` (`kotlin-shared`), not a database-seeded catalog. Each constant carries the
+official BT number as its persisted SMALLINT code (`B2bTermConverter`, a `jakarta.persistence
+.AttributeConverter<B2bTerm, Int>`, reads via a null-safe `fromCodeOrNull` so a code with no
+matching term degrades to `null` instead of failing the whole read), its EN 16931 level (header,
+seller/buyer party, or line), its field kind (text, number, date, or enum with a value-domain code
+list), and — for the subset a `B2bProfile` can actually capture — a binding: `BOUND` to an
+existing domain property (read via reflection at rule-evaluation time) or `FREE` for a value with
+no modeled property, evidenced by an XPath into the CII export. A term with `binding = null` is a
+pure reference term: named for compliance/export purposes, but never profile-selectable beyond
+`OPTIONAL`. `B2bTerm.BT_151` (the VAT category code of a line: `S`, `AE`, `E`, `O`, …) is
+the one deliberate exception and can never be selected in a B2B profile: the VAT category is a
+tax decision that follows from the tax rule chosen for the position, and a buyer's profile
+must not be able to require or override it. The value is still exported — it is derived from
+the position's tax snapshot, not from any profile field.
+
+Per-country profile rules live in `B2bProfile`/`B2bProfileRuleSet`: a profile selects which BOUND
+or FREE terms are mandatory/conditional/optional for a given recipient, evaluated against the
+invoice being finalized. The layout itself is not part of a profile: every invoice renders from the
+one shipped
+layout, only the required fields differ per recipient.
+
+The consumer note for private customers in the crafts wording profile (`HANDWERK`) reuses the
+invoice-owned note snapshot pattern of the seller's invoice note. It is copied at creation, in the
+document language, when the profile is `HANDWERK`, the recipient type is `CONSUMER` and the switch is
+on. In draft it follows changes of recipient type and document language only while untouched, is
+editable and resettable in the invoice header, is frozen once `ISSUED`, and is copied by storno. The
+PDF prints it as a second paragraph in the note box; the XML emits it as an additional invoice note
+(BT-22) on the same path as the regular note. No further validation rule or blocking applies.
+
+A business trip (<<adr-021,ADR-021>>) exports as exactly one BG-25 line, never one per expense
+(option A of the two shapes that were considered): BT-153/BT-154 carry the trip's title and
+purpose, BG-26 its period, and the forced quantity of `1`. Switching the position to "detailed"
+adds a BT-127 line note summarizing the expenses — truncated at 1000 characters with a pointer to
+the attachment — and the trip workbook as a BG-24 attachment (`TypeCode 916`, XLSX MIME), rendered
+once at job-publish time and exchanged through Valkey rather than carried on the NATS envelope
+itself (<<_messaging_event_driven_architecture,Messaging and Event-Driven Architecture>>). Both the
+note and the attachment are supported by the Mustang/CII
+and Factur-X export paths (the Factur-X route is on standby: kept, not developed further).
+
+== PDF Reporting (Typst)
+
+.PDF Rendering Pipeline
+image::pdf-rendering-pipeline.svg[Pipeline from invoice data through the Typst renderer to the validated PDF/A-3b document,align=center,width=100%]
+
+The visible base invoice document is rendered via `BasePdfRendererPort` (`kotlin-shared`) using
+Typst (`standard-invoice.typ`, `kotlin-xpdf`), the only shipped layout engine; there is no fallback
+renderer and no `.jrxml` template in the render path (<<adr-030,ADR-030>>). Issued invoices carry
+the brand mark; drafts and cancellations carry their own marks. A missing or altered document of
+record is resolved on access without a dialog, and a re-rendered sent invoice is a tagged
+reproduction that is never dispatched (<<adr-034,ADR-034>>).
+
+[cols="1,3", options="header"]
+|===
+|Property |Typst Specification (`kotlin-xpdf`)
+|*Engine status* |*Primary (shipped standard)*
+|*Template* |`standard-invoice.typ` (resource `typst/`)
+|*Layout model* |Content-driven flow layout according to DIN 5008
+|*Execution* |Sandboxed CLI subprocess (`--root`) without network or shell access
+|*GiroCode (EPC QR)*|Vector SVG (`XPDF_PAYMENT_QR=on`, EPC069-12 v002)
+|*Determinism* |Byte-identical output (fixed creation timestamp)
+|*Packaging* |Shipped worker image default
+|===
+
+[[_page_structure_flow_layout]]
+=== Page Structure and Flow Layout
+
+.Invoice Layout Flow and Page Structure
+image::invoice-page-budget.svg[Page layout of an invoice showing header, line items, totals and footer areas,align=center,width=85%]
+
+* *Header (DIN 5008 Form B)*: Letterhead, address window, and metadata info boxes sized strictly to
+  populated rows.
+* *Line Items*: Tables paginate natively across continuation pages with repeating headers; optional
+  columns (service period, article number, VAT rate) render conditionally.
+* *Totals and Payment*: Payment block, totals, and notes flow dynamically. If space is tight, the
+  payment block moves as a cohesive unit to the continuation page.
+* *Universal Footer*: Mandated company and register details appear on every page with automatic text
+  fitting (`fit-line`).
+
+=== Quality Assurance
+
+Automated conformance checks replace visual review:
+
+* `PdfLayoutInspector` verifies type-area bounds, footer column spacing, and DIN 5008 address window
+  coordinates.
+* `TypstInvoiceParityIT` enforces pixel-tolerance parity against the reference baseline across
+  synthetic test fixtures.
+* Downstream pipeline (`BasePdfStage`, Mustang, veraPDF) validates PDF/A-3b compliance regardless of
+  the underlying adapter.
+
+== Invoice Layout Delivery
+
+The product ships exactly one invoice layout (<<adr-030,ADR-030>>): `standard-invoice.typ`, a
+classpath resource of `kotlin-xpdf`. There is no template catalogue — no database rows, no
+upload, no per-profile or per-print-time choice, no feature switch. The layout changes only with
+a release, in code; what the jar delivers is what every installation renders, and the
+application cannot edit its own jar.
+
+Consequently a job records no template fingerprint: `generation_job` carries the AI-check
+choice and the trigger type, nothing about a layout, and the worker renders the invoice exactly
+as received on the wire. A support case about a layout starts from the release version.
+
+== Invoice Lifecycle State Machine
+
+`InvoiceStateMachine` (`domain/invoice`) is the single place in the domain that knows the legal
+`Invoice` status edges; `GenerationJob` uses the same shape for its own lifecycle
+(`GenerationJobStateMachine`). Each object owns a `Map<Status, Set<Status>>` of legal edges and
+exposes `isLegal`/`assertLegal`/`isTerminal`/`successors`; every write path goes through it rather
+than re-implementing the rule.
+
+.Invoice Lifecycle — State Machine
+image::invoice-state-machine.svg[State diagram of invoice statuses DRAFT, IN_REVIEW, ISSUED, CANCELLED and VOIDED with their legal transitions]
+
+The legal edges, verified directly against `InvoiceStateMachine.kt`:
+
+[cols="2,4", options="header"]
+|===
+|From |To (legal successors)
+
+|`DRAFT`
+|`IN_REVIEW`, `VOIDED`
+
+|`IN_REVIEW`
+|`DRAFT`, `ISSUED`, `VOIDED`
+
+|`ISSUED`
+|`CANCELLED`
+
+|`CANCELLED`
+|_(terminal — no outgoing edge)_
+
+|`VOIDED`
+|_(terminal — no outgoing edge)_
+|===
+
+`CANCELLED` and `VOIDED` are terminal; `ISSUED` is not — it keeps exactly one outgoing edge, the
+storno of a sent invoice. `isReadOnly` is the narrower predicate an editing view needs ("no longer
+accepts header/item edits"): true for every terminal status plus `ISSUED`, which otherwise accepts no
+edit. Absent a storno, an invoice stays `ISSUED` permanently — the normal, read-only end of its life.
+
+A storno moves the original invoice `ISSUED → CANCELLED`, the one legal edge `ISSUED` has, and
+separately constructs a second document — a full 1:1 copy of the original — born directly in
+`CANCELLED`, without walking `DRAFT → IN_REVIEW → ISSUED`: there is nothing left to draft, review, or
+correct on an already-sent invoice. Because it never reaches a `ISSUED` edge, the storno document draws
+its own invoice number when it is created, from the same number range and journal as every other
+invoice; only then is the original moved to `CANCELLED`. This construction sits outside `InvoiceStateMachine`'s edge
+table by design, since there is no prior status to transition from. `Invoice.status` has a private
+setter (<<adr-025,ADR-025>>), so this born-terminal construction and synthetic demo/test data (the
+only two legitimate callers) go through `Invoice.withInitialStatus(status)`, a companion factory
+that is deliberately outside `InvoiceStateMachine`'s legality check for the same reason: there is
+no prior status on a brand-new instance for the edge table to apply to. `transitionTo` remains the
+only way to change the status of an invoice that already exists.
+
+.Quote Lifecycle — State Machine
+image::quote-state-machine.svg[State diagram of quote statuses DRAFT, REVIEW, SENT, ACCEPTED, REJECTED and CANCELLED with their legal transitions]
+
+`QuoteStateMachine` (`quote-core`) owns the quote edges: `DRAFT` → `REVIEW`/`CANCELLED`, `REVIEW` →
+`DRAFT`/`SENT`/`CANCELLED`, `SENT` → `ACCEPTED`/`REJECTED`. `ACCEPTED`, `REJECTED` and `CANCELLED` are
+terminal; that an invoice was created from an accepted quote is recorded on the invoice order and in
+the protocol, not as a status (<<adr-036,ADR-036>>). Both diagrams use the colours of the shared status
+chip tones, so the same meaning carries the same colour in the lists and in the diagrams.
+
+An illegal transition is a programming error, not a recoverable runtime condition: `assertLegal`
+throws, naming both statuses, and the UI never hard-codes its status-change buttons — it builds
+them from `successors(currentStatus)`, so a button for an edge that is not legal cannot exist to be
+clicked. Status is persisted as an integer ordinal code (see <<_persistence,Persistence>> below).
+
+The `IN_REVIEW → ISSUED` edge is legal in the table above, but walking it is never a direct,
+synchronous UI action: "Send" only requests a `SEND`-triggered `GenerationJob` and returns
+immediately, the invoice stays `IN_REVIEW` while that job is in flight, and
+`InvoiceLifecycleService.transition(id, ISSUED)` itself runs only once the job completes and
+validation resolves `VALID` — see <<_send_invoice,Send an Invoice>> in the Runtime View for the
+full sequence. No new `InvoiceStatus` was added for this: the in-flight state is visible via the
+job's own `GenerationJobStatus`, not an invoice-level one.
+
+== Compliance Rules and the Finalization Gate
+
+`domain/compliance` (`kotlin-invoice`) is a small rule-evaluation engine, not one monolithic
+completeness check: independent rule sets each look at an invoice, or a piece of master data, and
+report their own findings; a caller composes exactly the rule sets a situation needs.
+
+=== Rule Sets, Subjects, and Findings
+
+A `ComplianceRuleSet` declares a stable `id`, the `ComplianceLevel`s it applies to (`SELLER`,
+`BUYER`, `CATALOGUE`, `INVOICE`), and a pure, read-only `evaluate(subject)`. `ComplianceSubject` is
+a
+sealed interface, so the same mechanism checks an invoice recipient or invoice issuer as a
+standalone master record
+and, in the context of one particular invoice, its *effective* (possibly overridden) party.
+`ComplianceEvaluator` filters rule sets by the subject's level and flat-maps their findings, in
+declaration order.
+
+A `ComplianceFinding` carries a `ruleId` whose prefix names its source (`BR-*` EN 16931 itself,
+`LT-*` a house rule, `CORE.*` the application's own completeness checks, `B2B.*` a user-defined B2B
+profile rule), a `ComplianceSeverity` (`ERROR` blocks finalization; `WARNING`/`INFO` never do), a
+`messageKey` resolved to text only by the UI, and a `FindingTarget` naming where it surfaces
+(header, a line, seller, buyer, or a catalogue item/article).
+
+=== The Rule Families
+
+[cols="2,3", options="header"]
+|===
+|Rule set |Blocks finalization when
+
+|`CoreCompletenessRules`
+|A mandatory header, party, or line field is missing.
+
+|`B2bProfileRules`
+|A field a B2B profile marks mandatory/conditional has no value once its trigger applies.
+
+|`DueDateRules`
+|Never — warning only; the stricter case is already a hard save-time `ERROR`.
+
+|===
+
+=== The Finalization Gate
+
+`FinalizationGate` judges the *validation run*, not the invoice's own content: given the
+`ValidationStatus`, the resolved validation profile, and the last KoSIT findings, it returns
+`Allow`, `AllowWithWarning`, or `Block` with a reason. `FinalizationPolicy` invokes both the gate
+and the rule-set evaluation from `InvoiceLifecycleService.transition`, only on the `→ ISSUED` edge of
+the <<_invoice_lifecycle_state_machine,Invoice Lifecycle State Machine>>, after the invoice's number
+is assigned but before the status itself flips. Each axis runs behind its own three-stage rollout
+switch (`OBSERVE` logs only, `WARN` logs louder, `BLOCK` enforces), so a rule already proven safe
+can block ahead of a global stage change via an explicit allowlist.
+
+`transition(..., ISSUED)` is driven by <<_send_invoice,Send an Invoice>>'s job flow. In the normal
+path `GenerationJobResultHandler.resolveSendOutcome` calls it once a `SEND`-triggered job's
+validation resolves `VALID`, not the UI click directly; a `ValidationStatus.UNAVAILABLE` outcome
+allows one manual escalation, an `overrideReason` supplied by the Office Manager, reached from its
+own
+explicit UI action instead of the "Send" button.
+
+== Invoice Numbering and the Number Journal
+
+Assigning an invoice number is not just formatting a string: an issued number must never be reused
+and never silently skipped. Three cooperating pieces implement that: the number range
+configuration, the counter that hands out the next value, and an append-only journal that records
+every allocation.
+
+=== Number Ranges and Allocation
+
+A number range is reference data, not code: it picks which kind of record draws from it (invoice,
+invoice recipient, catalogue, invoice issuer), where the prefix comes from, how much of the date is
+embedded in the
+formatted number, the zero-padding, whether issuers share one sequence or each gets its own, and
+whether the counter resets yearly. `continuity` is what the concurrency behavior actually hangs on:
+invoice numbers are gapless, everything else only needs to be unique.
+
+A gap-tolerant allocation commits in its own, immediately-committed transaction — a gap left by a
+rolled-back save is acceptable there. A gapless allocation instead runs inside the caller's own
+transaction: a single atomic upsert on the counter row serializes concurrent allocation for the
+same key, and a rollback releases the number again rather than burning it. Because it shares the
+invoice's own transaction, the journal entry for a gapless allocation is appended in the same step,
+so a rollback reverts the counter and the journal entry together. The invoice number itself is
+allocated on the <<_invoice_lifecycle_state_machine,Invoice Lifecycle>>'s `→ ISSUED` edge, inside the
+same transaction the status change commits in; a storno document, which is created directly in
+`CANCELLED`, is numbered at creation in the same way.
+
+A yearly-resetting range's boundary is the invoice's own business date, not the wall-clock instant
+the allocation transaction commits at: allocation takes `invoice.invoiceDate`, a calendar date read
+in the business zone `Europe/Berlin`, never the UTC instant of the commit
+(<<adr-029,ADR-029>>). A `→ ISSUED` transition at 00:30 on 1 January Berlin time, while UTC still
+reads 31 December, therefore dates and numbers the invoice into the new year, as the user sees it.
+
+Quote numbers follow the same split as the ranges above, with the definition and the counter in
+different modules: the number range with the subject `QUOTE` (prefix, date part, counter width,
+reset cycle) is reference data of the invoicing module and reaches the quote module through the
+master-data replica, while the gapless counter lives in `quote.quote_number_range` per
+`(range_code, period_key)` and is drawn inside the quote module's own status-changing transaction
+("submit for review"). The invoicing module never allocates quote numbers. See <<adr-033,ADR-033>>.
+
+=== The Number Journal
+
+Only gapless ranges are journaled — a merely-unique range's gaps carry no audit weight. Each entry
+records the event, the allocated number, which entity it went to, an actor and timestamp, and a
+hash chaining it to the entry before it. The table is append-only at the database level, not only
+by convention: a database rule turns any `UPDATE`/`DELETE` against it into a no-op, regardless of
+role. Concurrent appends to the same chain are serialized by an advisory lock held for the
+transaction, not a row lock on the range.
+
+Sealing a period appends a summary entry so the chain head at that moment can be recorded outside
+the system and compared back later; sealing the same period twice is rejected rather than creating
+a second, ambiguous head. The journal's self-check verifies, per period, that every expected
+sequence number appears exactly once and that the hash chain is intact; a complementary check diffs
+the journal's allocations against the actually-sent invoices, to catch a number that reached the
+invoice table without going through allocation, or one invoice that drew two numbers.
+
+=== Independent Verification
+
+A separate program, written in Go and deliberately sharing no code with the Kotlin chain
+implementation, re-derives the same hash chain independently and re-checks a range's journal rows
+against a live database. The reasoning: a report only the audited application itself can produce is
+self-testimony; a second, independently written program reaching the same result is evidence. It is
+exercised in the test suite, which asserts it reaches the identical verdict for a clean chain, a
+tampered hash, a mismatched externally-supplied seal, and a smuggled control character. The binary
+itself remains a DevOps tool, run against a real database connection — not something CI invokes
+against production data on its own.
+
+The property all three pieces protect is narrow: once an invoice number is issued, it can be shown
+— years later, by a program that never trusted the application that wrote it — to be exactly the
+number it was.
+
+== Persistence
+
+=== Master-Data Aggregate Child Updates
+
+`SenderProfile` owns additional VAT registrations. `Article` owns customer-specific
+article numbers/designations and country tax variants. Each aggregate validates the
+complete proposed child set before modifying its managed state. The natural keys are
+country and customer identity, respectively. Existing child rows retain their database
+identity; only added keys create rows and only omitted keys remove rows. Clearing and
+reinserting a collection is prohibited because insert-before-delete ordering can violate
+the unique parent/key constraints.
+
+The shared domain function `reconcileOwnedChildren` implements this mechanism through
+composition. It snapshots and validates proposed values and prepares new children before
+mutating the owned collection. Each aggregate supplies its own key, validation, factory and
+field-update operations; the helper has no persistence or transaction dependencies.
+
+Public collection views are unmodifiable. Seller VAT changes enter through immutable
+`SellerVatRegistrationCommand` values; the aggregate validates and normalizes their content.
+Commands express intent, while the aggregate enforces uniqueness, valid values and ownership.
+The existing full-form application save remains one transaction, reloads the managed root,
+checks the submitted revision and advances its version for child-only updates. A stale form
+must fail rather than replace newer child data. Commit completes before success is returned.
+
+`AbstractCrudView` provides shared revision checks through typed hooks. Article and seller
+form DTOs retain the revision captured when the dialog opens. `Section` supplies full-width,
+border-box layout by default; individual forms control responsive field arrangement.
+
+.Sequence: Save Master-Data Aggregate and Child Reconciliation (SenderProfile)
+image::sequence-save-masterdata-aggregate.svg[Sequence diagram of saving a SenderProfile aggregate and reconciling its child registrations in one transaction]
+
+Domain regression tests protect validation-before-mutation and child identity. PostgreSQL
+E2E tests cover repeated saves, added/removed keys and stale forms. Architecture tests pin
+private persistence collections and mutation entry points. JPA remains the domain write-model
+mapping under the project's pragmatic architecture decision.
+
+=== Invoice Aggregate Encapsulation and the Command/DTO Boundary
+
+`Invoice` follows the same shape (<<adr-025,ADR-025>>): `status` has a private setter —
+`transitionTo` (state-machine-checked, see <<_invoice_lifecycle_state_machine,Invoice Lifecycle
+State Machine>> above) and the `withInitialStatus` companion factory, used by `draft` and the
+storno factory, are the only ways to set it. `items` and `partySnapshots` are private mutable
+lists exposed read-only as `itemList` and `partySnapshotList`; `documents` is typed `List`. So
+`addItem`/`removeItem`/`applyPartySnapshots` remain the only mutation path. The Kotlin
+`List`/`MutableList` split is compile-time only (both erase to `java.util.List`), so Hibernate's
+field-access hydration of these `@OneToMany` collections is unaffected; only an ordinary caller's
+ability to alias and mutate them is removed. `receipts` and `llmAnalyses` are public
+`MutableList` properties.
+
+Encapsulation covers every mapped property of the domain write model, not only `Invoice`. Each
+`var` of an `@Entity`/`@Embeddable`/`@MappedSuperclass` class has a `protected set` (open entities;
+Hibernate hydrates through field access) or a `private set` (embeddables); a column without a
+production writer is a `val`. State changes go through intent-named methods (`assignNumber`,
+`updateHeader`, `recordMailSent`, ...) that take parameter objects when several fields
+change together; creation goes through `create`/`draft` factories or constructors with mandatory
+fields. Tests build aggregates through fixture factories (`anInvoice`, `anInvoiceItem`, ...), and
+only a reflective persistence emulation hydrates state that has no write path. `receipts`,
+`llmAnalyses`, `LocalizedTextGroup.entries` and `B2bProfile.fields`/`countries` are still exposed as
+mutable collections.
+
+The UI depends on no entity or embeddable. It reads DTO read models through narrow query ports and
+changes state through use-case ports, so a service result never carries an entity into `..ui..`.
+Architecture tests keep this in place: `EntitySetterArchitectureTest` (no public `set*` method
+on a mapped domain class, no call to such a setter from outside `..domain..`) and
+`UiEntityBoundaryArchitectureTest` (no `..ui..` class depends on a mapped class, directly or through
+a service result). `InputPortArchitectureTest` rejects composite input ports.
+
+The write boundary itself is checked, not only documented: `de.littletrotter.application.command`
+defines three marker interfaces — `Command`, `CommandResult`, `CommandEntryPoint` — because
+commands share their package with plain application services, so a class-name suffix alone cannot
+tell a rule which types the six architecture rules below apply to.
+
+[cols="1,4", options="header"]
+|===
+|Rule |What it checks
+
+|Command purity
+|A `Command`/`CommandResult` type never depends on a JPA entity, `EntityManager`, Hibernate/Panache,
+a CDI-managed service, Vaadin, or an infrastructure adapter.
+
+|No entity leak
+|No method on a `CommandEntryPoint` interface leaks an entity through a parameter, return type, or
+nested generic collection (e.g. `List<Entity>`).
+
+|No direct UI mutation
+|No `..ui..` class calls a mutating `Invoice` domain method directly (`addItem`, `transitionTo`,
+`applyPartySnapshots`, ...); construction and repository/persistence-API bans are covered
+separately by `ArchitectureRulesTest`/`UiLayerBoundaryTest`.
+
+|Immutable commands
+|A `Command` is an immutable data carrier: no public setter, never annotated `@Transactional`.
+
+|Domain independent of commands
+|Nothing in `..domain..` depends on a `Command`/`CommandResult` type — commands translate into
+domain operations, never the reverse.
+
+|Entry points in the application layer
+|A `CommandEntryPoint` implementation lives in the application layer; a `Command`/`CommandResult`
+never carries the transaction boundary itself.
+|===
+
+Each rule is proven twice in `CommandBoundaryArchitectureTest`: once against production code (must
+pass) and once against a small, deliberately violating test-only specimen (must fail) — a rule
+that only ever passes on the code that already existed is not evidence it would catch a real
+regression. The no-entity-leak check covers the invoice read entry point
+`InvoiceDetailQueryPort.findLlmAnalyses`:
+it returns the `ModelReport` projection (in `application.dto`), mapped once at the read boundary,
+never the `InvoiceLlmAnalysis` entity
+(<<adr-025,ADR-025>>).
+
+=== Why JPA
+
+JPA (Hibernate ORM with Panache, under Quarkus) is the persistence approach here because Quarkus
+treats it as first-class — dev services, Panache repositories, and declarative transaction handling
+come from the same integration — and because it lets the domain model
+(<<_domain_model,Domain Model>>, Chapter 5) be written once, as JPA entities, rather than kept as a
+separate persistence model alongside a domain model. The JPA annotations in the domain write model
+are a pragmatic compromise: the aggregates keep their invariants and mutation methods, while read
+models and projections live in `infrastructure` and the UI sees only DTOs. JPA is deliberately *not* asked to own the
+schema: `quarkus.hibernate-orm.schema-management.strategy=none` in every profile, so Flyway's
+baseline migrations are the single source of truth for DDL (<<adr-011,ADR-011>>,
+<<adr-017,ADR-017>>)
+— nor to cascade a write across aggregate boundaries
+(<<_aggregates_at_a_glance,Aggregates at a glance>>, Chapter 5): each aggregate persists through its
+own root, never implicitly through another's. Query-level JPA access patterns (pagination, fetch
+joins, `LIKE` escaping) are hardened per <<adr-006,ADR-006>> rather than described again here.
+
+=== Enum Columns
+
+JPA entities follow one converter convention throughout: every enum-typed column is persisted as
+an integer code, never as a string or a raw ordinal exposed without a range check, where
+declaration order and business meaning could drift apart. Two column styles coexist by design:
+`INTEGER` columns with a `CHECK (value BETWEEN 0 AND max)` constraint (`invoice.status`,
+`validation_status`, `currency`, `generation_job.status`, and others), so appending a new enum
+constant never requires a schema change, and `SMALLINT` columns (e.g. `system_message.severity`,
+`recipient.vat_id_verification_status`). Either way, most enums use the generic
+`OrdinalEnumConverter<E>`
+base class (`domain/shared/converters`, `domain/reference/converters`) with the enum's ordinal as
+the code; `B2bTermConverter` is the one exception, converting by an explicit numeric code
+(`B2bTerm.code`) because its declaration order does not match its BT numbering. `InvoiceStatus`
+uses `InvoiceStatusConverter`, an `OrdinalEnumConverter` instance over the `INTEGER`-with-
+range-check style — see <<_invoice_lifecycle_state_machine,Invoice Lifecycle State Machine>>
+above for its specific edge table and ordinal mapping.
+
+=== Flyway Baseline
+
+Schema and seed data are managed by an editable Flyway baseline: `V1__baseline_schema.sql` (DDL)
+and `V2__baseline_seed.sql` (seed data) under `kotlin-invoice/src/main/resources/db/migration/ddl`
+and `.../seed`. The mail component keeps its own baseline in `kotlin-email` under the same rule;
+which baseline runs when is described in the
+<<_database_baselines_what_runs_when,Deployment View>>.
+
+While no live instance exists yet, these two files are edited in place rather than accumulating
+`V3`, `V4`, ... migrations for every schema change — a deliberate greenfield decision that trades
+migration history for a single, always-current baseline. The directory hygiene test enforces
+exactly these two files, and fresh isolated PostgreSQL checks verify schema and reference data.
+The approach ends the moment a real deployment's data must survive an upgrade.
+
+=== Time and Timezone Handling across Database, Streams, and Object Storage
+
+As a foundational design principle, all technical systems record and exchange points in time
+strictly in UTC:
+* *Database*: The database never reads its own clock (<<adr-029,ADR-029>>). No column has a
+  `DEFAULT NOW()` or `CURRENT_DATE`; the application writes every date and timestamp from its
+  `TimeSource`, in UTC (`TIMESTAMPTZ`, Hibernate property `quarkus.hibernate-orm.jdbc.timezone=UTC`).
+  Where the database must stamp a moment itself — the invoice audit trigger's `occurred_at` — it reads
+  the session setting `app.now`, which `AppNowConnectionInterceptor` sets on every connection taken
+  from the pool, and rejects the write when the setting is missing. Writers outside the application
+  (admin scripts, the `datagen` loader) set `app.now` themselves. A test that fixes the `TimeSource`
+  therefore fixes the journal's timestamps as well.
+* *Messaging and Event Streams*: All message envelopes, event payloads, and timestamps published to
+  NATS JetStream (e.g. `GenerationJob`, `document-job-results`) convey instants strictly in UTC
+  (<<adr-008,ADR-008>>, <<adr-020,ADR-020>>).
+* *Object Storage (RustFS)*: Object metadata, timestamps, and S3-compatible attributes stored in
+  RustFS adhere strictly to standard UTC (<<adr-007,ADR-007>>).
+
+On top of this uniform UTC foundation, users interact with the system in their local time,
+respecting standard daylight saving transitions (DST, winter/summer time). The system default is
+German local time (`Europe/Berlin`, via `GermanTime.ZONE`, <<adr-005,ADR-005>>, <<adr-029,ADR-029>>).
+A stored UTC moment becomes a business day strictly through `GermanTime.dayOf(...)` (`kotlin-shared`),
+never via `OffsetDateTime.toLocalDate()` on a UTC value or process-level `ZoneId.systemDefault()`.
+This prevents critical boundary distortions across midnight: between 00:00 and 01:00 (winter time)
+or 02:00 (summer time), UTC still reflects the previous calendar day. Architectural gates in ArchUnit
+(`TimeRules.businessDay`) enforce that production code never bypasses `GermanTime.dayOf` when deriving
+calendar days from stored moments.
+
+Persisting in UTC while decoupling the user's localized presentation also provides the architecture
+with the direct capability to support multi-timezone operations across geographically distributed
+branch offices (Niederlassungen) for mid-sized enterprises (Mittelstand).
+
+=== Concurrent Editing
+
+Concurrency control across independent user sessions is strictly optimistic, using one JPA
+`@Version` per aggregate root, and no lock is held across user think time (<<adr-028,ADR-028>>). The
+decision record also holds the rationale and rejected alternatives. This mechanism is distinct from
+<<_locking,Locking>>, which serializes concurrent transactions within a single request.
+
+==== Core Mechanism: First Committed Writer Wins
+
+Editing contexts (dialogs, forms, grids) capture the aggregate version at read time and submit it as
+`expectedVersion` in mutation commands (e.g. `UpdateInvoiceHeaderCommand`, `InvoiceItemCommand`,
+`TripCommand`). The application layer enforces consistency before mutations occur:
+
+. *Pre-mutation Version Verification*: The current managed aggregate is loaded. If
+  `expectedVersion != aggregate.version`, the operation is aborted immediately without modifying
+  state.
+. *Conflict Handling*: Version mismatches throw `jakarta.persistence.OptimisticLockException`,
+  mapped by UI layers (`UiNotifications`) to a dedicated conflict notification. User input is
+  preserved in the view for manual reconciliation. An update racing a *successful* delete of the
+  same row affects zero rows, which Hibernate reports as the same `OptimisticLockException`;
+  `ArticleManagementService.save` and `CustomerManagementService.save` therefore flush inside their
+  own try/catch and re-check existence on a caught conflict, reporting the readable "wurde
+  inzwischen gelöscht" rejection instead of the ambiguous exception.
+. *Concurrent Deletions*: Mutations on rows deleted concurrently abort with a domain not-found
+  exception, never re-inserting the row; stale deletes are rejected like stale updates.
+. *Foreign-Key Concurrency*: Deletions of referenced master data (e.g. `Recipient`, `Article`)
+  racing in-flight invoice writes are resolved via explicit repository flush and translated into
+  actionable domain errors rather than raw database constraint violations:
+  `PanacheInvoiceRepository.save` flushes immediately and maps the named violations
+  (`invoice_recipient_id_fkey`, `invoice_sender_profile_id_fkey`, `invoice_item_article_id_fkey`) to
+  a readable `InvalidParameterException`, and the master-data repositories' `delete` does the same
+  in the opposite direction.
+
+==== Aggregate-Wide Version Increment (`OPTIMISTIC_FORCE_INCREMENT`)
+
+Child collections such as `Invoice.items` and `Invoice.trips` are `mappedBy` collections whose
+children own the foreign key, so a child-only edit does not dirty the `Invoice` root. Every item and
+trip mutation (`InvoiceItemMutationService`, `TripService`) therefore calls
+`InvoiceRepository.forceVersionIncrement(invoice)`
+(`em.lock(invoice, LockModeType.OPTIMISTIC_FORCE_INCREMENT)`), which forces
+`UPDATE ... SET version = version + 1 WHERE id = ? AND version = ?` on commit. The whole aggregate
+shares one authoritative version (<<adr-028,ADR-028>>).
+
+==== Per-Entity Concurrency Matrix
+
+[cols="2,2,3,3", options="header"]
+|===
+|Entity |Version Anchor |Update Conflict Strategy |Delete Conflict Strategy
+
+|`Invoice` (Header)
+|`Invoice.version`
+|Pre-check vs. `expectedVersion`; throws `OptimisticLockException`. Non-`DRAFT` writes reject via `InvoiceImmutableException`.
+|Hard deletes prevented by domain invariants (only voiding permitted).
+
+|`InvoiceItem`, `TripExpense`
+|Owning `Invoice.version`
+|Pre-check vs. `Invoice.version`. Unconditional `OPTIMISTIC_FORCE_INCREMENT` on parent invoice.
+|Requires matching `expectedVersion`. Concurrent delete surfaces as `InvoicePositionNotFoundException`.
+
+|`Recipient`, `Article`
+|`Recipient.version`, `Article.version`
+|Pre-check vs. `expectedVersion`. Distinguishes concurrent delete (not found) from true version mismatch.
+|Rejects delete if row version is stale. Cascading in-flight references protected by FK exception mapping.
+
+|Reference Catalogues
+|Row `@Version`
+|Checked via `CatalogueWrites.rowFor(id, expectedVersion)`. A `null` version bypasses check for seed/batch jobs.
+|Same as update strategy.
+|===
+
+==== Verification Model
+
+The concurrency contract is validated across four automated tiers:
+
+* *Unit and Component*: Isolated domain/service tests and Karibu UI mock tests.
+* *Foreign Key and Race Integration*: Real PostgreSQL ITs (`InvoiceForeignKeyRaceIT`) validating FK
+  conflict translations.
+* *High-Concurrency Invariants*: Multi-threaded stress test (`ConcurrentCrudStressE2EIT`), verifying
+  zero deadlocks (`pg_stat_database`), deterministic version progression (no lost updates), and
+  recovery semantics.
+* *End-to-End User Simulation*: Browser-level Playwright specs (`two-user-conflicts.spec.ts`)
+  validating UI input preservation upon conflict.
+
+=== Locking
+
+A transaction that must hold both a shared advisory lock and one or more row locks acquires the
+advisory lock *first* — the lock-first ordering rule — before touching any row the advisory lock
+is meant to protect. A row lock taken before the advisory lock, followed later in the same
+transaction by a wait on that advisory lock, lets two concurrent transactions each hold what the
+other one waits for (a classic AB-BA cycle); acquiring the advisory lock first removes the cycle
+by construction, since the first lock every such transaction takes is always the same one, so no
+interleaving of concurrent transactions can produce two of them each holding what the other
+waits for.
+
+Two writers apply the rule:
+
+* The invoice audit journal serializes every append behind one global advisory lock,
+  `pg_advisory_xact_lock(1308)`. `AuditGucInterceptor` acquires it right after setting the audit
+  GUCs, before the intercepted method body writes anything — the same point
+  `PostgresNumberJournalRepository.lockChain` already takes its own per-range lock (`1304`) for
+  the number journal (<<_the_number_journal,The Number Journal>> above). The capture trigger,
+  `capture_invoice_audit_event()`, re-acquires the same lock as a safety net for a write that
+  reaches these tables outside the application; re-acquiring a lock the transaction already
+  holds is free.
+* The generation-job stale-delegated reset's write step
+  (`PanacheGenerationJobRepository.resetStaleDelegatedByIds`) re-selects the ids its own read step
+  already decided on, `ORDER BY j.id` with a `PESSIMISTIC_WRITE` lock and a lock-timeout hint
+  Hibernate maps to Postgres' `FOR UPDATE SKIP LOCKED`, then updates one row per statement — one
+  fixed, ascending order instead of the arrival order of concurrent callers, and no bulk statement
+  that would keep every row lock it has already taken while it waits for the next one — so a
+  concurrent transaction holding one `generation_job` row is skipped rather than raced against in
+  the opposite order. The read step that decides *which* ids to reset
+  (`StaleDelegatedResetCoordinator`, see <<_messaging_event_driven_architecture,Messaging and
+Event-Driven Architecture>> below) runs before this lock is
+  ever taken and involves a NATS round trip — deliberately never inside the lock-holding
+  transaction, so a slow or unreachable broker can never turn into a Postgres lock-wait pile-up on
+  `generation_job`.
+
+=== The Excel Export's Read Side: A Dedicated Projection, Not the Aggregate
+
+<<_excel_export,The Excel export>> (Chapter 5) reads through `InvoiceExportReadRepository`, a
+JPA Criteria-API query returning scalar tuples (`Array<Any?>`, decoded column-by-index into row
+DTOs), rather than loading `Invoice` JPA entities the way every other read path in this
+application does. That is a deliberate exception, not an oversight, forced by three traps a plain
+`findAll`/entity-graph read would walk straight into for this one use case:
+
+* *`Invoice.references` is a write-triggering accessor.* Reading it outside a transaction that
+  is prepared to persist the result marks the entity dirty on first touch (a lazy-initialization
+  side effect elsewhere in the domain model, not a bug specific to export) — and an export over a
+  filtered set of possibly thousands of invoices is exactly the kind of read that must never
+  accidentally schedule thousands of writes.
+* *`InvoiceNumberConverter` throws on a malformed stored value.* An entity-based read decodes
+  every converter-backed column as part of materializing the entity; one invoice with unparseable
+  legacy number data would abort the whole export instead of just that row's number column. A
+  scalar projection defers decoding to the row mapper, which degrades one field, not the export.
+* *Loading full aggregates for a read that only ever renders a fixed set of columns is needless
+  N+1 risk* — the projection selects exactly the columns each sheet needs, across a `LEFT JOIN`
+  where a value is optional (e.g. `articleRef`'s article number, the invoice's own
+`invoice.currency`), and
+  nothing else.
+
+The cost of this choice is that adding a new exported column means adding a `Criteria` selection,
+an `Idx` constant, and a row-mapper decode step in three places kept deliberately parallel (see
+`InvoicePositionRowMapper`'s own column-index KDoc table) rather than simply reading a new getter
+off an already-loaded entity — a small, explicit tax paid once per column, in exchange for an
+export that cannot dirty an invoice or abort on one bad row.
+
+=== Caching (Valkey)
+
+.Caching Layers
+image::caching-layers.svg[Diagram of the Valkey cache layers: payload exchange, receipt checksums and application read caches]
+
+Valkey is the *one* cache in this system, used for three distinct things: the text-payload
+exchange behind NATS envelopes (KoSIT reports and trip workbooks — see
+<<_messaging_event_driven_architecture,Messaging and Event-Driven Architecture>>
+below), the receipt-checksum fast path ahead of the database's own unique constraint (see
+<<_upload_receipt,Upload Receipt>> in the Runtime View for why that constraint, not the cache, is
+the actual duplicate-prevention guarantee), and a handful of application-level read caches
+(`ValkeyInvoiceCacheClient`: rendered PDF bytes, job-status lookups, and invoice-overview query
+results — all TTL'd, all degrading to a plain cache miss rather than an error on a Valkey
+outage). The overview pages live in Valkey database 2 under the key prefix `overview:` with a TTL of
+30 s; eviction scans that prefix (`SCAN`/`DEL`) and never flushes the database. The evictor observes
+only the event types that change an overview column and skips an eviction that follows another
+within a 2-s debounce window. Reference lists (tax rates, per-diem rates) use the separate prefix
+`ref:` and are untouched by overview eviction. The one rule that holds across all three, stated once here because it applies system-
+wide: audit-relevant dispatch never depends on this cache — see
+<<_audit_relevant_dispatch_may_not_depend_on_a_cache,Audit-Relevant Dispatch May Not Depend on a
+Cache>> under Messaging.
+
+[[_messaging_event_driven_architecture]]
+== Messaging and Event-Driven Architecture
+
+.Event-Driven Core
+image::event-driven-messaging.svg[Diagram of job and result messages flowing between kotlin-invoice and kotlin-xpdf over NATS JetStream]
+
+An *event* in this architecture is a lightweight reference envelope published on NATS JetStream
+(`document-jobs`, `document-job-results`) — never raw document bytes (<<adr-008,ADR-008>>). Heavy
+binary artifacts reside in RustFS (S3), while transient text payloads live in Valkey.
+
+Domain events inside the application are published after commit through
+`DomainEventDispatcher.publishAfterCommit`; without an active transaction the event is published
+immediately. Three synchronous `fire` calls remain, each consumed by an
+`@Observes(during = AFTER_SUCCESS)` observer: `GenerationJobCreated`, `CreditNoteIssued` and
+`MessageRecorded`. An ArchUnit rule forbids any other `fire`/`fireAsync` in the application layer.
+
+Transaction rules are enforced by ArchUnit: `TransactionRules` in `kotlin-architecture-rules` checks
+transaction placement, I/O inside transactions, events inside transactions, nested transactions and
+blocking calls. The gates in invoice, quote and email carry shrink-only baselines.
+
+[[_event_backbone_nats_jetstream_enterprise_evolution_nats_vs_kafka]]
+=== Event Backbone: NATS JetStream
+
+The messaging tier uses *NATS JetStream* as its durable event backbone (<<adr-020,ADR-020>>): a
+lightweight Go broker delivering persistence, at-least-once guarantees, and consumer groups on
+low-power hardware. The Green IT rationale (<<_green_it_principles,Green IT Principles>>) adds a
+<128 MiB broker footprint, sub-100 ms startup, negligible idle draw, and power-off tolerance via
+PostgreSQL recovery, which makes a durable event-driven architecture viable on a mini PC that could
+not sustain a JVM-cluster broker. The broker is isolated in `infrastructure.messaging` behind
+domain command and result ports; replacing it with another broker is an adapter change
+(<<adr-020,ADR-020>>).
+
+[[_workers_recovery_mechanics]]
+=== Workers and Recovery Mechanics
+
+.Worker Recovery Layers
+image::worker-recovery-mechanics.svg[Diagram of the layered recovery mechanisms of the document generation worker]
+
+The generation pipeline is asynchronous: `kotlin-invoice` publishes a `GenerationJob` onto NATS
+JetStream (`DocumentJobPublisher`, `GenerationJobNatsAdapter`), `kotlin-xpdf` consumes it,
+renders, validates, and publishes a result back on the `document-job-results` subject
+(`ResultPublisher` / `GenerationJobResultConsumer`). The envelope principle keeps NATS messages
+small: only a typed reference structure (`GenerationJobResultRefs` in `kotlin-shared` — object
+keys, a download URL, LLM-callback fields) travels over NATS. Text payloads (KoSIT validation
+reports) are exchanged via Valkey behind a `PayloadExchange` port, keyed by a reference the
+envelope carries; PDFs and other binary artifacts live in RustFS (S3-compatible object storage),
+referenced the same way. A missing/expired Valkey entry degrades to a logged warning and a `null`
+report, never a processing failure.
+
+[[_dispatch_fast_path_safety_nets]]
+==== Dispatch Fast Path and Safety Nets
+
+Document generation uses a reactive primary path complemented by multi-tiered recovery mechanisms to
+balance near-instantaneous execution with crash-resilient guarantees.
+
+===== Fast Path (Event-Driven Primary Flow)
+
+. *Job Creation and Enqueueing*: A `GenerationJob` is persisted to PostgreSQL in status `PENDING`
+  within the primary business transaction.
+. *Post-Commit Dispatch*: Immediately following successful database commit, a post-commit flush
+  publishes a dispatch message to the JetStream stream `document-jobs` (bulk lane) or `document-jobs-interactive` (interactive lane), chosen from the lane stored on the job.
+. *Execution*: `kotlin-xpdf` acts as the dedicated stream consumer (`JobConsumer`), retrieving work
+  directly via event streaming without polling delay.
+
+===== Safety Nets (Durable Recovery Paths)
+
+To protect against process crashes, uncommitted stream publishes, or network partitions, background
+safety nets ensure self-healing:
+
+* *Startup Recovery & Bulkhead Rescue*: `FastPathExecutor` triggers an asynchronous sweep upon worker initialization,
+  enqueuing uncompleted `PENDING` jobs created before restart. If in-place backoff (~6 s) exhausts the
+  dispatch bulkhead while the broker is still warming up, `GenerationJobProcessor` schedules one
+  coalesced, non-re-arming `pollPendingJobs` rescue pass after 15 s (`rescueDelayMs`) so jobs do not
+  wait for the hourly sweep.
+* *Periodic Fallback Sweep*: `GenerationJobProcessor` runs a low-frequency background scan
+  (`invoice.jobs.recovery-interval`, default 1 h) guarded against concurrent overlapping execution.
+  This serves strictly as an emergency catch-up path for lost event notifications.
+* *Stale Job Re-delegation*: A dedicated probe evaluates jobs remaining in `DELEGATED` status beyond
+  `staleCutoffMinutes` (default 2 min) against the broker's stream cursor before re-dispatching (see
+  <<_stale_delegated_probe,Stale-DELEGATED Probe>>).
+* *Exhaustion and Dead-Lettering*: Jobs exceeding retry budgets and broker ack leases are routed to
+  `LITTLE_TROTTER_DLQ` for diagnostic quarantine.
+
+===== Architectural Trade-Offs
+
+[cols="1,3", options="header"]
+|===
+|Dimension |Assessment
+
+|*Latency and Efficiency*
+|Sub-second rendering turnaround under normal operation. Minimizes database I/O by replacing continuous polling with event notifications.
+
+|*Delivery Semantics*
+|JetStream provides at-least-once delivery. Consumers and downstream result processors must enforce strict idempotency and durable claim semantics.
+
+|*Operational Complexity*
+|System recovery relies on coordinated states between transactional storage (PostgreSQL) and the message broker (JetStream), requiring deep diagnostic observability across both layers.
+|===
+
+==== Stale-DELEGATED Probe
+
+A `DELEGATED` `GenerationJob` is re-published (on the subject of its stored lane) only when its `document-jobs` or `document-jobs-interactive` message no longer
+exists in the stream — never merely because a database timestamp looks old. `GenerationJob` carries
+`delegatedAt`/`delegatedStreamSeq` (the JetStream sequence its own publish landed at, from the
+`PublishAck`), stamped in the same write as its `PENDING → DELEGATED` transition. Once a row is
+older than `staleCutoffMinutes` (default 2 min) it becomes a *candidate*, not an automatic
+reset.
+
+`StaleDelegatedResetCoordinator` asks the broker through `DelegatedMessageProbe`:
+
+[cols="1,2", options="header"]
+|===
+|Probe finding |Action
+|Candidate's sequence past the stream's last sequence
+|Stream was purged and recreated → *reset* (outright).
+|Still ahead of the worker consumer's delivered cursor
+|Never even handed out yet (queued backlog or worker down) → *leave* alone.
+|Delivered and the broker still has the message
+|In flight or awaiting redelivery under `JobConsumer`'s JetStream lease → *leave* alone.
+|Delivered and the broker reports it gone
+|Acked, purged, broker data lost, no result ever recorded → *reset*, incrementing `attempts`.
+|No sequence was ever recorded
+|The publish ack never arrived → *reset* (same path).
+|===
+
+A worker being down can therefore never burn a job's attempt budget on its own — an undelivered
+message is never a reset candidate in the first place. A broker failure while deciding aborts that
+whole tick's reset without touching any row, logged once at WARN, retried on the next tick.
+
+One `GenerationJob` purpose reads this same result delivery as more than a status update:
+`GenerationJobResultConsumer` calls `GenerationJobResultHandler.resolveSendOutcome` as a plain,
+synchronous, sequential continuation right after `markCompleted`/`markFailed`, for any job whose
+`trigger` is `SEND` — see <<_send_invoice,Send an Invoice>> in the Runtime View. This is
+deliberately *not* another observer on the `DocumentGenerated` event above: those observers are
+independent and unordered by design (so one reaction's failure never rolls back a sibling's), which
+is exactly wrong for a step that must run only after the validation-status resolution has already
+happened. `resolveSendOutcome` instead re-derives the outcome directly from the job's own
+already-persisted KoSIT report and, only on `VALID`, calls `InvoiceLifecycleService.transition`.
+Nothing here polls: the worker's result message is already the trigger, matching
+<<_green_it_principles,Green IT Principles>> — no new `@Scheduled` bean exists for this feature.
+
+A late-but-genuine result for a job whose own stale-DELEGATED reset already
+raced it back to `PENDING` is reclaimed through the state machine's existing
+`PENDING → DELEGATED → COMPLETED|FAILED` edges rather than rejected — a defense-in-depth safety
+net for that residual race, not a loosening of the state machine's edge table.
+
+[[_lease_retry_dead_letter]]
+==== Lease, Retry, and Dead-Letter
+
+`kotlin-xpdf`'s `JobConsumer` holds each message under a JetStream lease (`ackWaitSeconds`,
+default 120 s) for as long as this JVM is actually holding it — queued behind other work or
+rendering — renewed by a periodic in-progress heartbeat scheduled at hand-off to the worker's
+bounded thread pool, not only once rendering starts, so a burst that queues more jobs than the
+pool can immediately start never lets a merely-queued job's lease lapse. `max_deliver` on that
+lease is unbounded by design (JetStream, not this consumer, owns ordinary redelivery); a message
+whose own delivery count exceeds the worker's configured retry budget is instead treated as
+poison and routed to `document-jobs-dlq` with a `FAILED` result, the same path an unparseable
+payload takes — the bound against a message that can never durably have its result published
+looping forever.
+
+Idempotency and retry are implemented, not just intended: `GenerationJobResultConsumer.consume`
+re-delivers into the same retry loop with exponential backoff (three attempts, doubling from
+100 ms), clearing the JPA persistence context before every attempt so a poisoned first-level
+cache entry from a failed flush cannot make every retry fail identically. A result for a job
+already in a terminal state (`COMPLETED`/`FAILED`) is logged and dropped rather than reapplied,
+so a re-delivered or duplicate message cannot double-write findings. Unrecoverable processing
+failures (malformed payload, message handler exception) are routed to a dead-letter subject
+(`document-job-results-dlq`) instead of retried forever; if the DLQ publish itself fails, the
+message is `nak()`-ed for JetStream redelivery rather than dropped.
+
+==== Maintenance Wake-Ups
+
+The maintenance queue follows ADR-024: PostgreSQL is authoritative, while a committed request emits
+a non-durable Core NATS hint on `maintenance.v1.<instance>.requested`. The worker validates the
+hint and schedules a serialized drain; the maintenance recovery scan (`invoice.maintenance.recovery-interval`, default 5 min) remains the safety net. Each
+short transaction uses a per-invoice claim-token fence. An interrupted `RUNNING` maintenance claim
+becomes `UNKNOWN` and requires manual requeue; it is never auto-replayed. A failed or unknown
+recalculation blocks dependent generation until a later successful recalculation. The drain keeps
+recalculation ahead of issued-document generation.
+
+The two daily tasks (`ChainVerificationScheduler`, `SystemMessageRetentionScheduler`) fire on a
+plain `@Scheduled(every = "24h")` in-JVM timer, but each checks the most recent
+`DatabaseMaintenanceEvent` of its own type before doing any work (one interval for the whole
+maintenance cycle): a `null` last-run
+event (fresh deployment) is due immediately, an event less than 24 h old is skipped, and an event
+24 h or older is due again. A restart shortly after a real run does not re-run within minutes,
+and a restart after the interval has already elapsed still catches up rather than silently waiting
+for the next in-JVM tick. No energy or consumption measurement is part of this mechanism; no
+consumption savings are claimed.
+
+The pattern repeats above the job pipeline: every open invoice list, print-job list, and detail
+view currently polls every two to five seconds regardless of whether a job is in flight
+(`LIVE_UPDATE_POLL_INTERVAL_MS`/`DETAIL_POLL_INTERVAL_MS`),
+which a planned change narrows to "only while a job is pending".
+
+=== Mail Dispatch: A Second Producer, the Same Envelope Principle
+
+The optional mail dispatch component (see <<_building_block_view,Building Block View>>) joins this
+picture without changing its rules. It owns its two streams and creates them itself: the invoicing
+stack's stream setup does not know them, so an instance without the component never creates them.
+`mail.send.requested` stays *private* to the component — the internal dispatch queue between its
+own API and its own SMTP consumer, which the invoicing application must never publish to. The only
+subject that crosses the context boundary is `mail.send.result`, and it crosses in one direction:
+component to application, fire-and-forget, surviving an application restart, with no callback
+coupling in the opposite direction. The consumer for it is registered only while the feature is
+enabled, so a mail-less instance has neither a stream nor a consumer waiting for one.
+
+The envelope principle of <<adr-008,ADR-008>> is unchanged and, in fact, is the
+reason the *compose* handover is deliberately a REST call rather than a message: an
+interactive request whose answer a user is waiting for would otherwise have to park its payload in
+Valkey just to satisfy the envelope rule — adding a cache dependency to the interactive path.
+The rule the project keeps is therefore stated as a boundary, not as a transport preference:
+messaging carries everything that must survive; the one synchronous call carries the one thing a
+human is waiting for, and it creates no durable state that matters (a lost draft means the user
+clicks the button again).
+
+=== Archive Handover: Status, Retry, Administrator Notice
+
+The handover of a dispatched mail to the operator's archive (<<adr-037,ADR-037>>) is a second
+durable step after sending and never part of the send itself.
+
+* *Status*: per journal entry `MailArchiveHandoverStatus`: `NOT_CONFIGURED` (no archive
+  address), `DISABLED` (switch of the document family off), `PENDING`, `HANDED_OVER` (archive
+  server answered SMTP 250) and `FAILED` (with error text and time). The axis is independent
+  of the status of the signed archive package.
+* *Trigger and durability*: the outbox handler for `MailSent` sends the byte-identical message
+  to the archive address as an envelope recipient only; the result is committed to PostgreSQL
+  before success is reported, so a crash between sending and handover leaves a retryable
+  `PENDING` entry instead of a lost copy.
+* *Retry*: `FAILED` entries are retried automatically with a limited number of attempts and
+  backoff, in the pattern of the send sweeper; a manual retry is available on the journal
+  endpoint.
+* *No lock*: a failed handover never blocks or reverts the customer dispatch.
+* *Administrator notice*: a failure and a missing archive address produce a notice in the
+  message center for administrators; the missing address stays visible until it is configured.
+* *Configuration*: archive address and the two switches (invoice, quote) belong to the mail
+  component and are changeable by administrators only. The invoicing UI shows the status as a
+  symbol in the mail journal and the dispatch log.
+
+=== Audit-Relevant Dispatch May Not Depend on a Cache
+
+A sent mail leaves the building and is evidence for the tax office, which makes one question
+architectural rather than an implementation detail of one service: *which store may a dispatch in
+flight depend on?* The answer the mail dispatch concept establishes, and which this documentation
+records as the system-level rule:
+
+[quote]
+____
+Nothing that can leave the building may depend on a cache. Valkey holds pre-decision state only —
+the compose draft. From the moment the user presses send, PostgreSQL and object storage hold
+everything the dispatch needs.
+____
+
+Concretely: the journal row and the authored content are written durably *before* any dispatch
+envelope is published, the consumer reconstructs the whole send from those two sources, and what
+is read back is verified against the checksums recorded at authoring time before a message is
+built — a mismatch aborts with a recorded failure instead of sending. The failure mode this buys
+is the mild one: a cache outage degrades to "no new mail can be composed" instead of "queued mails
+fail", and it removes the class of defect where a truncated cache entry decodes into a
+valid-looking order and a real invoice recipient receives an empty mail, or an invoice mail without
+its
+attachment, recorded as successfully sent. This differs on purpose from the generation path above,
+where a missing Valkey payload is a documented degrade to a `null` validation report: a validation
+report that does not arrive stays inside the system, a mail that does not arrive correctly does
+not.
+
+== Input Ports
+
+The UI and the inbound adapters reach the application layer only through *input ports*: role
+interfaces cut per use case (<<adr-027,ADR-027>>). There are no composite interfaces that bundle
+several roles and no `*Facade` types; each caller injects exactly the ports it uses.
+
+[cols="1,3", options="header"]
+|===
+|Convention |Rule
+
+|Package
+|`de.littletrotter.application.<context>.port.inbound` — e.g. `application.invoice`,
+`application.masterdata`, `application.reference` (`inbound`, because `in` is a Kotlin keyword).
+
+|Reads
+|`*QueryPort` (`InvoiceListQueryPort`, `InvoiceDetailQueryPort`, `RecipientQueryPort`,
+`TaxRateQueryPort`, ...). Never a `CommandEntryPoint`.
+
+|Writes
+|`*UseCase` (`CreateInvoiceUseCase`, `EditInvoiceHeaderUseCase`, `ChangeInvoiceStatusUseCase`,
+`ManageRecipientUseCase`, `ManageTaxRateUseCase`, ...). Always a `CommandEntryPoint`, so the
+command/DTO rules above apply to every write port.
+
+|Reference data
+|One `<Catalogue>QueryPort` and one `Manage<Catalogue>UseCase` per catalogue; read-only catalogues
+(languages) have only the query port.
+
+|Implementation
+|One application-layer class per port, named after the use case (`InvoiceListQueries`,
+`EditInvoiceHeader`, `TaxRateQueries`, `ManageTaxRate`); write authorization
+(`@RequiresPermission`) sits on the use-case implementation.
+
+|Size
+|At most 12 methods per port (overloads count individually), guideline ≤ 8; cut by caller
+cluster, not by single method.
+
+|Composition
+|No input port extends another; no interface combines two or more of the application's own
+interfaces.
+
+|Signatures
+|DTOs and value types only; entities never cross a port.
+|===
+
+A view that needs many ports is split into injected sub-components rather than handed a parameter
+object: `InvoiceDetailView` composes `InvoiceCockpitHero`, `InvoiceDetailTabs` and
+`InvoiceEntryPane`, and each of them takes only its own ports. `InputPortArchitectureTest` checks
+the package, naming, size and composition rules against production code and against violating
+specimens; `CommandBoundaryArchitectureTest` covers the write ports.
+
+== UI Concept
+
+The UI is built with Vaadin (server-side rendering, `MainLayout` as the shell). German is the
+default display language and English the backup, both served from one bundle pair
+(`messages_de.properties`/`messages.properties`, never resolved through the host JVM's own default
+locale). `TranslationService` (`ui/i18n`) implements Vaadin's `I18NProvider` against that pair;
+`UiTranslations` gives non-Vaadin call sites (dialogs, mappers, the invoice/trip workbook export)
+the same lookup outside a component's own translation context; `I18nBundleResource` serves the
+resolved bundle as JSON at `/api/i18n`, read by the sibling Playwright suite so its label
+assertions never drift from a hand-copied string. All three planes resolve a bundle value's
+`{term:...}` markers (the per-instance wording profile's vocabulary substitution,
+<<adr-022,ADR-022>>) before any `java.text.MessageFormat` pass, since a term marker is not a valid
+MessageFormat argument index and would otherwise throw. A missing translation key or an
+unresolvable term marker both render visibly (`!{key}!`/`!{term:name}!`) and are logged once per
+JVM lifetime, so neither is silently swallowed at render time; a parity test additionally checks
+that every `{term:...}` marker used in either bundle resolves for all three wording profiles and
+both locales, so a gap surfaces at build time rather than in production. Formatting call sites that
+do
+not go through the bundle (dates, month names, currency) construct `Locale.GERMAN`/
+`Locale.GERMANY` explicitly (`MoneyFormatter`, `TrendChart`, list/detail views) instead.
+
+Dark mode follows the OS color scheme, not an in-app toggle: `AppShell` injects a small inline
+script that reads `prefers-color-scheme` before first paint and keeps following runtime OS
+changes, setting `theme="dark"` on the document root; both Lumo/Vaadin components and the app's
+own CSS tokens (`themes/littletrotter/styles.css`) read the same attribute, so there is one
+source of truth for light/dark rather than two independently toggled surfaces. Accessibility is
+addressed incrementally at the component level (explicit `ariaLabel`s on icon-only actions and
+custom widgets) rather than through a single blanket mechanism; every UI/color change is checked
+against contrast and dark-mode rendering as a matter of review discipline, per the project's
+color guidelines. Menu ergonomics (drawer behavior, breadcrumbs, notification bell/badge) are
+covered by dedicated Karibu tests (`MainLayoutDrawerKaribuTest`,
+`MainLayoutBellBadgeKaribuTest`, `MainLayoutBreadcrumbKaribuTest`, and siblings).
+
+The mail views are part of this UI: `MailComposeView` (`mail/compose/:draftId`, reached from the
+send action on an invoice), `MailJournalView` (`mail/journal`) and `MailTemplatesView`
+(`mail/templates`, with `MailTemplateEditorDialog` and `MailTemplateHistoryDialog`). The journal
+filters, sorts and pages on the server, keeps filter, sort and page in the URL, shows status chips
+and row details, exports to Excel and offers retry and re-archive for failed entries. The routes
+are gated in `RouteAccess` by `MAIL_COMPOSE_AND_SEND`, `MAIL_JOURNAL_VIEW` and `MAIL_TEMPLATE_EDIT`
+and use the same i18n bundles, theme and dark mode as every other view; the drawer entry and the
+send action appear only while `MailAvailability` allows them.
+
+The compose layout follows the "envelope" principle: the preview shows exactly the two parts the mail
+component sends (HTML and plain text), nothing else. From a window width of 64em (1024 px) the form
+column (`mail-compose__form`: recipient, subject, placeholder chips, body editor) and the envelope
+preview (`MailPreviewCard`: header with recipient, subject and attachments, then the body, switchable
+between HTML and text) sit side by side; the card stays in view while the form scrolls, and unresolved
+placeholders are highlighted inside it. The send bar (`MailComposeSendBar`) is pinned to the bottom edge
+and shows one state at a time -- unchanged template text, edited text, unresolved placeholders or an
+invalid field -- computed by the pure function `MailComposeState`. Send stays clickable in every state
+and reports the problem on click, so validation never fails silently. Below 64em the view switches
+to a `TabSheet` (edit, preview) that re-parents the same component instances, so editor content and
+cursor survive a resize; the preview tab carries a dot while placeholders are unresolved. The mail
+body keeps fixed light colors in the card, because mail clients do not know the application's dark mode.
+=== Internationalization of Operator Tools
+
+The operator tools in the sibling `little-trotter-admin-tools` repository (`lt` CLI, `lhorse` TUI,
+`lhorse web`) have their own message catalog, separate from the application's bundle pair
+(<<adr-043,ADR-043>>). English is the source language and the default; German is the second catalog.
+
+* *Catalog*: package `admin-tools/ui/internal/i18n`. Embedded flat JSON files, one per area and
+  language (`catalog/<lang>/{common,lt,setup,tui,web}.json`); the files of a language are merged and a
+  duplicate ID is a load error. Entries have stable IDs, named placeholders (`{instance}`, `{count}`)
+  and `one`/`other` plural forms. A missing ID in German falls back to English and is logged once; a
+  missing English ID renders the ID.
+* *Operator language*: `lt` and the TUI use `LT_LANG`, then `LC_ALL`, `LC_MESSAGES`, `LANG`, else
+  `en`; only the language part counts, an unknown language means `en`. `lhorse` starts `lt` as a child
+  process with its own `LT_LANG`. `lhorse web` uses the EN/DE switch in the header (kept per browser),
+  then `Accept-Language`, then `en`. There is no new CLI flag.
+* *Customer files*: `README.txt`, `STATUS.txt` and `ALARM.txt` in the pickup directory follow the
+  instance, not the operator: `LT_LOCALE` (`en` or `de`) in the instance env, derived by `lt setup`
+  from the wording profile (`--profile customer` selects German), default `en`. Templates live in
+  `admin-tools/scripts/templates/<locale>/` and are rendered by `scripts/lib/render-template.sh`
+  (`{{name}}` placeholders; an unfilled placeholder or a control character in a value is an error).
+  A missing template falls back to `en`. File and directory names are fixed English names.
+* *Never translated*: machine values and logs. In `status.json`, `result` is `ok`, `warning`, `error`
+  or `skipped`; steps are `inventory`, `backup`, `verify`, `pickup`, `maintenance`, `pgbackrest`, `mirror`; the schema 3 blocks `pitr` and `mirror` with their fields are fixed; generations are
+  `daily`, `weekly`, `monthly`, `yearly`. Exit codes, JSON fields and alarm codes are likewise fixed.
+  The invoice application's `BackupStatusLoader` reads the English values.
+* *Safeguards* (Go tests in the `i18n` package): completeness (every ID exists in both languages with
+  the same placeholders), usage (every ID referenced in Go and in the web page exists in English), and
+  a literal lint over the `lt`, `lhorse` and setup packages that rejects new user-facing string
+  literals outside an allowlist. A template test renders each template in both locales.
+
+
+== Security and Operations
+
+Caddy is the stack's sole externally exposed service (`docker/caddy/Caddyfile`), terminating TLS
+1.2/1.3 in front of the Vaadin/Quarkus application, setting HSTS/`X-Content-Type-Options`/
+`X-Frame-Options`/`Referrer-Policy` headers, and blocking direct external access to Quarkus
+management endpoints (`/q/*`) that a catch-all reverse proxy would otherwise expose. `TLS_MODE`
+selects between Caddy's internal CA (development/LAN) and Let's Encrypt ACME (public domains) at
+container-start substitution time, without changing the Caddyfile.
+
+Every application-owned service in `docker-compose.yml` sets `security_opt:
+no-new-privileges:true`; the applications' own containers additionally drop all Linux
+capabilities (`cap_drop: [ALL]`) and carry explicit memory/PID limits under `deploy.resources`
+(infrastructure services — Postgres, RustFS, NATS, Valkey — deliberately keep their default
+capability sets, scoped out of the capability-drop by a documented decision, not an oversight).
+Backups are a DevOps operation (not application code) and are age-encrypted end-to-end:
+in Phase 1 (operational MVP until Q4/2027), `admin-tools/scripts/backup/backup.sh` executes backups and
+never leaves a plaintext archive behind an unverified ciphertext — its scrub step refuses to delete plaintext
+components unless a matching `*.tar.gz.age` file already exists in the target directory; in Phase 2 (from Q4/2027),
+this is executed via `lt backup` under the consolidated management plane.
+Authentik (OIDC) is not part of the repository's base compose file; on the server it runs as a shared
+service outside the instance projects and is the identity provider of every instance (Chapter 7).
+Where it is used, it gets its own PostgreSQL database (`little-trotter-auth`) in the same
+instance rather than a second Postgres instance or a shared schema, so an identity-store restore
+never has to touch invoice data and vice versa.
+
+=== Data Protection (GDPR)
+
+The application processes personal data of invoice recipients and senders: customer master data,
+contact persons, and e-mail addresses (mail dispatch). Issued invoices contain this data and are
+subject to statutory retention: the legal retention period for invoices takes precedence over
+erasure requests until it ends at the operator's archive (<<adr-035,ADR-035>>). The application has no
+automated erasure, anonymization, or blocking function; personal data in master data is changed or
+removed through the regular editors only. The workbook export carries a data-protection notice
+section (`ExportSheetWriter`).
+
+== Test Strategy and Test Architecture
+
+Testing is split across the projects in this repository's own Maven reactor, plus one browser-E2E
+project in the sibling `little-trotter-admin-tools` repository (see
+<<_building_block_view,Building Block View>> for how the two repositories divide the test and
+tooling projects):
+
+[cols="2,3,3", options="header"]
+|===
+|Project |Scope |Mechanism
+
+|`kotlin-invoice` (`src/test`)
+|Unit tests, JPA/Flyway integration tests (Testcontainers PostgreSQL), and headless Vaadin UI
+tests for views, layout, and menu ergonomics
+|JUnit 6 + Testcontainers; Karibu Testing for server-side Vaadin components (`*KaribuTest`
+naming), no browser involved
+
+|`kotlin-e2e-tests`
+|System-level integration tests exercising real infrastructure end-to-end (NATS redelivery/dedup,
+S3 round-trips, receipt/print annexes, e-invoice generation) rather than mocked collaborators; also
+carries the Karibu-based monkey suite — seeded random walks (`MonkeyRun` support
+class) over the invoice, profile, and system views, surfacing states scripted scenarios do not
+think to try
+|JUnit 6 + Testcontainers (`PostgresTestResource`, `NatsTestResource`, `S3TestResource`,
+`ValkeyTestResource`), test classes suffixed `E2EIT`; the monkey suite runs as ITs tagged `monkey`,
+excluded from the default failsafe run
+
+|`coverage-report`
+|Aggregates unit, integration, and E2E exec data across `kotlin-shared`, `kotlin-xpdf`,
+`kotlin-invoice`, and `kotlin-e2e-tests` into one coverage figure, gated at 90% line / 90%
+branch (`jacoco.line.coverage`/`jacoco.branch.coverage` in the root `pom.xml`) — the UI layer is
+included in this gate, not carved out
+|JaCoCo `report-aggregate` in the `ci/coverage-report` module (`post-integration-test`)
+
+|`e2e-test-playwright` (sibling `little-trotter-admin-tools` repository)
+|Browser-driven system E2E against a fully running compose stack; one spec file per work
+package, test titles beginning with the specification's scenario ID (e.g. `S1`, `B3`, `P2`)
+|Playwright/TypeScript; a fixture layer (`fixtures/i18n.ts` reads the real `messages.properties`
+at run time via `GET /api/i18n/{locale}` so label assertions never drift from a hand-copied
+string; `fixtures/tags.ts` gives every run a unique tag so grid assertions can filter a shared,
+persistent dev database) plus an isolated compose stack at https://localhost:9443 (`make playwright`,
+auto-started, fresh database) — the shared dev stack at https://localhost stays available as an alternate
+target
+|===
+
+Linter gates run as Maven `exec-maven-plugin` executions bound ahead of the test phase and are
+mandatory, not advisory: `ktlint-check` and `detekt-check` (with a ratcheting baseline —
+`detekt-baseline-ratchet.sh` — that only ever tightens) cover Kotlin, `sqlfluff-check` covers SQL
+migrations, plus a config-format check; all four can be bypassed locally only via an explicit
+`-DskipLinterGates=true` flag, never silently. The sibling repository's `make playwright
+CMD=check` target runs a TypeScript check and a traceability matrix (`tools/spec-matrix.ts`)
+reporting which specification scenario IDs are implemented, marked `fixme`, or still open — the
+same scenario-ID convention that makes Playwright and Kotlin E2E test titles traceable back to
+their originating specification without a separate mapping document.
+
+== Error Handling and Validation
+
+Validation is layered, each layer catching a different class of mistake before it reaches the
+database. At the UI, editor forms validate per field via Vaadin's `Binder` (IBAN, email, postal
+code, and similar single-purpose validators) before a save is even attempted. Below the UI, the
+domain enforces its own invariants independently of whatever the Binder already checked, because
+not every rule is expressible per field (e.g. a cross-object consistency check); these surface as a
+small, typed exception hierarchy — not-found, illegal transition, immutable, storno-not-allowed,
+and one consolidated field-validation exception carrying a machine-readable error code rather than
+pre-rendered text. At the application boundary, a translator narrows that variety down to three
+generic outcomes — bad input, not found, conflict — that a UI presenter can react to without
+knowing domain vocabulary. Above both, the
+<<_compliance_rules_and_the_finalization_gate,Compliance Rules and the Finalization Gate>> are a
+later layer: they judge the invoice as a whole, at the one moment (the `→ ISSUED` transition) after
+every per-field and per-object check has already passed.
+
+Every resolved error reaches the user through one shared notification component, distinguishing
+auto-dismissing confirmations from warnings and from errors that require an explicit close, rather
+than through ad hoc alerts scattered across views; an exception resolves to displayed text only
+through an i18n bundle key, never a hard-coded string. Every shown error is also persisted to the
+Message Center with a short dedup window, so a repeating failure does not flood the log and an
+admin auditing the system later sees what users saw live.
+
+Background job failures are a distinct case: nothing is on the call stack of a user action to
+catch. Their retry and dead-letter semantics are covered in
+<<_messaging_event_driven_architecture,Messaging and Event-Driven Architecture>> above; from
+this section's perspective, a terminal job status is simply a normal, renderable UI state, not an
+exception a view has to catch.
+
+The one rule that matters for an audit-relevant path: a `Block` from the finalization gate is never
+bypassable from the UI — there is no "save anyway" affordance — and whether a check currently
+blocks at all is itself staged (`OBSERVE`/`WARN`/`BLOCK`), never silently hard-coded, so a newly
+added rule is observed against real data before it can stop anyone.
+
+=== VAT ID: One Field, Visible Prefix Recognition
+
+A VAT ID (German: USt-IdNr.) stays one text field everywhere it appears — on an invoice recipient,
+on an
+invoice issuer profile, and on an additional invoice issuer VAT registration row — rather than
+splitting country
+and number into two fields; `VatIdValidator` (`domain/value`) is the single validator behind all
+three, so the format rule is defined once and the three places can never quietly drift apart. The
+shared `VatIdField` UI component (`ui/component`) layers the visible ergonomics on top of it:
+normalizing the value on blur (whitespace stripped, upper-cased), auto-completing the two-
+character prefix from the linked address country when the Office Manager types digits only
+(`vatPrefixFor`, the alpha-2 code except Greece, whose EU VAT prefix is `EL` rather than `GR`),
+showing the recognized country's name as a suffix once a prefix is known, and offering a country-
+specific placeholder (`DE123456789`, `ATU12345678`, `NL123456789B01`, …) rather than one generic
+example.
+
+Format validation runs on blur and returns a structured `VatIdValidator.Violation`
+(`TOO_LONG`/`NO_PREFIX`/`UNKNOWN_PREFIX`/`FORMAT`) rather than a pre-rendered sentence, resolved to
+its message through the i18n bundle the same way every other validation outcome in this section
+is — never a hard-coded string. A prefix that disagrees with the linked address country (a German
+company invoicing from an Austrian VAT registration is a legitimate case) is *information*, not an
+error, for an invoice recipient and an invoice issuer profile; the same disagreement on an
+additional invoice issuer VAT
+registration row *is* an error, because that row's own country combo is the definitive answer and
+nothing else can be. Verifying the id against the EU VIES REST API is a separate, later step,
+recipient-only, and never automatic — see <<_verify_vat_id,Verify an Invoice Recipient's VAT ID>>
+and
+<<adr-023,ADR-023>>.
+
+== Configuration
+
+Configuration is layered, and each layer owns a different kind of value: application defaults live
+in code, per-environment overrides live in `docker-compose.yml`, and secrets live in an untracked
+`.env` file — a value that must differ between installs is never baked into an image.
+
+Quarkus's own `application.properties` is the base layer, with a development-mode default via
+`${VAR:default}` syntax; its profile mechanism (`%dev`, `%test`, `%prod`, and the project's own
+`%worker`) overrides specific keys per profile in the same file rather than via separate property
+files. A handful of security-sensitive properties (datasource password, S3 credentials, OIDC client
+secret) declare no `%prod` fallback at all, so a production deployment missing the corresponding
+variable refuses to start rather than silently running against a real database with a development
+default.
+
+`docker-compose.yml` turns a built image into a specific running container: which profile it runs,
+whether its scheduler is enabled, and which hostnames/ports it reaches its dependencies on are all
+set through `environment:` entries there, never by building a different image per role — the app
+and the job worker are the *same* build artifact, told apart only by their environment.
+
+Secrets are never committed and never hardcoded: they live in a repo-root `.env` file, generated by
+`ci/scripts/dev/setup-secrets.sh` (run by `make dev` when `.env` is missing), which refuses to
+overwrite an existing file and, on `--check` (also run by `make dev`), rejects known-weak placeholder
+values.
+
+The table below lists the parameters DevOps actually sets — not internal Quarkus
+tuning.
+
+[cols="2,2,4,2", options="header"]
+|===
+|Parameter |Default |Meaning |Where set
+
+4+|*Instance (server deployment, sibling `little-trotter-admin-tools` repository's `instance.env`)*
+
+|`LT_INSTANCE`
+|`dev`
+|Which of the server's parallel instances this is (`dev`/`demo`/`prod`); selects the port block for
+the other variables below.
+|`instance.env`
+
+|`LT_APP_PORT`
+|`8080`
+|Caddy's reverse-proxy target port for the application container.
+|`instance.env`
+
+|`TLS_MODE`
+|`internal`
+|Caddy's internal CA (LAN/dev) vs. Let's Encrypt ACME (a real public domain).
+|`instance.env`
+
+|`PUBLIC_DOMAIN`
+|`little-trotter.local`
+|Domain Caddy requests a certificate for when `TLS_MODE=acme`.
+|`instance.env`
+
+|`LT_APP_AUTH_ENABLED`
+|`true`
+|Whether the instance requires OIDC login (Authentik) at all. Disabling login is for development
+only and must not be used in production; the application has no startup check that rejects it.
+|`instance.env`
+
+|`LT_MAIL_ENABLED`
+|`false`
+|Whether the optional mail dispatch component is deployed for this instance.
+|`instance.env`
+
+|`LT_BACKUP_AGE_RECIPIENT`
+|_(empty)_
+|Public age key backups are encrypted to; the matching private key never lives on the server.
+|`instance.env`, generated by DevOps
+
+4+|*Base stack (this repository's `docker-compose.yml` / `.env`)*
+
+|`QUARKUS_PROFILE`
+|`dev` / `worker`
+|Which behavior the shared build artifact runs as (application vs. job worker).
+|`docker-compose.yml`
+
+|`QUARKUS_SCHEDULER_ENABLED`
+|`false` / `true`
+|Whether this container's own scheduler runs (only the worker's does).
+|`docker-compose.yml`
+
+|`AUTH_ENABLED`
+|`false` (worker container); `true` otherwise
+|Bypasses the OIDC/authenticated-HTTP policy for a container that serves no UI traffic.
+|`docker-compose.yml`, read by `application.properties`
+
+4+|*Application (`kotlin-invoice/src/main/resources/application.properties`)*
+
+|`MLX_ENDPOINT`
+|_(unset)_
+|Local oMLX inference server URL; unset means the AI-assisted validation review
+(<<_ai_assisted_validation_review_optional_prototype,AI-Assisted Validation Review>> below) does not exist for this deployment.
+|`.env`
+
+|`littletrotter.features.llm-analysis.enabled`
+|`true`
+|Deployment-level kill switch for the whole LLM analysis path, independent of the per-check
+reference-data switch the Office Manager flips in the UI.
+|env override in `application.properties`
+
+|`littletrotter.validation-gate.stage`
+|`OBSERVE`
+|Rollout stage of the finalization validation gate (`OBSERVE`/`WARN`/`BLOCK`).
+|env override in `application.properties`
+
+|`littletrotter.compliance-rules.blocking-rules`
+|`CORE.SERVICE_PERIOD_XOR`
+|Comma-separated compliance-rule ids escalated to blocking ahead of a global stage change.
+|env override in `application.properties`
+
+|`invoice.jobs.max-attempts`
+|`5`
+|Retry budget for a generation job before it is routed to the dead-letter subject.
+|env override in `application.properties`
+|===
+
+== Feature Switches
+
+An optional capability is gated twice, and the two gates are independent. The _deployment switch_
+says whether the capability is installed at all; the _instance offer_ says whether an installed
+capability is offered to the users of one instance. A capability is usable only when both are on, so
+an operator can install a component without exposing it, and no setting in the UI can conjure a
+component that is not deployed. The e-mail component is the reference case: `MailAvailability`
+combines both gates, and every UI entry point and adapter asks it instead of reading either flag;
+`QuoteAvailability.offered` does the same for the quote component.
+The delivered configuration has the component switched off.
+
+[cols="3,2,2,5", options="header"]
+|===
+|Switch |Scope |Default |Effect
+
+|`MAIL_ENABLED` (`mail.enabled`)
+|Deployment
+|`false`
+|Off: no HTTP dispatch adapter, no mail-result consumer, no drawer entry, no mail route, no send
+action; the settings mail card reads "not installed".
+
+|`feature.email.enabled` (`FeatureFlag`)
+|Instance
+|on
+|Off: an installed component is not offered to this instance's users; no effect while the
+deployment switch is off.
+
+|`QUOTE_ENABLED` (`quote.enabled`)
+|Deployment
+|`false`
+|Off: no quote drawer section, no quote route, no settings quote card.
+
+|`feature.quote.enabled` (`FeatureFlag`)
+|Instance
+|on
+|Off: quote section, routes and command palette entries disappear and quote-changing calls are
+refused; the settings quote card stays so the module can be switched on again. Master-data
+replication and accepted-quote events keep running, so switching back on needs no resync.
+|===
+
+== Observability
+
+Both Quarkus services expose the standard Quarkus health endpoints (`/q/health/live`,
+`/q/health/ready`; `kotlin-xpdf` remaps its root to `/health`). `docker-compose.yml`'s own
+container healthchecks curl these directly, and `depends_on: condition: service_healthy` gates
+startup ordering on them — the app and worker only start once Postgres, RustFS, NATS, and Valkey
+report healthy. The health paths are the one deliberate, unauthenticated hole in the HTTP auth
+policy, so Caddy's own healthcheck can reach them.
+
+Logging is asymmetric by design: `kotlin-xpdf` logs structured JSON from the start;
+`kotlin-invoice` logs Quarkus's default human-readable console format. Log level is configured per
+Quarkus category and profile, not through a separate logging config file. There is no
+project-wide structured-logging or trace-propagation concept; it is not implemented and is tracked
+as technical debt in chapter 11.
+
+Metrics and dashboards are an optional overlay, not part of the core stack; see
+<<_operations_and_admin_tooling_little_trotter_admin_tools,Operations and Admin Tooling>> (Chapter
+7) for what it scrapes and how it
+is reached. Because it is optional, its absence changes nothing about the core stack's own health
+checks and logs, which are the observability signals actually relied on if the overlay is never
+started.
+
+[[_memory_budget_of_the_print_job]]
+== Memory Budget of the Print Job (kotlin-xpdf)
+
+One print job runs in one JVM. Its heap is bounded by the following rules (decision:
+<<adr-040,ADR-040>>); the numbers are design values until the stress run measures them.
+
+[cols="2,3,2", options="header"]
+|===
+|Mechanism |Effect |Setting
+
+|Heap formula
+|boot reserve 500 MiB, a receipt reserve of 256 MiB (the rasterised pages of one maximum combined
+document) and, per concurrent job (bulk threads plus the interactive thread), a base of 150 MiB, what
+a job without receipts needs above boot; `JobConsumer.defaultWorkerThreads` derives the bulk thread
+count from the heap. START (1536 MiB heap): 4 bulk threads plus the interactive one, 286 MiB left for
+receipt work. KLEIN (1024 MiB heap): 1 bulk thread. `JOB_WORKER_THREADS` set explicitly wins. The
+sizing is logged once at startup
+|`xpdf.jobs.per-thread-render-mib` (`XPDF_JOBS_PER_THREAD_RENDER_MIB`)
+
+|Receipt page raster
+|display size relative, at most the A4 raster (about 9 MiB per page); pixel safety limit lowers the
+resolution, never refuses
+|`xpdf.receipt-annex.dpi`, `xpdf.receipt-annex.max-pixels`
+
+|One PDFBox pass
+|receipt pages and post-render mark are added in a single load/save before the ZUGFeRD embedding; one
+exact-size array per saved document
+|-
+
+|Spill to scratch files
+|PDFBox stream data above the threshold per document goes to the scratch directory
+|`xpdf.pdfbox.memory-threshold-bytes` (default 8 MiB)
+
+|Admission by weight
+|a job starts when the receipt bytes of the running jobs plus its own fit the budget; waiting keeps
+the message leased through the heartbeat
+|`xpdf.job-weight-budget-kib` (default derived from the receipt headroom: one maximum document of
+19 receipts x 440 KiB = 8360 KiB scaled by headroom / 256 MiB, between one and just under two such
+documents; START 9339 KiB). A single job heavier than the budget runs alone
+
+|Valkey PDF cache
+|PDFs above the limit are not cached; the overview caches keep their memory
+|`VALKEY_PDF_CACHE_MAX_BYTES` (default 2 MiB)
+|===
+
+Stage durations (`xpdf_export_stage_seconds`, stages render, annex, mustang, syntax, schematron,
+kosit, pdfa, verapdf, stamp, store) show where a job spends its time; the stamp stage is
+timed inside the base-document pass.
+
+[[_green_it_principles]]
+== Green IT Principles
+
+Green IT is a design constraint of this system, not a feature: the target is small-budget hardware
+(a mini PC running Ubuntu Server), the load is 20–200 invoices a month, and DevOps may switch
+the machine off in the evening to save power. The principles below are what a change is checked
+against; where a rule is not yet fully met, the polling work package names the
+planned change, and a baseline measurement (watts at the wall, RSS per container, queries per page
+view) is the acceptance criterion the PO schedules separately.
+
+. *Small-budget hardware is the target*. Every compose service carries an explicit memory limit
+  (Chapter 7); outgrowing the target is a documented swap path (<<adr-020,ADR-020>>), never a
+  reason to grow the default footprint.
+. *No work without a trigger — push over poll*. A new generation job reaches the worker through
+  the fast path and NATS (<<adr-020,ADR-020>>), not a timer. The worker's hourly recovery scan (`invoice.jobs.recovery-interval`) and
+  asynchronous startup pass recover persisted generation jobs when that trigger is missed; UI
+  live updates still use polling until a planned change narrows it to pending jobs.
+. *On demand, not always-on*. The optional Factur-X engine container (standby, kept but not
+  developed further) starts for its first job and stops
+  again after an idle period — the pattern for every optional heavyweight component.
+. *Power-off tolerance*. Generation-job state survives a worker restart because recovery reads
+  PostgreSQL and runs at startup. The two daily maintenance tasks each check the most recent
+  `DatabaseMaintenanceEvent` of their own type before running, so a restart neither
+  re-runs one within minutes of its last run nor silently skips a day it missed. All state lives in
+  PostgreSQL, JetStream's file store, and RustFS; Valkey is a cache and shared fast path whose loss
+  costs latency, never data.
+. *Maintenance is DevOps-driven*. The database is vacuumed, reindexed, and backed up when
+  DevOps decides, from the System tab or the admin tooling; the application neither runs
+  maintenance on its own nor snapshots its status on a timer.
+. *Reuse over recompute*. Validation verdicts are cached by content hash and profile; receipts
+  are deduplicated by checksum; a re-published job is deduplicated by the broker — a second export
+  of an unchanged document must not cost a second validation run.
+. *Optional capabilities are off unless configured*. The local LLM analysis (oMLX; see
+  <<_ai_assisted_validation_review_optional_prototype,AI-Assisted Validation Review>> below) runs only when `MLX_ENDPOINT` is set — unset
+  means the capability does not exist for that deployment: no UI element, no job option, no
+  connection attempt.
+. *Measure before optimizing — deferred, not dropped*. The first measurement is the acceptance
+  criterion for everything above and is scheduled by the PO for a later wave; until then, no
+  optimization beyond these rules is started on assumption alone.
+
+== Dependency Vulnerability Scanning
+
+Dependabot alerts are the first source for known vulnerabilities in direct dependencies. The OWASP
+dependency-check Maven plugin (`org.owasp:dependency-check-maven`, version 13.0.0) is the second
+source: it also resolves transitive runtime JARs and matches them against the NVD.
+
+=== NVD API Key
+
+The plugin reads the key from an environment variable (plugin parameter
+`nvdApiKeyEnvironmentVariable`, variable `NVD_API_KEY`), never from a command-line property,
+because properties appear in process lists and logs. The key is stored in `~/.nvd.env` (file mode
+`600`) on the developer machine and on the test host. A scan sources that file first
+(`source ~/.nvd.env`). The value is never printed, logged, or committed.
+
+=== Scan and Triage
+
+* The scan runs over the whole reactor on the test host (see
+  <<_verification_on_the_test_host,Verification on the Test Host>>) and produces the HTML report
+  `dependency-check-report.html`.
+* The scan is the Dagger function `security` in `ci/main.go`
+  (`dagger call security --source=.. --nvd-api-key=env:NVD_API_KEY`); Dagger passes the key into
+  the build container as a secret variable, so it does not appear in the container's logs.
+* Critical and high findings with a fixed upstream version are resolved by pinning that version in
+  the `dependencyManagement` section of the parent POM, so the pin applies to every module and to
+  transitive paths. Example: `kotlin-reflect` is managed to `${kotlin.version}`.
+* Findings without a fix, and false positives (for example an advisory for another language
+  binding of the same project, or an affected version range that ends below the version in use),
+  are not suppressed in the scan configuration. The repository holds no suppression file; each
+  such finding is recorded with its reason in the vulnerability record of the release and in the
+  commit text, and is re-evaluated at the next scan.
+* The commit text of a scan-driven change states the plugin version and the finding count per
+  severity.
+
+== AI-Assisted Validation Review (Optional, Prototype)
+
+Status: prototype development. The running
+application can send one prompt to a local model on an oMLX server and get a second opinion on
+an invoice's validation findings; that possibility is the whole feature. The check never gates
+anything: it
+runs asynchronously after finalization, and its result — a rating, a summary, issues, and
+suggestions — is stored as an `InvoiceLlmAnalysis` record on the invoice, surfaced as an advisory
+alongside the compliance/KoSIT findings but never consulted by the
+<<_the_finalization_gate,Finalization Gate>>.
+
+The check is enabled by installing oMLX, a local OpenAI-compatible inference server (Apple MLX), on
+a Mac or a mini PC on the operator's own network (see
+<<_dedicated_single_instance_host_mini_pc,Dedicated Single-Instance Host>>, Chapter 7), and pointing
+`MLX_ENDPOINT` at it; no endpoint configured means the feature does not exist for that deployment —
+no UI element, no job option, no connection attempt. A deployment-level switch
+(`littletrotter.features.llm-analysis.enabled`) can additionally take the whole path out of service
+regardless of the endpoint. Because the endpoint runs on the operator's own network, no invoice
+data leaves it for this check.
+
+[[crosscutting-tiers]]
+== Roles and Visibility (Tiers)
+
+`lt` assigns every call one of three tiers, derived from the *package* (customer package or not) and the
+*person* (login identity).
+
+[cols="1,2,3",options="header"]
+|===
+| Tier | When | Reaches
+| workshop | not a customer package (repository checkout, lab VM) | everything, including `lt lab`, `lt test`, `lt publish`, `lt docs`, `lt tunnel`
+| stallmeister | customer package and login identity `stallmeister` | customer tier plus `lt instance create\|build\|remove\|delete` for demo/test, `credentials`, `secrets`, `clean`, `db-reset`, `reinstall`, `service`, `lt maintenance unlock`, `lt user`, `lt ui` including `lt ui web`
+| customer | customer package, any other account, or no login identity | `lt backup`, `lt instance list\|start\|stop\|restart\|update\|check\|logs\|metrics\|output-intent` on `prod` only, `lt upgrade`, `lt setup`, `lt maintenance` except `unlock`, `lt audit`, `lt info`, `lt help`
+|===
+
+*Identity.* `lt` reads `/proc/self/loginuid`, which `pam_loginuid` sets at login and `sudo` does not change,
+and resolves it to a user name. `SUDO_USER` is for display only. Without a login identity (container,
+`multipass exec`) the tier is customer.
+
+*One table.* The command table in `admin-tools/ui/internal/ltcli/commands.go` carries the tier per command and
+subcommand. Dispatch, help, shell completion, the command overview, the lhorse TUI boxes, the lhorse web routes
+and the job catalog read the same column; a parity test asserts that a web or catalog entry is reachable at a
+tier exactly when its `lt` command is.
+
+*Absent, not dimmed.* Entries above the caller's tier do not appear. Calling one anyway exits with code 2
+("stallmeister only" or "workshop only"); the web answers 404. For the customer tier, `lt instance list` shows
+only `prod`, any `--instance` other than `prod` is refused, and the lhorse TUI shows only the Backup,
+Instance prod and System boxes.
+
+*Web window.* lhorse web on a customer host runs only as `lhorse-web@stallmeister`, so its tier is
+stallmeister; it is opened and closed with `lt ui web enable|disable` (<<deployment-host-classes>>). The Caddy
+route drops client-supplied `X-Authentik-*` headers before `forward_auth`, so only Authentik can assert group
+membership. Every switch is written to the maintenance journal and to the system journal (`lt-audit`).
+
+*Security boundary.* Customer admin accounts keep sudo (PO decision 2026-10-16). The customer tier therefore
+protects against operator errors and leaves an audit trail; it is not a security boundary. The security
+boundary for the web is Authentik group `lt-admins`; stallmeister actions are recorded by `auditd`.

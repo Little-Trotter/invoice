@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>de.littletrotter</groupId>
+    <artifactId>little-trotter-invoice-parent</artifactId>
+    <version>0.9.59-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <groupId>de.littletrotter</groupId>
+  <artifactId>sbom-postprocess</artifactId>
+  <version>0.9.59-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>sbom-postprocess</name>
+  <description>
+    Build-time-only CycloneDX post-processing tool for the BSI TR-03183-2 SBOM spec. Fills in the
+    required data fields (§ 5.2) the cyclonedx-maven-plugin does not itself emit (SBOM/component
+    creator, bsi:component:filename/executable/archive/structured, dependency-list completeness)
+    and merges the delivered frontend npm bundle into an application's document.
+
+    This module is never a project dependency of kotlin-invoice or kotlin-xpdf — those two invoke
+    it as a PLUGIN dependency of exec-maven-plugin's "java" goal only, which keeps this tool off
+    their own resolved dependency graph and therefore out of their own CycloneDX scan. It carries
+    no cyclonedx-maven-plugin execution of its own (like kotlin-e2e-tests and ci/coverage-report):
+    a build tool is not a delivered product and gets no SBOM of its own.
+  </description>
+
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+
+  <properties>
+    <kotlin-maven-plugin.version>${kotlin.version}</kotlin-maven-plugin.version>
+    <!-- Newest release on Maven Central as of this task (checked against
+         repo1.maven.org/maven2/org/cyclonedx/cyclonedx-core-java/maven-metadata.xml) — not the
+         9.0.5 that cyclonedx-maven-plugin 2.9.3 itself bundles internally on its own isolated
+         plugin classpath. The two are independent: this dependency is only used for the fixed,
+         externally-versioned CycloneDX 1.6 JSON SCHEMA the library ships, which does not change
+         between library releases, so there is no reason to pin to the plugin's own older version. -->
+    <cyclonedx-core-java.version>13.2.0</cyclonedx-core-java.version>
+  </properties>
+
+  <dependencies>
+    <!-- Not pulled in transitively here (unlike kotlin-shared/kotlin-xpdf/kotlin-invoice, this
+         module has no Quarkus dependency to bring it along) — version managed by the root pom. -->
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <!-- CycloneDxSchemaValidator's own dependency, compile-scoped so it transits to kotlin-invoice
+         and kotlin-xpdf when they depend on this module at test scope (see their poms) — verified
+         NOT to already be reachable there: cyclonedx-maven-plugin's own dependencies live on its
+         isolated plugin classpath and never leak into a module's compile/test classpath (confirmed
+         via `mvn dependency:tree -Dscope=test`, empty for kotlin-invoice, kotlin-xpdf and this
+         module alike, before this dependency was added). -->
+    <dependency>
+      <groupId>org.cyclonedx</groupId>
+      <artifactId>cyclonedx-core-java</artifactId>
+      <version>${cyclonedx-core-java.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
+    <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-maven-plugin</artifactId>
+        <version>${kotlin.version}</version>
+        <configuration>
+          <jvmTarget>${maven.compiler.release}</jvmTarget>
+        </configuration>
+        <executions>
+          <execution>
+            <id>compile</id>
+            <phase>process-sources</phase>
+            <goals><goal>compile</goal></goals>
+          </execution>
+          <execution>
+            <id>test-compile</id>
+            <phase>process-test-sources</phase>
+            <goals><goal>test-compile</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+      <!-- ktlint/detekt/sqlfluff/baseline-ratchet inherited from parent pluginManagement.
+           sqlfluff has nothing to lint here (no db/migration directory) — its own <skip> already
+           defaults to true at the root and this module never overrides it. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,0 +1,55 @@
+[[adr-001]]
+= ADR-001: Money Value Type Instead of Raw BigDecimal
+
+== Status
+Accepted
+
+== Context
+Every monetary amount in an invoicing system is a candidate for rounding drift: repeated
+`BigDecimal` arithmetic scattered across call sites, each choosing its own scale and rounding
+mode independently, reliably produces off-by-a-cent totals that are hard to trace back to a
+single cause. `BigDecimal` also does not distinguish "this is a final, quotable amount" from
+"this is an intermediate value being accumulated before one final rounding" — both look
+identical at the type level.
+
+== Decision
+All monetary arithmetic goes through a single `Money` value object (`kotlin-shared`), never a
+raw `BigDecimal`. `Money` normalizes to two decimals with `HALF_UP` rounding on its normal
+operators (`plus`, `minus`, `times`, `div`, `percentage`), but also exposes an explicit
+"exact" precision path (`Money.exact`, `plusExact`, `times(scale, rounding)`) for accumulators
+that must round only once at the end of a computation. `allocate()` distributes an amount
+across weighted parts using largest-remainder rounding so the pieces always sum back to the
+original amount exactly. `Money` lives in `kotlin-shared` specifically so both `kotlin-invoice`
+and `kotlin-xpdf` share the one rounding rule, since `kotlin-xpdf` depends on `kotlin-shared`
+but not on `kotlin-invoice`.
+
+Each module (`kotlin-shared`, `kotlin-xpdf`, `kotlin-invoice`) carries an ArchUnit test
+(`MoneyArchitectureTest`) asserting that no money-named field, constructor parameter, or method
+return type is a raw `BigDecimal` — the rule is enforced by the build, not left to code review.
+
+== Consequences
+
+=== Positive
+* One rounding rule, applied consistently everywhere a monetary amount is produced.
+* The type system distinguishes "final amount" from "intermediate, unrounded accumulator" —
+  `Money.of` vs. `Money.exact` — so a caller cannot round early by accident.
+* The ArchUnit guard turns a style convention into a build-breaking regression test.
+
+=== Negative
+* `Money` equality is by value (comparing the underlying amount), not by scale, which differs
+  from `BigDecimal`'s default `equals` (`1.50` != `1.5`) — a caller relying on `BigDecimal`
+  scale-sensitive equality would be surprised; `sameValueAs`/`compareTo` make the intended
+  comparison explicit instead.
+* An extra wrapper type at every domain boundary (persistence converters, DTOs, Jackson
+  (de)serialization) that a plain `BigDecimal` would not need.
+
+=== Mitigation
+* `MoneyConverter` (JPA `AttributeConverter`) is the one thing kept in `kotlin-invoice` rather
+  than `kotlin-shared`, since it needs `jakarta.persistence`, which `kotlin-shared` must not
+  depend on.
+* Jackson `@JsonCreator`/`@JsonProperty` annotations keep the wire shape byte-identical to a
+  plain `{"amount": ...}` object, so the wrapper is invisible to API/DTO consumers.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/Money.kt`_

@@ -1,0 +1,41 @@
+[[adr-007]]
+= ADR-007: RustFS as the S3-Compatible Object Store, Including on Small-Budget Hardware
+
+== Status
+Accepted
+
+== Context
+Receipts and generated PDF/XML documents need durable, content-addressable, S3-compatible object
+storage, independent of the relational database. The project's target deployment is a small Linux
+server on small-budget hardware, not a cloud cluster, which puts memory and CPU footprint on equal
+footing with API compatibility when choosing an object-store implementation.
+
+== Decision
+RustFS, an S3-compatible object store, is used as the receipt/document object storage backend
+(`docker-compose.yml` service `rustfs`), addressed through the standard S3 API from both
+`kotlin-invoice` and `kotlin-xpdf`. This is a deliberate, standing choice, not a placeholder: it
+remains the storage backend on the small-budget deployment target as well as in development, and it
+is not to be replaced by a plain filesystem mount even where that would look like a simpler
+option for a single-operator deployment — S3-compatible semantics (content addressing, checksum
+verification, backup tooling built around `pg_dump`-style object export) are treated as an
+architectural property of the system, not an implementation detail to simplify away.
+
+== Consequences
+
+=== Positive
+* One API (S3) for object storage across every deployment target, from a developer laptop to the
+  small-budget mini PC deployment target.
+* Checksum-based duplicate detection for receipts composes naturally with content-addressable
+  storage.
+
+=== Negative
+* An additional stateful service (with its own data volume, `rustfs-data`) to operate and back
+  up, compared to writing files directly to a mounted filesystem path.
+
+=== Mitigation
+* Backup (planned): the object store's data is backed up alongside PostgreSQL by the same
+  encrypted backup and restore flow, so the added operational surface adds no second backup
+  concept.
+
+'''
+_Architecture Decision Record — source: `docker-compose.yml` (`rustfs` service)_

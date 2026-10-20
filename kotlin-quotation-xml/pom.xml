@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>de.littletrotter</groupId>
+    <artifactId>little-trotter-invoice-parent</artifactId>
+    <version>0.9.59-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+  <groupId>de.littletrotter</groupId>
+  <artifactId>kotlin-quotation-xml</artifactId>
+  <packaging>jar</packaging>
+
+  <name>kotlin-quotation-xml</name>
+  <description>
+    Machine-readable offer: a syntax-neutral QuotationModel, the UBL 2.1 Quotation writer, an XSD
+    validator and a Schematron validator for the business rules BR-Q-01 to BR-Q-05. Plain,
+    CDI-unaware library (same as kotlin-shared); the consuming service owns the
+    wiring. The embedded schemas under ubl/ are the unmodified OASIS UBL 2.1 XSDs from
+    https://docs.oasis-open.org/ubl/os-UBL-2.1/UBL-2.1.zip (UBL 2.1 OASIS Standard, 2013-11-04,
+    directories xsd/maindoc/UBL-Quotation-2.1.xsd and xsd/common/).
+  </description>
+
+  <!-- SBOM spec (BSI TR-03183-2 § 5.2.2, SbomFieldCatalogueIT's "distribution licences are
+       present on almost every component" gate, MIN_LICENSE_COVERAGE=0.99): kotlin-shared and
+       kotlin-invoice never declared this either, but the whole reactor's license coverage
+       already sat right at that 99% line before this module existed — a fourth license-less
+       internal module tipped kotlin-xpdf's own generated BOM below it. This project is Apache-2.0
+       (see the repo root LICENSE), so declaring it here is also simply correct, not just a gate
+       fix. -->
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+
+  <dependencies>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-shared</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- XPath 2.0 evaluation of the Schematron rules (net.sf.saxon.s9api), the same engine kotlin-xpdf
+         uses for its Schematron stages. -->
+    <dependency>
+      <groupId>net.sf.saxon</groupId>
+      <artifactId>Saxon-HE</artifactId>
+      <version>${saxon.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
+    <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-maven-plugin</artifactId>
+        <version>${kotlin.version}</version>
+        <configuration>
+          <jvmTarget>${maven.compiler.release}</jvmTarget>
+          <!-- Kotlin-only call sites: no DefaultImpls compatibility classes for interface defaults
+               (dead forwarders that JaCoCo counted as missed lines). -->
+          <args>
+            <arg>-jvm-default=no-compatibility</arg>
+          </args>
+        </configuration>
+        <executions>
+          <!-- Qodana KotlinMavenPluginPhase — explicit phases (matching kotlin-xpdf's pom) so the
+               Kotlin compiler is guaranteed to run ahead of any javac step in this lifecycle,
+               rather than relying on the plugin's implicit default phase binding. -->
+          <execution>
+            <id>compile</id>
+            <phase>process-sources</phase>
+            <goals><goal>compile</goal></goals>
+          </execution>
+          <execution>
+            <id>test-compile</id>
+            <phase>process-test-sources</phase>
+            <goals><goal>test-compile</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>${maven-failsafe-plugin.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.cyclonedx</groupId>
+        <artifactId>cyclonedx-maven-plugin</artifactId>
+        <configuration>
+          <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+          <includeCompileScope>true</includeCompileScope>
+          <includeProvidedScope>false</includeProvidedScope>
+          <includeRuntimeScope>true</includeRuntimeScope>
+          <includeSystemScope>false</includeSystemScope>
+          <includeTestScope>false</includeTestScope>
+        </configuration>
+        <executions>
+          <execution>
+            <id>make-bom</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>makeBom</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- H27-42: ktlint and detekt linter gates (inherited from parent pluginManagement) -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <!-- Inherits ktlint-check and detekt-check executions from parent -->
+      </plugin>
+    </plugins>
+  </build>
+</project>

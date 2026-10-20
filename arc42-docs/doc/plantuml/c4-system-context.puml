@@ -1,0 +1,66 @@
+@startuml c4-system-context
+' PO 2026-09-12: this is the BUSINESS context of arc42 chapter 3 — labels in business language,
+' no protocols or ports; channels, protocols and formats live in the Technical Context table.
+
+!include <C4/C4_Context>
+
+' PO decision 2026-09-12 ("surprise me"): replaces the Structurizr auto-layout export for
+' System Context with a hand-laid diagram — few relationships, no crossings, natural (curved)
+' splines, so no `skinparam linetype` override here (unlike the sibling container/deployment
+' views, which force ortho/polyline for label-collision reasons that do not apply at this scale).
+' Palette copied from c4-container-landscape.puml / doc/c4/workspace.dsl "styles" block.
+'
+' Neighbors and relationships are reconciled against doc/arc42/03-context.adoc's own tables and
+' doc/c4/workspace.dsl's "System Context relationships": the Office Manager, the recipient,
+' DevOps, Monitoring and Backup Storage come straight from the DSL model; the mail dispatch component's
+' two relationships and their protocols come from 03-context.adoc's technical-context table
+' (little-trotter-email is its own bounded context, not part of this model); Authentik is added
+' here because Office Manager login is real OIDC
+' (kotlin-invoice/src/main/resources/application.properties, "TS-2 — Authentik OIDC"),
+' not previously drawn at this level — its row was added to 03-context.adoc's technical context
+' table in the same change. The embedded KoSIT validator is a library inside kotlin-xpdf, not an
+' external system, so it is intentionally absent. The recipient relationship is worded to match
+' chapter 01/03: this system generates the documents, it does not transmit them itself.
+
+skinparam defaultFontName "Roboto Condensed, Arial Narrow, sans-serif-condensed, sans-serif"
+skinparam defaultFontSize 12
+
+UpdateElementStyle("person", $bgColor="#5F6368", $fontColor="#ffffff", $borderColor="#4C4F53")
+UpdateElementStyle("system", $bgColor="#1A73E8", $fontColor="#ffffff", $borderColor="#1456AE")
+UpdateElementStyle("external_system", $bgColor="#9AA0A6", $fontColor="#202124", $borderColor="#74787C")
+
+LAYOUT_TOP_DOWN()
+
+Person(officeManager, "Office Manager", "Manages master data, invoices, receipts")
+Person(recipient, "Tax Advisor / Auditor /\nInvoice Recipient", "Receives generated invoice documents")
+
+System(ltSystem, "Little Trotter X-Invoice", "UStG e-invoicing: master data, receipts, jobs")
+
+Person(devops, "DevOps", "Provisions, deploys, and maintains the server")
+
+System_Ext(authentik, "Authentik", "Identity provider")
+System_Ext(mailDispatch, "little-trotter-email", "Mail dispatch component (own bounded context, optional)")
+System_Ext(quoteSystem, "little-trotter-quote", "Quote component (own bounded context, optional)")
+System_Ext(vies, "EU VIES", "European Commission VAT ID validation service")
+System_Ext(monitoring, "Monitoring", "Prometheus/Grafana")
+System_Ext(backupTarget, "Backup Storage", "Off-site encrypted backup target")
+
+' Business workflows (Users & Invoicing)
+Rel(officeManager, ltSystem, "Manages master data, invoices, receipts")
+Rel(officeManager, recipient, "Hands over e-invoices and PDFs (out-of-band)")
+Rel(ltSystem, authentik, "Authenticates Office Manager")
+Rel(ltSystem, vies, "Validates recipient VAT ID on demand")
+Rel(ltSystem, mailDispatch, "Hands over invoices and quotes for e-mail dispatch")
+Rel(mailDispatch, ltSystem, "Reports dispatch outcome")
+Rel(ltSystem, quoteSystem, "Delegates quote lifecycle and master-data updates")
+Rel(quoteSystem, ltSystem, "Hands over explicit invoice order")
+
+' Operations & Infrastructure
+Rel(devops, ltSystem, "Provisions, deploys, and maintains")
+Rel(devops, backupTarget, "Copies encrypted backup archives")
+Rel(devops, monitoring, "Reviews dashboards and alerts")
+Rel(monitoring, ltSystem, "Observes health and metrics")
+
+SHOW_LEGEND()
+
+@enduml

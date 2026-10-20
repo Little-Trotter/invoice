@@ -1,0 +1,54 @@
+[[adr-046]]
+= ADR-046: Tax number per foreign VAT registration
+
+== Status
+Accepted; PO decision: 2026-10-19. PO approval of visible output change: 2026-10-19.
+
+== Context
+A seller with a foreign VAT registration (`seller_vat_registration`, one row per country) often holds a
+national tax number in that country as well and has to show it in the invoice header. Until now only the
+registration VAT ID could be stored. The German tax number and VAT ID of the profile stay mandatory and
+unchanged.
+
+== Decision
+. *Pair, optional.* Each registration may carry a tax number (`seller_vat_registration.tax_number`,
+  up to 50 characters, stored normalised: separators removed, upper case). It cannot exist without the VAT ID
+  of the same country; the aggregate enforces this.
+. *Generic check only in the aggregate.* `ForeignTaxNumber` checks not blank, length and letters/digits.
+  The country layout (`ForeignTaxNumberValidator`, structure and, where the national sheet defines one, the
+  check digit) is a *warning* in the profile form: saving is always possible, because a rule can lag behind an
+  authority's change while the seller still has to print the number it was issued.
+. *Header row.* For an invoice billed under a foreign registration the PDF header shows the tax number
+  directly below that country's VAT ID. The row is omitted when the number equals the VAT ID without its
+  country prefix. German tax number and VAT ID rows are unchanged. The row applies to every invoice type,
+  document language and the invoice format. The quote header does not show a registration, so it has no row.
+. *Labels, the same in every language.* France: "SIREN" (9 digits) or "N° fiscal" (13 digits); Belgium:
+  "KBO/BCE" (10 digits) or "RRN/NN"; Netherlands: "RSIN" (the 9-digit format cannot tell company and person
+  apart, the registration is a business registration); Luxembourg: "Matricule". Every other country and
+  every unrecognised format: `TIN (<ISO alpha-2>)`, for example "TIN (DK)". The producer of the invoice data
+  chooses the label key and drops duplicates, so the renderer needs no country rules.
+. *XML unchanged.* The e-invoice XML does not carry the foreign tax number: BT-32 stays the German tax
+  number (it occurs at most once).
+. *Frozen at issue.* When an invoice is issued (and for a credit note when it is created) the tax number of
+  the invoice's registration is copied to `invoice_party_snapshot.registration_tax_number` (seller row only).
+  A read-only document prints that value; a later profile edit does not change it. A draft prints the live
+  profile value.
+. *Effective only for a recipient in that country (existing requirement).* The selected registration
+  applies only when the recipient's country (billing address, else delivery address) equals the
+  registration's country. Otherwise it is not effective: the PDF shows only the German VAT ID and tax
+  number, BT-31 stays the German VAT ID and the snapshot holds no foreign tax number. One decision,
+  `effectiveSellerRegistrationCountry` in `kotlin-shared`, serves the PDF context builder, the BT-31
+  resolution and the snapshot freeze, so PDF, XML and snapshot always agree. A recipient without a
+  country never matches. Before this ADR the PDF and BT-31 resolved by the seller's selected country
+  alone, so a manual selection with a recipient elsewhere printed and exported the foreign VAT ID;
+  that was a defect, fixed with the same decision.
+
+== Consequences
+* Visible output change: one additional PDF header row for sellers who enter a foreign tax number; approved
+  by the PO on 2026-10-19. Also visible, as a defect fix of an existing requirement: a foreign VAT ID is no longer printed or
+  exported (BT-31) when the recipient is outside the registration's country.
+* Schema only in the baseline (`seller_vat_registration.tax_number`,
+  `invoice_party_snapshot.registration_tax_number`), no upgrade script.
+* The profile form shows the tax number field next to the VAT ID in each registration row; a wrong layout
+  produces a warning text, a tax number without VAT ID is rejected.
+* Related: <<adr-044,ADR-044>> (terms).

@@ -1,0 +1,74 @@
+@startuml quality-gates
+
+' PO 2026-09-12: ortho routing keeps the six-stage chain left-to-right without any curve
+' crossing the two release-tag gates that run side by side (security job / sonarqube job in
+' .forgejo/workflows/cicd.yml). Falls back to polyline if a label ever gets covered.
+skinparam linetype ortho
+skinparam nodesep 110
+skinparam ranksep 120
+skinparam shadowing false
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultTextAlignment center
+skinparam wrapWidth 190
+
+skinparam rectangle {
+  FontSize 12
+}
+skinparam rectangle<<endpoint>> {
+  BackgroundColor #9AA0A6
+  BorderColor #74787C
+  FontColor #202124
+  roundCorner 0
+}
+skinparam rectangle<<stage>> {
+  BackgroundColor #3C88EB
+  BorderColor #2D66B0
+  FontColor #202124
+  roundCorner 0
+}
+skinparam rectangle<<gate>> {
+  BackgroundColor #1A73E8
+  BorderColor #1456AE
+  FontColor #ffffff
+  roundCorner 0
+}
+skinparam note {
+  FontSize 11
+  BackgroundColor #FEF5E0
+  BorderColor #E65100
+  FontColor #202124
+}
+skinparam arrow {
+  FontSize 11
+  Color #5F6368
+  FontColor #202124
+}
+
+rectangle "Commit\n(git commit)" as Commit <<endpoint>>
+rectangle "Local · make test\nJaCoCo 90/90 line+branch\nktlint · detekt · sqlfluff" as LocalTest <<stage>>
+rectangle "Push / PR\nForgejo test.yml: make test\n(same gates, shared runner)" as Push <<stage>>
+rectangle "Release tag v*\nGitleaks (full history)\nTrivy fs (.trivyignore.yaml)" as Security <<gate>>
+rectangle "Release tag v*\nSonarQube CE\n(Maven plugin, JaCoCo coverage)" as Sonar <<gate>>
+rectangle "Publish\nmake publish / publish-images.yml\nTrivy image gate" as Publish <<gate>>
+rectangle "Deploy\n(pull image, Ubuntu server)" as Deploy <<endpoint>>
+
+' Column pinning: Security/Sonar stacked in the same release-tag column so neither arrow
+' into or out of Publish has to cross the other.
+Security -[hidden]down- Sonar
+
+Commit -right-> LocalTest : pre-commit hook\n(Gitleaks)
+LocalTest -right-> Push : git push
+Push -right-> Security : release tag
+Push -right-> Sonar : release tag
+Security -right-> Publish : tag passes
+Sonar -right-> Publish : tag passes
+Publish -right-> Deploy : image pushed
+
+note bottom of Sonar
+  False positives: Product Owner decision.
+  CDI findings: always resolved
+  architecturally, never excluded.
+end note
+
+@enduml

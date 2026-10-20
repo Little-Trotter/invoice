@@ -1,0 +1,41 @@
+# Maven/Gradle build output
+/target/
+**/target/
+
+# IntelliJ / IDE
+/.idea/
+*.iml
+*.ipr
+*.iws
+
+# Build artifacts
+*.jar
+*.war
+*.ear
+*.class
+
+# Kotlin / Gradle build dirs
+/build/
+/out/
+
+# Generated sources
+/generated-sources/
+**/generated-sources/
+
+# Protobuf / protoc generated
+/generated-sources/protobuf/
+**/generated-sources/protobuf/
+
+# Node/npm frontend (Vaadin/Frontend)
+/node_modules/
+/package-lock.json
+/yarn.lock
+/dist/
+
+# Snapshot artifacts
+**/*-SNAPSHOT.*
+**/*-SNAPSHOT.jar
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,63 @@
+[[adr-037]]
+= ADR-037: Archive Handover via SMTP Journal Copy
+
+== Status
+Accepted, 2026-10-08
+
+== Context
+<<adr-035,ADR-035>> makes archiving the operator's responsibility and recommends an immutable
+e-mail archive. Until now the application only recommended it: nothing handed the dispatched
+mail to that archive, and the journal could not show whether it arrived. The per-template BCC
+does not fill the gap: it is optional, editable by users, visible in the message header and
+leaves no result in the journal.
+
+The mail component also builds a signed archive package (`manifest.json`, original, Ed25519
+signatures) when a mail is sent. This looks like a conflict with ADR-035, which states that no
+archive package counts as an independent copy. It is not one: the package is an operational and
+evidence artifact of the component, not a retention medium.
+
+== Decision
+* *Interface*: the complete dispatched message (MIME/EML, byte-identical to the copy sent to
+  the customer, including PDF and XML) is delivered by SMTP to one archive address per
+  instance. Most mail archives accept journal mail, so the interface is vendor-neutral. A
+  push to an object store (package export) and a webhook were considered and are not built.
+* *Addressing*: the archive address is an additional envelope recipient (RCPT TO). It is not
+  part of any header, cannot be edited in a template and is invisible to the customer.
+  Only administrators can change it.
+* *Optional address*: without an address the status is `NOT_CONFIGURED` and a permanent notice
+  in the message center points to the missing setting.
+* *Per document family*: a switch for invoices and one for quotes, both on by default. A
+  disabled family gets the status `DISABLED`.
+* *Status axis*: `MailArchiveHandoverStatus` with `NOT_CONFIGURED`, `DISABLED`, `PENDING`,
+  `HANDED_OVER` and `FAILED`, separate from `MailArchiveStatus` of the signed package. The
+  contract changes additively (schema version 5); existing enum values are not extended
+  because consumers with an exhaustive `when` would break. Translation happens only in the
+  `acl` adapters.
+* *Trigger*: the durable outbox handler for `MailSent` performs the handover, not the inline
+  post-send hook, so a crash after sending does not lose it. `PENDING` becomes `HANDED_OVER`
+  when the archive server accepts the message (SMTP 250) and `FAILED` with the error text
+  otherwise. The result is committed to PostgreSQL before success is reported.
+* *No send lock*: a failed handover never blocks or reverts the dispatch to the customer
+  (warning instead of lock, as with the receipt budget). `FAILED` is retried automatically
+  with limited attempts and backoff; a manual retry exists on the journal endpoint. A failure
+  and a missing address raise a notice to administrators.
+* *Signed package kept*: the internal archive package remains as an evidence artifact of the
+  mail component. It is not a retention medium, and ADR-035 stays valid unchanged.
+
+== Consequences
+* The journal shows per mail whether the operator's archive accepted it. Acceptance by the
+  archive server is the receipt; the application does not check what the archive stores.
+* The operator still runs, secures and retains the archive (ADR-035); the application quotes
+  the interface and records the result.
+* A handover failure does not delay the customer's invoice; the cost is a window in which
+  the archive copy is missing until the retry succeeds or an administrator acts.
+* Quotes are handed over on the same path because they are business letters.
+* Delivery is at least once: if the process stops after the archive server accepted the copy
+  but before the result is stored, the retry sends it again. The archive then holds two copies
+  with the same Message-ID.
+* The archive address and switches live in the mail component's schema (baseline only);
+  the invoicing UI shows the status through a dedicated input port.
+* No vendor adapters, retention periods, WORM or object lock are added.
+
+'''
+_Architecture Decision Record — source: Product owner decision, 2026-10-08._

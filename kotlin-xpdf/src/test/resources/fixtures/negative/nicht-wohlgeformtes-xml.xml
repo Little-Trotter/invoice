@@ -1,0 +1,5 @@
+<!--
+  F5 — Negativ-Fixture: nicht wohlgeformtes XML (fehlender schliessender Tag).
+  Erwartung: SYNTAX=INVALID, kein Regel-ID (Parserabbruch vor ErrorHandler).
+-->
+<rsm:CrossIndustryInvoice><broken>

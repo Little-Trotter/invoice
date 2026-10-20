@@ -1,0 +1,49 @@
+@startuml pdf-rendering-pipeline
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam linetype ortho
+skinparam roundCorner 0
+skinparam nodesep 40
+skinparam ranksep 35
+
+skinparam rectangle {
+  FontSize 12
+  FontStyle bold
+  FontColor #ffffff
+  BorderColor #2D66B0
+  BackgroundColor #3C88EB
+}
+
+skinparam note {
+  FontSize 11
+  BackgroundColor #FEF5E0
+  BorderColor #E65100
+  FontColor #202124
+}
+
+skinparam arrow {
+  Color #5F6368
+  FontColor #202124
+  FontSize 11
+}
+
+rectangle "Engine-Neutral Report Model\n<color:#D5E8FF>Domain Facts + Formatted Data</color>" as Model #1A73E8
+
+rectangle "BasePdfRendererPort\n<color:#D5E8FF>Inbound Role Interface</color>" as Port #2D66B0
+
+rectangle "TypstInvoiceRenderer (Default)\n<color:#D5E8FF>Shipped Layout Engine (standard-invoice.typ)</color>\n• Flow layout & DIN 5008\n• Subprocess CLI (sandboxed)\n• Deterministic byte output\n• Optional GiroCode (EPC QR)" as Typst #0D9488
+
+rectangle "BasePdfStage Pipeline\n<color:#D5E8FF>Receipt Annex -> Mustang (Factur-X / PDF/A-3) -> veraPDF</color>" as Pipeline #1662C5
+
+Model -down-> Port
+Port -down-> Typst : Standard
+Typst -down-> Pipeline : Base PDF bytes
+
+note right of Typst
+  Sole layout engine.
+  Dynamic content-sized flow layout.
+end note
+
+@enduml

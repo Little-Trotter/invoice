@@ -1,0 +1,32 @@
+= Architecture Glossary: System Design, Standards & Domain Concepts
+:author: Project Initiator (https://github.com/eifel42[eifel42])
+:revnumber: 0.9.59-SNAPSHOT
+:revdate: {docdate}
+:description: Comprehensive technical glossary: System architecture concepts, domain-driven design, and e-invoicing standards for Little Trotter X-Invoice
+:doctype: book
+:toclevels: 2
+:sectanchors:
+:sectlinks:
+:sectnums:
+:sectnumlevels: 3
+:toc: left
+:docinfodir: docinfo
+:stylesdir: css
+:stylesheet: arc42-docs.css
+:linkcss:
+:experimental:
+:docinfo: shared-head
+:icons!:
+:source-highlighter!:
+:imagesdir: images
+:title-logo-image: image:little-trotter-horse.png[Little Trotter Logo: Stylized Horse,300,align="center"]
+:lang: en
+:toc-title: Table of Contents
+:project-name: Little Trotter X-Invoice
+:copyright: Copyright (C) 2026 https://github.com/little-trotter/invoice
+
+[abstract]
+.Abstract
+This document serves as the authoritative technical glossary for the system architecture, domain-driven design patterns, and e-invoicing standards of *Little Trotter X-Invoice*. It provides precise architectural definitions for engineering teams and technical reviewers.
+
+include::arc42/architecture-glossary-terms.adoc[]

@@ -1,0 +1,59 @@
+@startuml admin-tooling-architecture
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+' Straight segments (polyline) instead of ortho: ortho routing let relation labels cover
+' nodes and each other here; straight segments keep every arrow straight and readable.
+skinparam linetype polyline
+skinparam roundCorner 0
+skinparam nodesep 40
+skinparam ranksep 70
+
+skinparam rectangle {
+  FontSize 12
+  FontStyle bold
+  FontColor #ffffff
+  BorderColor #2D66B0
+  BackgroundColor #3C88EB
+}
+
+skinparam arrow {
+  Color #5F6368
+  FontColor #202124
+  FontSize 11
+}
+
+actor "DevOps / Operator" as DevOps #5F6368
+
+package "little-trotter-admin-tools (Operator Plane)" {
+  rectangle "lt CLI Suite\n<color:#D5E8FF>Headless & scriptable</color>\n(setup, build, backup, user, upgrade)" as LtCli #1A73E8
+  rectangle "lhorse TUI Commander\n<color:#D5E8FF>Interactive dashboard</color>\n(live status, logs, multi-instance)" as Lhorse #1A73E8
+  rectangle "DevOps Tooling & Scripts\n<color:#D5E8FF>Automation core</color>\n(pgBackRest, rclone, restic, age-encryption, Caddy certs)" as Scripts #5F6368
+  
+  LtCli -down-> Scripts : invokes
+  Lhorse -down-> Scripts : invokes
+}
+
+package "Target Server (Ubuntu / Linux Host)" {
+  rectangle "Caddy [native systemd]\n<color:#D5E8FF>Ports 80/443 (TLS edge)</color>" as Caddy #1662C5
+  rectangle "PostgreSQL 18 [native systemd]\n<color:#D5E8FF>Port 5432 (1 cluster, role-trios)</color>" as Postgres #1662C5
+  rectangle "RustFS [native systemd]\n<color:#D5E8FF>Port 9010 (S3 API, buckets)</color>" as RustFS #1662C5
+  
+  package "Docker Compose (per Instance: prod|dev|demo)" {
+    rectangle "App Layer Containers\n<color:#202124>little-trotter-invoice, worker, xpdf, nats, valkey</color>" as AppLayer #81B2F2
+  }
+}
+
+rectangle "Off-site / SSD Backup\n<color:#202124>age-encrypted archives</color>" as Backup #9AA0A6
+
+DevOps -down-> LtCli : "lt setup | build | upgrade"
+DevOps -down-> Lhorse : "lhorse (interactive TUI)"
+
+Scripts -down-> Caddy : manages vhosts
+Scripts -down-> Postgres : runs backups & migrations
+Scripts -down-> RustFS : verifies buckets & syncs
+Scripts -down-> AppLayer : controls lifecycle (up/down)
+Scripts -down-> Backup : copies archives
+
+@enduml

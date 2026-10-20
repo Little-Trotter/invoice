@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LoopWithTooManyJumpStatements:MoneyArchitectureTest.kt$MoneyArchitectureTest$for</ID>
+    <ID>LoopWithTooManyJumpStatements:PdfTableGeometry.kt$PdfTableGeometry$for</ID>
+    <ID>PrintStackTrace:ConcurrentRenderMemoryHarness.kt$t</ID>
+    <ID>TooGenericExceptionCaught:EmbeddedKositValidator.kt$EmbeddedKositValidator$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ExportCompletionStage.kt$ExportCompletionStage$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:JobConsumer.kt$JobConsumer$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:JobDispatcher.kt$JobDispatcher$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:LlmAnalysisStage.kt$LlmAnalysisStage$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MlxClient.kt$MlxClient$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:MlxVisionClient.kt$MlxVisionClient$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:MustangPdfRenderer.kt$MustangPdfRenderer$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:MustangTransactionBuilder.kt$MustangTransactionBuilder.&lt;no name provided&gt;$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:ReceiptAnnexBuilder.kt$ReceiptAnnexBuilder$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:RenderWarmup.kt$RenderWarmup$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ResultPublisher.kt$ResultPublisher$e: Exception</ID>
+    <ID>TooGenericExceptionThrown:DocumentJobPipelineIT.kt$DocumentJobPipelineIT.&lt;no name provided&gt;$throw RuntimeException("disk quota exceeded for $jId")</ID>
+  </CurrentIssues>
+</SmellBaseline>

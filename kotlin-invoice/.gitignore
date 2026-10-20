@@ -1,0 +1,16 @@
+# Maven build output
+target/
+
+# Vaadin/npm generated files and caches
+node_modules/
+package-lock.json
+vite.generated.ts
+vite.config.ts
+.vaadin-node-tasks.lock
+src/main/frontend/generated/flow/generated-flow-imports.js
+src/main/frontend/generated/flow/generated-flow-imports.d.ts
+src/main/frontend/generated/flow/generated-flow-webcomponent-imports.js
+src/main/frontend/generated/theme.js
+src/main/frontend/generated/theme.d.ts
+src/main/frontend/generated/theme-*.generated.js
+src/main/frontend/generated/jar-resources/

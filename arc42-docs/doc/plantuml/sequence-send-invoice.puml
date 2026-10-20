@@ -1,0 +1,42 @@
+@startuml sequence-send-invoice
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+database "PostgreSQL\n<size:10>[Database]</size>" as DB
+queue "NATS JetStream\n<size:10>[Stream: document-jobs]</size>" as JobQueue
+participant "kotlin-xpdf" as Renderer
+database "RustFS\n<size:10>[Object Store]</size>" as S3 <<storage>>
+queue "NATS JetStream\n<size:10>[Stream: document-job-results]</size>" as ResultQueue
+
+OfficeManager -> WebApp: click "Send"
+WebApp -> DB: persist GenerationJob\n(trigger=SEND, issued=true, PENDING)
+WebApp --> OfficeManager: send requested\n(invoice stays IN_REVIEW)
+WebApp -> JobQueue: publish job
+JobQueue -> Renderer: render + validate e-invoice
+Renderer -> S3: store documents
+Renderer -> ResultQueue: publish result
+ResultQueue -> WebApp: deliver result
+WebApp -> DB: mark job COMPLETED/FAILED
+
+alt job COMPLETED and validation VALID
+  WebApp -> WebApp: resolveSendOutcome:\ntransition(id, ISSUED)
+  WebApp -> DB: stamp date, freeze payment term,\nassign number, flip status
+  WebApp --> OfficeManager: push status: ISSUED
+else job FAILED, or COMPLETED but INVALID/UNAVAILABLE
+  WebApp -> DB: message-center entry\n(invoice unchanged)
+  WebApp --> OfficeManager: push notification: send failed
+end
+
+note over OfficeManager, WebApp
+  Manual escalation, not part of the automated flow above: if validation resolved
+  UNAVAILABLE (the validation tooling itself was unreachable, not a data defect),
+  the Office Manager may still send with an audited override reason — the pre-existing
+  FinalizationGate override, reusing the already-COMPLETED job's document; the
+  same call the Invoice Lifecycle State Machine's IN_REVIEW -> ISSUED edge always
+  used before this feature. INVALID/PENDING/NOT_VALIDATED remain non-overridable.
+end note
+
+$SequenceStorageLegend()
+@enduml

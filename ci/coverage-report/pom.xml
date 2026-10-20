@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>de.littletrotter</groupId>
+    <artifactId>little-trotter-invoice-parent</artifactId>
+    <version>0.9.59-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+  <groupId>de.littletrotter</groupId>
+  <artifactId>coverage-report</artifactId>
+  <packaging>pom</packaging>
+
+  <name>coverage-report</name>
+  <description>
+    Project-wide JaCoCo coverage report. Carries no code of its own: it depends on every module
+    that produces exec data and runs jacoco:report-aggregate over the union, so one report covers
+    unit tests, integration tests and the E2E suite together instead of four per-module reports
+    that each see only their own slice.
+
+    Every module funnels surefire, failsafe AND the Quarkus test JVM into a single
+    target/jacoco.exec (quarkus.jacoco.data-file + reuse-data-file in the app's
+    application.properties), so report-aggregate's default exec discovery already picks up the
+    complete picture per module — no jacoco:merge step is needed.
+
+    This module must stay LAST in the parent's module list: report-aggregate reads the exec files
+    and class output of its dependencies, so every one of them has to be built and tested first.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-shared</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- Shared ArchUnit rules; test scope like every other consumer (root POM enforcer). -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-architecture-rules</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Mail contract (published language, ADR-015/016). -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-mail-contract</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- Document job contract (wire DTOs, subjects, codec). -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-document-job-contract</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-masterdata-contract</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-quote-contract</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-edge-identity</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-quotation-xml</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-xpdf</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- Free-text editor + chip row Vaadin component jar, extracted out of kotlin-invoice. -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-ui-components</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-invoice</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- Test-only module: contributes no classes of its own, but its exec data records coverage
+         of the other modules' classes, which is exactly what makes this an E2E-inclusive report. -->
+    <dependency>
+      <groupId>de.littletrotter</groupId>
+      <artifactId>kotlin-e2e-tests</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- This module is a pure aggregator: no src/, no migrations, nothing for the per-module
+           lint gates to read. They reach it by inheritance from the parent's exec-maven-plugin
+           block, and detekt fails outright on a directory that does not exist — which is what
+           made `mvn verify` fail in its very last reactor project. `inherited=false` on the
+           parent side does NOT prevent this (verified against the effective pom): Maven hands
+           the executions down regardless. Switched off explicitly here
+           rather than by narrowing the parent, so a module that DOES carry sources keeps getting
+           the gates by default. MavenExecGatesTest (kotlin-shared) pins the pairing. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>ktlint-check</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>detekt-check</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>detekt-baseline-ratchet</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>sqlfluff-check</id>
+            <phase>none</phase>
+          </execution>
+          <!-- Every source file must reach 90 % lines in the total report, not only the bundle:
+               a bundle average hides single files with large gaps. Measured per source file, so a
+               Kotlin Companion or DefaultImpls counts towards the file it is written in. Runs in
+               verify, after the total report written in post-integration-test. -->
+          <execution>
+            <id>class-coverage-gate</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <skip>${jacoco.gates.skip}</skip>
+              <executable>python3</executable>
+              <arguments>
+                <argument>${maven.multiModuleProjectDirectory}/ci/scripts/quality/coverage-per-class.py</argument>
+                <argument>--threshold</argument>
+                <argument>0.90</argument>
+                <argument>${project.build.directory}/site/jacoco-aggregate/jacoco.xml</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco-maven-plugin.version}</version>
+        <executions>
+          <!-- The parent's pluginManagement defines prepare-agent/report/check for the modules
+               that actually run tests. This module runs none, and a BUNDLE check over an empty
+               bundle would fail the build, so all three are unbound here by id. -->
+          <execution>
+            <id>prepare-agent</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>check</id>
+            <phase>none</phase>
+          </execution>
+
+          <execution>
+            <id>aggregate-report</id>
+            <phase>post-integration-test</phase>
+            <goals>
+              <goal>report-aggregate</goal>
+            </goals>
+            <configuration>
+              <title>little-trotter-invoice — total coverage (unit + IT + E2E)</title>
+              <outputDirectory>${project.build.directory}/site/jacoco-aggregate</outputDirectory>
+              <!-- Only genuinely GENERATED code, plus dev-only tooling that never ships (see the
+                   AP-IMP-6 exclude below), is excluded here. The per-module BUNDLE gates also
+                   carry **/*_.class and **/*$$*, but those two must not be reused for a total
+                   report: measured against this reactor they drop 368 real classes, including
+                   every Kotlin Companion (59) and DefaultImpls (25) — compiled code that carries
+                   real branches. The total has to count them. -->
+              <excludes>
+                <exclude>**/de/littletrotter/shared/proto/**</exclude>
+                <exclude>**/dagger/**</exclude>
+                <exclude>**/*Dagger*.class</exclude>
+                <!-- AP-IMP-6, PO-Entscheid 31.08.2026 — de.littletrotter.infrastructure.dev
+                     (DevDataFixtures) is developer-only demo-data seeding, not product code: its
+                     one entry point (onStart) is hard-gated on `launchMode != DEVELOPMENT` and is
+                     therefore a no-op in every build that ships, so it must not count towards
+                     product coverage. The per-module BUNDLE gate in kotlin-invoice/pom.xml already
+                     excludes this package for the same reason; this mirrors that decision in the
+                     aggregate report, which the BUNDLE excludes list does not otherwise reach. -->
+                <exclude>**/de/littletrotter/infrastructure/dev/**</exclude>
+              </excludes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!-- Same activation as the root with-email profile: the mail modules join the aggregate only
+         when they are in the reactor. -->
+    
+
+    <!-- Same activation as the root with-quote profile. -->
+    
+  </profiles>
+</project>

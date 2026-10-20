@@ -1,0 +1,73 @@
+[[adr-020]]
+= ADR-020: NATS JetStream as the Event Backbone
+
+== Status
+Accepted
+
+== Context
+PDF/XML generation between `kotlin-invoice` and `kotlin-xpdf` is asynchronous and needs a message
+broker as its backbone (<<_messaging_event_driven_architecture,Messaging>> in Chapter 8 and
+<<adr-008,ADR-008>>). The deployment target is a single dedicated Linux server on small-budget
+hardware — a mini PC in a small business, running the whole stack without a separate monitoring
+cluster (<<_deployment_view,Deployment View>>) — and every service in it, including the broker,
+declares an explicit memory limit (<<_architecture_constraints,Architecture Constraints>>). A
+JVM-based broker's baseline heap and coordination overhead sit in direct tension with that
+budget.
+
+== Decision
+NATS, with JetStream as its persistence layer, is the event backbone for job/result exchange
+between `kotlin-invoice` and `kotlin-xpdf`. This keeps an event-driven architecture affordable on
+small hardware, which is the Green-IT idea behind the choice: a small footprint, a single static
+binary with no external coordination service of its own, and JetStream (built into NATS Server
+2.2+) adding durable streams, acknowledgements and replay on top of that same binary rather than
+requiring a separate persistence tier. The deployment table
+(<<_server_deployment_production_style_target,Server Deployment>>) prices the `nats` service at
+128 MiB (96 MiB under the small-footprint overlay) — the same order of magnitude as `valkey` and
+well under `postgres`, `rustfs` or the application tier, a footprint a JVM broker plus its own
+coordination layer (ZooKeeper, or KRaft's controller quorum) could not match on the same box.
+
+A medium-sized enterprise or larger organization, running this system's architecture at a scale
+that outgrows a single small-budget host, can switch to Kafka. Neither RabbitMQ nor a plain
+database job table is a better fit at that scale either: both cover the same job/result queue need
+with more to run and back up, or with weaker push and dedup properties, than NATS with JetStream
+offers today. A managed cloud queue is excluded outright by the self-hosting requirement
+(<<_technical_constraints,Technical Constraints>>).
+
+The envelope principle (<<adr-008,ADR-008>>) keeps everything broker-specific out of business
+logic — only small typed reference structures cross NATS, never documents or reports — so a broker
+swap is a messaging-adapter concern, not a domain one. The messaging contract itself is thin: two
+logical queues (jobs, results) plus one DLQ per queue, which bounds a Kafka switch to subjects
+becoming topics, durable pull consumers becoming Kafka consumer groups, the `Nats-Msg-Id` dedup
+window becoming Kafka's idempotent-producer configuration, DLQ subjects becoming DLQ topics, a
+partitioning key preserving per-job ordering, and each side's already-isolated NATS client code
+being where the adapter changes land: both `kotlin-invoice` and `kotlin-xpdf` keep every class
+that talks to the broker in its own dedicated `infrastructure.messaging` package, so a broker swap
+touches one package per module. Retry/backoff and DLQ routing are hand-implemented rather than
+framework-driven (<<adr-010,ADR-010>>) and are transport-adjacent, not broker-specific, so they
+carry over unchanged.
+
+== Consequences
+
+=== Positive
+* The broker's own resource cost stays proportional to a small deployment (single binary, roughly
+  100 MiB memory budget), leaving headroom for the application and rendering tiers on constrained
+  hardware.
+* One operational surface (one binary, one data volume) instead of a broker plus a separate
+  coordination service.
+* The envelope principle and the thin jobs/results/DLQ contract bound what a Kafka switch would
+  touch to a small, enumerable list of adapter changes.
+
+=== Negative
+* NATS's ecosystem (connectors, schema registries, stream-processing frameworks) is smaller than
+  Kafka's; anything beyond the job/result/DLQ shape this project needs would likely have to be
+  hand-built rather than bolted on.
+
+=== Mitigation
+* The adapter-only exposure (subjects, consumer groups, dedup, DLQ, ordering, client placement) is
+  documented here precisely so a Kafka switch has a checklist rather than a rediscovery exercise.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/NatsStreamSetup.kt`,
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/infrastructure/messaging/JobConsumer.kt`,
+`little-trotter-admin-tools/docker-compose.yml` (`nats` service)._

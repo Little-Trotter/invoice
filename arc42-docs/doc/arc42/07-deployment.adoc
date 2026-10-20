@@ -1,0 +1,618 @@
+= Deployment View
+
+The target environment is called the **server** throughout this document. The primary target is
+an Ubuntu server; a dedicated single-instance host (a mini PC or any other standalone machine
+serving one operator) is the second supported shape, covered in
+<<_dedicated_single_instance_host_mini_pc,Dedicated Single-Instance Host>> below. This
+repository's own `docker-compose.yml` is the minimal product stack — the application, the
+renderer/worker, and the four infrastructure services it needs (PostgreSQL, RustFS, NATS,
+Valkey), no TLS proxy, no monitoring, no hardening overlays. The full production-style deployment
+described in this chapter — native Postgres/RustFS/Caddy, the instance overlay, backups, and
+monitoring — is assembled by the sibling, private `little-trotter-admin-tools` repository, which
+layers its own Compose overlays and native-install scripts on top of this repository's base file
+rather than duplicating it. Every path below prefixed `docker/compose/` or `admin-tools/`
+therefore refers to that sibling repository, checked out alongside this one.
+
+The container images carry no heap or GC flags. The Compose file is the single source for them, through `JAVA_TOOL_OPTIONS` of each service; every entry also sets `-XX:+ExitOnOutOfMemoryError` so that a container that ran out of memory is restarted instead of lingering.
+
+Productive use is a server installation by an IT service provider, following the Ubuntu server
+deployment described below. This repository's `make dev` compose stack is meant for evaluation
+and development only.
+
+== Server Deployment (Production-Style Target)
+
+.Server deployment
+image::c4-server-deployment.svg[C4 deployment diagram of the Ubuntu server: native shared services and one Docker Compose project per instance]
+
+On the Ubuntu server, PostgreSQL 18, RustFS, and Caddy run *natively* under systemd — one
+installation of each, shared by every instance on the box — instead of as Docker containers.
+Only the application layer (`little-trotter-invoice`, `little-trotter-job-worker`, `kotlin-xpdf`,
+NATS JetStream, Valkey) is Docker Compose, running as *one compose project per instance*
+(`little-trotter-prod`/`little-trotter-dev`/`little-trotter-demo`), each with its own Docker
+subnet and its own database, bucket, and role-trio on the shared native services. Caddy is the
+stack's only externally exposed edge: one shared installation generates one HTTPS vhost per
+instance (ports `443`/`80`), reverse-proxying to that instance's own `little-trotter-invoice`
+container on a loopback-only port — every other container, native or Docker, stays unreachable
+from outside the server. Authentik and the monitoring stack (Prometheus/Grafana) are shared
+Docker services outside every instance project: Authentik is the identity provider for the
+Office Manager login of every instance (`little-trotter-invoice` runs as a Quarkus OIDC web-app client
+against it, the application itself decides who may do what) and additionally gates the separate admin site; monitoring
+scrapes every instance's metrics endpoint.
+
+Instance ports follow one offset scheme (`prod` +0, `dev` +10000, `demo` +20000) — for example
+the application's loopback port is `8080`/`18080`/`28080` and NATS' client port is
+`4222`/`14222`/`24222` — while the two shared native services keep one fixed port each,
+independent of instance count: PostgreSQL `5432` and RustFS `9010`.
+
+[cols="2,2,2,3", options="header"]
+|===
+|Service |Runtime |Network / Port(s) |Notes
+
+|`caddy`
+|*Native (systemd)*, shared
+|all interfaces, `443`/`80` per instance vhost (only ports reachable beyond `127.0.0.1`)
+|One installation for the whole server; `install-caddy-ubuntu.sh` regenerates one vhost per
+configured instance.
+
+|`postgres`
+|*Native (systemd)*, shared
+|`127.0.0.1:5432` (one cluster)
+|One database + role-trio (`lt_migrator_<instance>`/`lt_app_<instance>`) per instance; adopted or
+freshly created by `install-postgres-ubuntu.sh`.
+
+|`rustfs`
+|*Native (systemd)*, shared
+|`127.0.0.1:9010` (S3 API)
+|One bucket per instance (`invoice-documents[-dev\|-demo]`); adopted or freshly created by
+`install-rustfs-ubuntu.sh`.
+
+|`little-trotter-invoice`
+|Docker, per instance
+|`127.0.0.1:8080`/`18080`/`28080` (Caddy's proxy target only)
+|1200M memory limit, `pids: 512`; reaches native Postgres/RustFS via `host.docker.internal`.
+
+|`little-trotter-job-worker`
+|Docker, per instance
+|none (no UI, no externally reachable port)
+|432M memory limit, `pids: 512`.
+
+|`kotlin-xpdf`
+|Docker, per instance
+|none (internal REST only, never fronted by Caddy)
+|768M memory limit, `pids: 512`.
+
+|`verapdf`
+|Docker, per instance
+|none (`http://verapdf:8080`, internal network only, called by `kotlin-xpdf`)
+|768M memory limit, 512M heap, `pids: 256`; dedicated container for asynchronous PDF/A-3b conformance (<<adr-041,ADR-041>>).
+
+|`nats`
+|Docker, per instance
+|`127.0.0.1:4222`/`14222`/`24222` (client), `127.0.0.1:8222`/`18222`/`28222` (monitoring)
+|128M memory limit; one JetStream broker per instance, never shared.
+
+|`valkey`
+|Docker, per instance
+|none published
+|192M memory limit; deliberately the one Docker-native infrastructure service — a disposable
+cache, not shared state.
+
+|Authentik
+|Docker, shared (adopted or own containers)
+|reached through Caddy; admin site on `:8444`
+|OIDC identity provider for the Office Manager login of every instance (Quarkus OIDC web-app client);
+additionally the forward-auth gate of the admin site (Prometheus).
+
+|Monitoring
+|Docker, shared (adopted or own containers)
+|`127.0.0.1:9090`/`3000`-class, SSH tunnel only
+|Prometheus + Grafana (`admin-tools/monitoring/`), scrapes every instance.
+|===
+
+`kotlin-xpdf`'s image renders with the pinned Typst CLI only (<<adr-030,ADR-030>>); there is no
+second layout engine, no engine switch and no optional build profile for one.
+
+PostgreSQL and RustFS keep their data directly on the server's own filesystem, outside Docker's
+storage driver (systemd-managed data directories, not named volumes) — one reason they are native:
+independent backup, resize, and migration. The Docker-side volumes that remain are per instance and
+named per compose project, so three instances never collide. `little-trotter-invoice`'s own
+`backups-data:/backups` volume is where DevOps's cron-triggered backup run (see
+<<_operations_and_admin_tooling_little_trotter_admin_tools,Operations and Admin Tooling>> below)
+writes its archives before `backup.sh` copies them off; the USB SSD copy at the server is the same 7z export,
+copied 1:1 (<<_backup_v5,Backup v5>>).
+
+Backups serve recovery, not archiving; retention is covered by the operator's archive
+(<<adr-035,ADR-035>>). Disk encryption at rest (for example LUKS) of the host is the operator's
+responsibility; the AES-256 of the 7z export archives protects the copies.
+
+Reaching the server: `sudo lt-setup build prod|dev|demo` resolves that instance's ports,
+installs/adopts native Postgres, RustFS, and Caddy, adopts monitoring and Authentik if present,
+and deploys the instance's Docker Compose project (`QUARKUS_PROFILE=prod`, scheduler enabled on
+both Quarkus services).
+
+[[_backup_v5]]
+=== Backup v5: Pickup Directory, Verification, Sunday Window
+
+Normative for backup behaviour; the working specification is `docs/betrieb-docs/backup-abholung-generationen.md`
+(section 14, Rev. 8) in `little-trotter-admin-tools`. Backups serve recovery, not archiving (no retention or WORM
+guarantee, see above).
+
+* *Read-only export.* Every generation is written finished and verified into one export directory,
+  `/backups/little-trotter/<instance>/abholung/` on disk (internal name), published as the Samba share
+  `sicherung-<instance>` (read-only, drive `S:`, SMB3, one dedicated user): `BITTE-LESEN.txt`, `STATUS.txt`,
+  `PRUEFSUMMEN.txt` per folder (signed with `ssh-keygen -Y`, namespace `lt-export`), the generated copy scripts,
+  `Aktuell/` (exactly one daily 7z, replaced atomically only after the new archive passed its checks), `Monat/` (12),
+  `Jahr/` (open) and `Rueckmeldung/`, the only writable folder (second share `rueckmeldung-<instance>`, text files only).
+  Users copy it themselves; the manual step is deliberate (offline copy, known place, evidence). Little Trotter writes,
+  the operator reads (group `lt-abholung`).
+* *Generations.* Daily: restic repository, internal only (`intern/daily`, always encrypted, `forget --keep-daily 14`)
+  holding the object mirror, the pgBackRest repository and the staging area. Export: AES-256 7z with encrypted file
+  names (`-mx=0 -ms=off -mhe=on`, `LittleTrotter_<Betrieb>_<Tag|Monat|Jahr>_<date>.7z`), openable with standard tools; inside
+  `WIEDERHERSTELLEN.txt`, `INDEX.csv` (year, kind, file, original object key, size, SHA-256), `Datenbank/dump.pgcustom` +
+  `dump.sql`, `Belege/<Jahr>/{Rechnungen,Eingang,Sonstiges}/`, `Lauf/`. The year of a document comes from the database
+  (`invoice_date`, `document_date`), never from file times. No weekly generation. Restore: `restore.sh --export`.
+  `age` is no longer used for any export.
+* *Copy chain.* (1) The server SSD (live data, restic). (2) A USB SSD permanently plugged into the server (exFAT, systemd
+  automount with idle unmount, `backup-usb.sh`: `.part` -> verify -> rename -> unmount, SMART via `smartctl -d sat`, alarm class `hardware`).
+  (3) A workstation copy: Windows `robocopy` + `schtasks`, macOS `rsync` + `launchd`, target OneDrive or iCloud Drive; the scripts verify
+  the checksums and report back through `Rueckmeldung/<computer>.txt` (strictly parsed, never executed). (4) Monthly burn to BD-R or M-DISC,
+  or a USB drive stored off site. Media: USB SSD of a brand manufacturer, at least 1 TB; sticks and microSD cards are excluded as the only medium.
+  The server reads the feedback into STATUS and `status.json`; after 14 days without a successful copy the application shows the
+  "contact support" banner.
+* *Stock check (inventory check).* Before each run the live data is checked: PostgreSQL page
+  checksums and `pg_stat_database.checksum_failures`, `pg_amcheck` (indexes daily, heap and indexes
+  on Sundays), DB-to-RustFS object existence, rotating SHA-256 comparison of RustFS content against
+  `sha256_checksum` (full coverage weekly), orphan objects on Sundays (report only, never delete).
+  A finding never prevents the backup; the run is marked `inventory=error` and monitoring alerts.
+* *Per-run order.* Inventory check -> maintenance window (pgBackRest backup, `rclone sync` into the object mirror, caddy-data, sealed run record) -> deep verification of
+  the new run (every run, no longer Sunday only) -> export (restic, `Aktuell/`, `Monat/`, `Jahr/`) -> USB SSD copy (a failure is a warning, never a red backup) -> database
+  maintenance, only after a successful verification: `VACUUM (ANALYZE)` on Sundays,
+  `REINDEX INDEX CONCURRENTLY` only on `amcheck` findings or index bloat above 30 %, never an
+  automatic `VACUUM FULL`.
+* *Schedule.* `LT_BACKUP_TIME` (HH:MM, per installation, instance env) sets the start; the duration
+  estimate is 3x the maximum of the last 14 runs, at least 2 h. With `host-shutdown` active, start
+  plus estimate must end before `stack-stop`; a shutdown waits for the backup lock (max. 4 h) and a
+  deferral is reported. A missed run is caught up at the next start (last success older than 26 h).
+* *Status interface.* The orchestrator alone writes `status.json` (atomic, schema 3) into the instance backup
+  directory; monitoring, the System tab tile "Datensicherung" and the Sunday window only read it.
+  The application mounts that directory read-only (`LITTLETROTTER_BACKUP_BASE_DIR`, property
+  `littletrotter.backup.base-dir`); a missing or unreadable file renders as "keine Daten", `ALARM.txt`
+  next to it is shown as a hint. Values are English machine values: result `ok`/`warning`/`error`/`skipped`,
+  steps `inventory`/`backup`/`verify`/`pickup`/`maintenance`/`pgbackrest`/`mirror`, inventory object under `inventory`.
+  Additive blocks (readers ignore unknown ones): `copies` (`state` none/ok/stale/error, `banner`, `workstations[]`, written by the export step from `Rueckmeldung/`) and `usb`
+  (`state` absent/running/ok/error, `last_ok_at`, `fstype`, `free_bytes`, `smart`); step `usb`.
+  Schema 3 adds block `pitr` (`result`, `last_full_at`, `last_incr_at`, `wal_until`, `restorable_from`) and
+  block `mirror` (`result`, `synced_at`, `objects`, `bytes`, `free_bytes`, `disk_warning`). Readers accept schema 3 only.
+* *Operating model.* The host runs 24/7. The Sunday window (`LT_SUNDAY_WINDOW`, on for native
+  installs) runs after a fully successful backup: `VACUUM`, bundled
+  package upgrades, reboot, start check, at most one automatic second reboot, then alarm. A failed
+  backup or verification means no upgrade and no reboot. Daily only security updates
+  (`unattended-upgrades`); kernel, `docker-ce`, `containerd.io` and `postgresql-*` are held back
+  and updated only as a bundle in the window. No automatic application image updates (`lt update`
+  with occasion backup only).
+* *Container watchdog.* A systemd timer (5 min) restarts a container only after three consecutive
+  `unhealthy` checks, at most twice per hour per container, then alarms instead of looping.
+* *Update rings.* Each `lt-tools` version pins a tested package snapshot. R0 (test host and
+  reference device, one week ahead), R1 (10 % of installations), R2 (rest, one week later).
+
+Restore drill: every maintenance window opens the newest export archive and checks the dump and every document against `INDEX.csv`
+(`restore.sh --export`) before anything is changed.
+
+Open decisions (not implemented, no assumptions made): *F2* local retention 7+4 reduced to 3;
+*F4* yearly archives and their retention; *F7* back channel for ring status and alarms after the
+maintenance window, which decides whether a failure in R0/R1 can stop R2 automatically.
+
+[[_backup_cockpit]]
+=== Backup Cockpit and Simplified Installation
+
+Backups serve recovery, not archiving. The cockpit only reads the `status.json` (schema 3) and `alarm.json`
+written by the backup orchestrator (<<_backup_v5,Backup v5>>); it never writes backup state. It shows
+"restorable from … to …" from the `pitr` block; a `pitr` or `mirror` error is red, `disk_warning` is yellow.
+
+* *`lt backup status [--instance NAME] [--json]`.* Traffic light (green/yellow/red) per instance
+  with one main reason plus all findings; with `--instance` the detail view (steps, generations,
+  inventory check, pickup directory, schedule, operation, alarm). Exit code 0 green, 1 yellow,
+  2 red, 3 state unreadable (red wins over unreadable when instances differ); `--json` for
+  monitoring and lhorse. Read-only: needs only the readable instance state, no `LT_HOME` or
+  compose directory.
+* *`lt backup verify`, `lt backup share install|status|remove`.* `verify` checks the newest run
+  (`--deep` also test-restores). `share` wraps the pickup-directory Samba share; `install` and
+  `remove` need `sudo`, and the share stays a deliberate operator action, not part of `lt setup`.
+* *`sudo lt backup handover --instance NAME`.* Shows the handover sheet with the archive password
+  (7z) and the restic password. Root and TTY only; no file is written and no JSON output exists.
+  The operator stores both in KeePass as "Backup / Archiv-Passwort (7z)" and
+  "Backup / Sicherungs-Passwort (restic)".
+* *`lt maintenance status|unlock [--instance NAME]`.* `status` shows the Sunday window (last run,
+  second-reboot counter) and the reboot lock. `unlock` lifts the permanent reboot lock; support
+  action via `sudo`, requires `--yes` or the instance name, and is logged in the instance journal.
+* *lhorse.* The web API `GET /api/backups` returns the same per-instance data as
+  `lt backup status --json`; it is read-only, contains no secrets and is not restricted to
+  Tailscale. The panel "Datensicherung" (web and TUI) polls every 60 s and shows the traffic
+  light, main reason, generations, pickup directory, operation and alarm. The web panel can start a
+  verification job; restore, `maintenance unlock`, `share` and `handover` are not available in
+  lhorse, which shows the matching `lt` command instead.
+
+`lt setup` runs the following steps; `lt setup --answers FILE` (env format, keys = flag names,
+implies `--yes`, no passwords or secrets accepted) and `lt setup --profile customer` (ACME TLS,
+no mail, deploy) make it repeatable for fleets. Precedence: command-line flag, answer file,
+profile, default. Operating values go to both the repo `.env` and the instance env
+(`/etc/little-trotter/<instance>.env`); if the instance env is not writable, `lt setup` aborts
+with a non-zero exit (`--dry-run` changes nothing).
+
+[cols="1,3", options="header"]
+|===
+|Step |Content
+
+|Provision |Base provisioning and host operations (watchdog, update policy).
+|Secrets |Instance secrets plus the backup password files (restic and archive, mode 0600).
+|E-Mail |Optional mail component; asks for the alert address (`MAIL_ALERT_TO`, empty allowed with a warning).
+|Wording |Wording profile.
+|TLS |Internal CA or ACME.
+|Betrieb |Operating mode (24/7 or evenings off; derives `LT_BACKUP_TIME` and the Sunday window), support contact.
+|Datensicherung |Optional age recipient, data directory, cron jobs derived from the operating mode; ends with the handover sheet, shown once and acknowledged.
+|Deploy |Deploys the stack.
+|Abnahme |Full backup run (inventory check, backup, verification, pickup), then reads `status.json`: green accepts, yellow accepts with findings, red fails with exit code != 0 while the stack keeps running. Not skippable.
+|Abschluss |Summary with follow-up steps as `lt` commands, e.g. `sudo lt backup share install --instance prod`.
+|===
+
+[[_dedicated_single_instance_host_mini_pc]]
+=== Dedicated Single-Instance Host (Mini PC)
+
+The second deployment shape is one machine for one deployment: a mini PC that serves a single
+operator. It runs this repository's `docker-compose.yml` as it is — no instance model, no
+shared native services — so every service is a container, PostgreSQL, RustFS and Caddy included.
+Caddy sits on `proxy-net` and is the only service with published ports; everything else lives on
+`invoice-net`, reachable from the host on `127.0.0.1` at most.
+
+[cols="2,2,1", options="header"]
+|===
+|Service |Reachable at |Memory limit
+
+|`caddy` |`80`, `443` (the only ports open beyond localhost) |128M
+|`little-trotter-invoice` |via Caddy only |1200M
+|`little-trotter-job-worker` |not reachable (no UI) |432M
+|`kotlin-xpdf` |internal only |768M
+|`postgres` |`127.0.0.1:5432` |768M
+|`rustfs` |`127.0.0.1:9000` (S3), `127.0.0.1:9001` (console) |400M
+|`nats` |`127.0.0.1:4222`, `127.0.0.1:8222` |128M
+|`valkey` |not published |192M
+|===
+
+Every container carries a memory limit (about 3.9 GB in total) and the application tier a `pids`
+limit; a tighter overlay for smaller machines brings the total down to about 2.6 GB. Database and
+object-store data live on bind mounts under `/srv/little-trotter`, so they survive a full
+container and image cleanup. The stack is deployed with `make -C admin-tools deploy`, which picks
+the hardware overlay automatically and can pull published images instead of building them.
+
+[NOTE]
+.Host Memory Sizing
+====
+* *16 GB RAM (Recommended Reference Machine):* Commercial standard for smooth, headroom-safe production operation.
+* *At least 10 GB RAM (Operational Minimum):* Required for regular operation with attachment-heavy invoices (combined documents per ADR-039), where embedded receipt pages are rasterised and validated through the full validation pipeline (XSD, Schematron, KoSIT, and veraPDF).
+* *8 GB RAM (Minimal Configuration for Testing):* Suitable strictly as a minimal setup for development, testing, evaluation, or simple invoices without heavy receipt attachments, or when memory-intensive validation stages are not active.
+====
+
+The memory limit above is a hard ceiling: `little-trotter-invoice` and `little-trotter-job-worker`
+both run with `-XX:+ExitOnOutOfMemoryError`, so a burst of concurrent PDF/XLS/report generation work
+that exceeds it kills the whole process rather than degrading. The
+`invoice.generation.bulkhead.max-concurrent-calls` knob
+(`INVOICE_GENERATION_BULKHEAD_MAX_CONCURRENT_CALLS` / `_WORKER`, see `docker-compose.yml`) exists to
+keep worst-case concurrent generation work under whichever memory limit a given overlay configures;
+a rejected call fails cleanly into the existing durable `PENDING` job record
+(<<_generate_e_invoice,Generate E-Invoice>>) rather than dropping work or risking the OOM kill.
+Interactive document jobs pass a separate bulkhead,
+`invoice.generation.interactive-bulkhead.max-concurrent-calls`
+(`INVOICE_GENERATION_INTERACTIVE_BULKHEAD_MAX_CONCURRENT_CALLS`, default 4), so a full bulk bulkhead
+never rejects them; its memory share counts on top of the bulk limit. On the `kotlin-xpdf` side,
+`JOB_INTERACTIVE_WORKER_THREADS` (default 1) adds the interactive render threads, which the derived
+bulk thread count already subtracts from the heap budget.
+`docker-compose.yml`'s own comment on that variable carries the sizing arithmetic for this
+repository's default limits; a hardware overlay that lowers the memory limit further (as this
+section's mini-PC table does) must lower this knob to match, which is out of this repository's scope
+to prescribe for a sibling repository's overlay.
+
+== Optional Mail Dispatch Container
+
+The mail dispatch component (`kotlin-email`, see
+<<_building_block_view,Building Block View>>) sends invoices by email. It is a separately built
+and deployed container so this bounded context — templates, provider SMTP, an append-only send
+journal, signed archive packages — has its own release cycle and failure domain, and so an
+instance can run with or without it: mail dispatch is never on the invoicing application's
+critical path.
+
+It plugs into the stack the same way the optional Factur-X engine overlay (standby, kept but not
+developed further) does — an `email` Compose profile in admin-tools, switched on per instance by one
+flag (`LT_MAIL_ENABLED`; in development `make dev` starts it by default, `EMAIL=0` opts out) — with
+no port published to the internet; Caddy answers 404 for `/mail/*` from outside, and only the invoicing application calls the
+component's REST API. Composing a mail is one HTTPS request into the
+component, attachments handed over as presigned links rather than a shared bucket; the outcome comes
+back asynchronously on the NATS subject `mail.send.result`, projected onto two nullable columns on
+the invoice so the send history stays visible even with the component stopped. The design decisions
+(own bounded context, published contract package, forwarded identity headers) are recorded in
+<<adr-015,ADR-015>>, <<adr-016,ADR-016>> and <<adr-019,ADR-019>>; this section covers only how the
+component is deployed. An instance that leaves the flag off carries none of it — no container, no
+schema, no bucket, no streams, no secret. Every test stack (isolated Playwright stack, stress,
+admin-test, dev) and the cross-module E2E suite run the real component with a Mailpit sink, never a
+stub; a stub HTTP server remains only in integration tests that deliberately isolate the invoicing
+side's HTTP adapter (retry/timeout, malformed answers).
+
+[cols="2,3", options="header"]
+|===
+|Switch |Effect
+
+|`LT_MAIL_ENABLED` (instance), `EMAIL` (dev, on by default)
+|Starts `email-app` plus its schema, bucket and NATS streams; the invoicing image itself is
+unchanged either way.
+
+|Port
+|`LT_MAIL_PORT` (8090 / 18090 / 28090), `127.0.0.1` only — called by the invoicing application
+over the instance network; no port reaches the network.
+
+|Provisioning
+|Switching the flag on provisions everything the component needs on the host automatically: the
+`mail` database schema with the `mail_app`/`mail_migrator` roles, the `mail-journal` object-store
+bucket with its access key, the archive-signing key pair and the integration bearer token; the component creates its own JetStream streams at start. The
+only human input is the instance name; no value is typed or pasted.
+
+|Transport (`MAIL_TRANSPORT`)
+|`sink` (dev/demo only) points SMTP at a loopback Mailpit sink so no mail leaves the host;
+`provider` (prod) uses the SMTP provider credentials from the server-local sealed file
+`/etc/little-trotter/mail-provider.properties.age`, decrypted only in the deploy process's
+environment at start time — the plaintext never exists as a file, in the instance env, in a log or
+in a repository. A prod instance without a sealed provider file refuses to enable mail (exit 2,
+env untouched).
+
+|Archive
+|The mail secrets of an instance (mail env keys, archive-signing key pair, and the still-sealed
+provider file with its key) can be exported as one age-encrypted archive under the instance backup
+directory and restored into a fresh env without overwriting existing keys; the archive never
+contains a plaintext provider password.
+|===
+
+[NOTE]
+====
+The integration is opt-in. New instances keep `LT_MAIL_ENABLED=false`; enabling it on a production
+instance requires the sealed provider file to exist on the host first, so mail is switched on in
+one step once the SMTP provider and its audit requirements are settled.
+====
+
+== Optional Quote Container
+
+The quote module (`kotlin-quote`, see <<_building_block_view,Building Block View>>) is deployed
+like the mail component: a separate `quote-app` container behind the Compose profile `quote`
+(overlay `docker/compose/quote.yml` in admin-tools, switched on per instance by
+`LT_QUOTE_ENABLED`; `make dev QUOTE=1` in development), reached by the invoicing application
+over the instance network. It reuses the instance's PostgreSQL and RustFS but is isolated by name:
+schema `quote` in the existing database with its own role pair (`quote_migrator`, `quote_app`), own
+bucket `quote-documents`, own NATS streams. No port is published; Caddy answers 404 for
+`/quote/api/*` and `/quote/q/*` from outside. The invoicing application gates menu, publisher and
+consumer with `quote.enabled` (`QUOTE_ENABLED`, off by default); an instance that leaves it off
+carries no container, schema, bucket or stream of the module. Quote PDFs are produced by the
+existing renderer through the document-job subject; quotes are sent through the mail component,
+so a quote instance that sends quotes also runs the mail component.
+
+== Database Baselines: What Runs When
+
+Two independent Flyway baselines exist, one per component, in the same PostgreSQL database but in
+separate schemas with separate history tables. Neither is an upgrade path: while no live instance
+exists, both are edited in place (greenfield baseline, no `V3`+ scripts, no backfills).
+
+[cols="2,3", options="header"]
+|===
+|Baseline |Runs
+
+|Invoice `ddl/V1__baseline_schema.sql` + `seed/V2__baseline_seed.sql` (`kotlin-invoice`)
+|At every start of the invoicing application (Flyway, `lt_migrator`). Independent of
+`MAIL_ENABLED`; the invoicing application never references the `mail` schema and talks to the
+component only over HTTP and NATS.
+
+|Mail `V1__mail_baseline_schema.sql` + `V2__mail_baseline_seed.sql` (`kotlin-email/email-service`)
+|Only by `email-app`, and only when the component runs (`MAIL_ENABLED=true` / `LT_MAIL_ENABLED`),
+as `mail_migrator` into schema `mail` (history table `flyway_schema_history_mail`). With the flag
+off the schema is never created.
+
+|Roles `mail_migrator` / `mail_app` (`db/roles/mail_roles.sql`, not a Flyway migration)
+|Once, against the instance's existing database, before the first mail migrate (role bootstrap of
+the deployment). The mail baseline then grants and revokes against these existing roles.
+|===
+
+Verification: a fresh isolated PostgreSQL starts the invoicing application with the invoice
+baseline alone (`FeatureModulesAlwaysActiveIT`); with the flag off no NATS result consumer is bound
+and the start-up log carries no mail-related warning.
+
+== Operations and Admin Tooling (`little-trotter-admin-tools`)
+
+Server operations, instance lifecycle management, and disaster recovery are strictly separated from
+application code and orchestrated by the sibling repository `little-trotter-admin-tools` (currently
+maintained as an internal operator suite by the project initiator; public release planned for Q4/2027 or
+Q1/2028 after multi-year operational maturity validation; operators in the interim reduce operational
+effort through reference hardware and administrative scripts).
+
+.Architecture: Operator Plane & Target Deployment
+image::admin-tooling-architecture.svg[Architecture diagram of the operator plane and the target deployment]
+
+=== Staged Operations Rollout: Lean MVP Baseline vs. Phase-2 Management Plane
+
+The operational lifecycle follows a lean, two-stage rollout model to eliminate operational waste (*Muda*) and ensure compliance-grade robustness:
+
+* *Phase 1 (Operational MVP / Current Baseline until Q4/2027):*
+** *Lean Reference Hardware:* Standardized fanless Mini-PC paired with local mirrored NAS, eliminating platform-specific driver, thermal, and configuration anomalies.
+** *Lightweight Shell Automation:* Dedicated shell and CLI scripts maintained by the project initiator handle core operational tasks (age-encrypted backups, atomic PostgreSQL snapshots, container rollouts, and systemd watchdog verifications).
+** *Operator Baseline:* Achieves an empirically validated run-effort of 2–3 person-days per year (0.75–1.5 person-days initial ramp-up).
+* *Phase 2 (Consolidated Management Plane / Release Q4/2027–Q1/2028):*
+** *General Availability of little-trotter-admin:* Packaged Go CLI suite (`lt`) and interactive TUI (`lhorse`).
+** *Phase-Gate Quality Criteria:* Transition to Phase 2 requires proven completion of an operational hardening cycle under real-world production conditions:
+*** Non-disruptive PostgreSQL schema evolution across major version migrations.
+*** Validated automated disaster recovery rehearsals with Mean Time to Recovery (MTTR) < 15 minutes.
+*** Long-term zero-maintenance operation of certificate renewal, Authentik forward-auth, and storage reclamation under sustained production accounting loads.
+
+=== Unified Operational Interfaces: `lt` CLI & `lhorse` TUI
+
+Day-2 operations run either headless/scripted via the `lt` CLI suite or interactively via the
+`lhorse` Commander TUI (five boxes: Backup, Instances, Lab, System, Log; wizards; live multi-instance
+status, container logs).
+
+==== Test topology (<<adr-045,ADR-045>>)
+
+* *Dev server* is a customer-like host: it runs only `demo` and `prod` (native `lt setup` from the
+  package, no worktrees, no test runs).
+* *Dev, E2E and stress* run in disposable Multipass VMs created by `lt lab` as clones of the golden VM
+  `lt-golden` and deleted after evaluation. Stress runs alone on the host (CPU variance); E2E and dev VMs
+  may run beside `demo`/`prod` within the memory budget.
+* *Reachability:* the VMs sit on the LAN bridge. The host edge Caddy (`tls internal`) proxies
+  `<vm>.lab.<domain>` (app), `<vm>-mail.lab.<domain>` (Mailpit), `<vm>-s3.lab.<domain>` (RustFS console)
+  and `<vm>-prom.lab.<domain>`; the domain is set by `LT_LAB_DOMAIN`. The host Prometheus scrapes each VM
+  through `file_sd` (one target file per VM); Grafana stays on the host (`var-environment=<vm>`).
+* *Mac:* interactive development with `make dev`; no test runs. `make purge LEVEL=stack|images|all` frees
+  Docker resources.
+
+[cols="2,3,4", options="header"]
+|===
+|Operational Domain |Core Commands (`lt`) |Responsibility & Infrastructure Impact
+
+|*Provisioning & Setup*
+|`lt setup`, `lt check`
+|Guided server installation, dependency verification (systemd, Docker, mDNS, TLS, firewall).
+
+|*Instance Lifecycle*
+|`lt build [instance\|all]`, `lt instance [start\|stop\|restart\|teardown]`
+|Deploys multi-environment stacks (`prod` +0, `dev` +10000, `demo` +20000) with shared native
+Postgres/RustFS/Caddy.
+
+|*Orchestrated Upgrade*
+|`lt upgrade --source=ghcr`
+|5-step orchestrated update: preflight check → occasion backup → container rollout → DB migration →
+health check. The container rollout recreates containers whose image changed, a brief interruption
+on this single-node deployment, not a zero-downtime swap.
+
+|*Disaster Recovery*
+|`lt backup [status\|create\|verify\|sync\|restore\|share\|handover]`, `lt maintenance [status\|unlock]`
+|PostgreSQL via pgBackRest on the native server (full backup Sunday, incremental Mon–Sat, WAL archived
+continuously with `archive_timeout` 60 s, point-in-time recovery, RPO minutes; retention 2 full backups,
+about 14 days including incremental and WAL; `pgbackrest verify` on Sundays). Objects: `rclone sync` from
+RustFS into a persistent mirror under the backup base, incremental, no nightly full copy. Restic backs up
+the mirror, the pgBackRest repository and the staging area daily; `mc` is no longer used. Restore:
+`restore.sh --pitr --target-time <ISO>` or latest. `pg_dump` exists only inside the 7z
+export archive, openable without special tools. Each nightly run directory is a small sealed record
+(manifest, signed anchor, caddy-data, `pgbackrest-info.json`). Setup warns when free disk is below
+2.5 times the object volume. Stock check and deep verification on every run, export directory
+(<<_backup_v5,Backup v5>>). USB SSD copy (7z, 1:1). Traffic light, handover and reboot lock: <<_backup_cockpit,Backup Cockpit>>.
+
+|*User & Access Management*
+|`lt user [invite\|add\|remove\|reset-password]`
+|Direct Authentik OIDC tenant administration, user enrollment invitations, and role assignments
+(`user`, `admin`, `customer-admin`).
+
+|*Observability & Diagnostics*
+|`lt metrics`, `lt logs`, `lt tunnel`
+|Aggregated JVM/DB/Queue metrics, real-time log streaming, and secure SSH tunnels for non-public
+administrative ports.
+|===
+
+[[deployment-host-classes]]
+=== Host Classes: Workshop Host, Lab VM, Customer Host
+
+Three host classes run `lt`. What a host offers follows from its class; who may use it follows from the
+tier of the caller (<<crosscutting-tiers>>).
+
+[cols="1,2,2",options="header"]
+|===
+| Host class | Purpose | Runs
+| Workshop host (dev server, Mac) | development and operator host; no agent tests on the host checkouts | `lt lab` to create lab VMs, stress control, internal documentation
+| Lab VM (Multipass, one per agent and task) | development, E2E, stress and acceptance runs | full workshop tier, Mailpit sink, load tests, synthetic `datagen` data only
+| Customer host (Raspberry Pi or Ubuntu, `lt-tools` package) | production for one customer | exactly one `prod` instance with backups; demo/test only on demand by the `stallmeister`; no Mailpit; lhorse web off by default
+|===
+
+On the customer host, e-mail leaves only through the sealed provider. The package build strips the Mailpit
+service from the shipped compose files and the package check rejects any Mailpit image, service or
+`email-dev` profile.
+
+lhorse web on the customer host is a timed window, not a permanent service: `lt ui web enable` (stallmeister,
+root, interactive terminal) starts `lhorse-web@stallmeister` without enabling it, adds a Caddy route on port
+8445 behind Authentik `forward_auth` restricted to group `lt-admins`, and arms a transient systemd timer that
+switches it off after 4 h by default. After a reboot it is off.
+
+=== Manual Database Writes
+
+The database never invents a time (<<adr-029,ADR-029>>): the invoice audit trigger stamps
+`occurred_at` from the session setting `app.now` and rejects a write without it. The application
+sets `app.now` itself; every operator write outside it — a `psql` session, an ad-hoc script, a
+bulk loader — that inserts, updates or deletes rows of `invoice`, `invoice_item`,
+`invoice_document`, `trip_expense` or the receipt assignments sets it first, in the same
+transaction, in UTC:
+
+[source,sql]
+----
+BEGIN;
+SELECT set_config('app.now', '2026-09-27T08:00:00Z', true);
+-- the corrective statements
+COMMIT;
+----
+
+Without it the write fails with `app.now is not set: a write to <table> must carry the application
+time`. Columns that carry the application time (`invoice.invoice_date`, the `created_at`
+of snapshots, jobs, validation data and maintenance events, `maintenance_queue_execution.claimed_at`)
+have no database-clock default; a manual `INSERT` supplies them explicitly.
+
+Not affected: read-only `psql` access, and `lt backup restore` — a full `pg_restore --clean`
+loads the data before it recreates the triggers. The `datagen` loader sets `app.now` on every
+connection it opens.
+
+== Development and Test Deployment Variants
+
+The base `docker-compose.yml` is the single source of truth; dev and test only add or swap
+overlays, never a parallel stack definition.
+
+[cols="2,3,2", options="header"]
+|===
+|Variant |Command |App Port
+
+|Local dev stack
+|`make dev` (adds debug and veraPDF overlays)
+|https://localhost
+
+|Isolated Playwright/E2E stack (sibling repository)
+|`make playwright` in `little-trotter-admin-tools` — its own Compose project and network, running
+alongside the dev stack without disturbing it
+|https://localhost:9443; `STACK=dev` targets the running dev stack instead
+
+|CI-local
+|This repository's Maven reactor gate (`make test`); the sibling repository's own QA suite
+(`make qa`) covers Playwright, monkey, and this chapter's docs build
+|n/a
+|===
+
+The isolated Playwright stack keeps a full browser E2E run from competing with whatever a
+developer already has running under `make dev`.
+
+== Verification on the Test Host
+
+At the end of a wave, the result is verified on the test host, not on the developer machine. The
+host runs its own Docker Compose stacks and never touches existing instance data.
+
+[arabic]
+. Transfer: the commits are sent as a `git bundle` and checked out into a dedicated, detached
+  worktree on the host.
+. Isolation: every run uses its own Compose project name (for the Playwright stack
+  `E2E_PROJECT=<name>`), its own network, and a fresh database. Test data is limited to the
+  synthetic `datagen` data.
+. Order: Playwright suite, then the dependency scan (see
+  <<_dependency_vulnerability_scanning,Dependency Vulnerability Scanning>>), then `make test`.
+. Cleanup: `docker compose -p <name> down -v`, then remove the worktree.
+
+Long jobs run in a login shell (`bash -lc '...'`). User-installed linters such as `ruff` live in
+`~/.local/bin`, which a non-login SSH shell does not have on `PATH`; without it the config lint
+gate fails.
+
+=== Playwright Harness Behavior
+
+* *`ERR_NETWORK_CHANGED`:* Chromium reports this on page loads when Testcontainers creates or
+  removes Docker networks on the same host in parallel. The request never reaches the server. The
+  harness reloads once and reports the application as offline only if the error persists.
+  Integration test suites therefore do not run in parallel with Playwright.
+* *Grid cells:* Vaadin renders grid cell content in the light DOM inside
+  `vaadin-grid-cell-content`, outside the `[role=row]` element. Status symbols are
+  `span[role=img]` elements with an `aria-label`. Locators target the cell content, not row
+  descendants.
+* *Notifications:* an open error notification is not replaced by a later success notification
+  (one toast slot per UI). A test dismisses the error before asserting a following success toast.

@@ -1,0 +1,70 @@
+@startuml archive-handover-flow
+
+' Reader-facing flow for the German archive handover guide: how a dispatched
+' invoice mail reaches the operator's e-mail archive. Two rows keep the figure
+' compact on a page: the application on top, the mail provider below. Orthogonal
+' edges keep every arrow straight. Edge labels are kept off the horizontal edges
+' (ortho places them onto the boxes); the status feedback and the journaling
+' variant are notes instead of labelled back-edges, so no line crosses another.
+
+' A single generic family: PlantUML quotes a comma list as one family name in SVG,
+' which browsers cannot match and fall back to serif.
+skinparam defaultFontName sans-serif
+skinparam defaultFontSize 11
+skinparam shadowing false
+skinparam linetype ortho
+hide stereotype
+skinparam roundCorner 0
+skinparam nodesep 70
+skinparam ranksep 60
+
+skinparam rectangle {
+  FontSize 11
+  FontStyle bold
+  FontColor #ffffff
+  BorderColor #2D66B0
+}
+skinparam rectangle<<group>> {
+  FontColor #5F6368
+  FontStyle bold
+  BackgroundColor transparent
+  BorderColor #DADCE0
+}
+skinparam note {
+  BackgroundColor #F8F9FA
+  BorderColor #DADCE0
+  FontColor #202124
+}
+
+rectangle "Little Trotter X-Invoice" <<group>> as App {
+  rectangle "1 Finale E-Rechnung erstellen\n<color:#D5E8FF>PDF mit XML, Zeitpunkt protokolliert</color>" as Issue #1A73E8
+  rectangle "2 E-Mail erstellen\n<color:#D5E8FF>Original gesichert, Prüfsumme und Signatur</color>" as Compose #1A73E8
+  Issue -right-> Compose
+}
+
+rectangle "Ihr E-Mail-Anbieter / Ihre IT" <<group>> as Provider {
+  rectangle "3 Postausgangsserver des Betriebs\n<color:#E8EAED>verschlüsselte Übergabe</color>" as Smtp #5F6368
+  rectangle "4a Empfänger\n<color:#E8EAED>Übertragung 1: an Kunden</color>" as Customer #5F6368
+  rectangle "4b Archivadresse (Option B)\n<color:#E8EAED>Übertragung 2: separate SMTP-Session</color>" as ArchiveAddr #5F6368
+  rectangle "5 E-Mail-Archiv (Anbieter oder eigene IT)\n<color:#D7F0DC>unveränderbar, 8 Jahre</color>" as Archive #188038
+  Smtp -right-> Customer : Übertragung 1
+  Smtp -down-> ArchiveAddr : Übertragung 2 (nach Quittung 1)
+  ArchiveAddr -right-> Archive
+  Smtp .[#188038]down.> Archive
+}
+
+Compose -down-> Smtp : verschlüsselt
+
+note right of Archive
+  Gestrichelt, Option A (Standard):
+  der Anbieter kopiert die Nachricht
+  selbst ins Archiv
+end note
+
+note bottom of ArchiveAddr
+  Option B: separate SMTP-Übertragung
+  ohne Bcc-Kopfzeile. Ein Fehler im
+  Archiv gefährdet den Kundenversand nie.
+end note
+
+@enduml

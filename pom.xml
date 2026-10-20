@@ -1,0 +1,697 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+         child.project.url.inherit.append.path="false">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>de.littletrotter</groupId>
+  <artifactId>little-trotter-invoice-parent</artifactId>
+  <version>0.9.59-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>little-trotter-invoice parent</name>
+  <description>Aggregator and parent POM for Kotlin modules</description>
+  <!-- BSI TR-03183-2 § 5.2.1 / E2 — creator of the SBOM, as a URL because no project email
+       exists; deliberately the project URL, not a personal address, since the SBOM ships with
+       the product. child.project.url.inherit.append.path="false" above stops Maven's default
+       per-module path suffix (which would otherwise turn this into
+       ".../little-trotter-invoice/kotlin-invoice" for that module) so every module's
+       ${project.url} resolves to exactly this same address. -->
+  <url>https://github.com/little-trotter/invoice</url>
+
+  <properties>
+    <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
+    <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+    <quarkus.platform.version>3.40.1</quarkus.platform.version>
+    <protobuf.version>4.36.2</protobuf.version>
+    <kotlin.version>2.4.21</kotlin.version>
+    <java.version>25</java.version>
+    <maven.compiler.release>25</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- Reproducible builds (PACKSATTEL P1): fixed timestamp for every zip entry (maven-jar-plugin,
+         Quarkus jars) and the CycloneDX bom timestamp, so an unchanged source tree rebuilds to
+         bit-identical jars and Docker layers stay byte-stable (package delta). A constant, not the
+         commit time: the image build context excludes .git. Bump only on purpose. -->
+    <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>3.6.0</maven-failsafe-plugin.version>
+    <!-- Memory envelope of one build: the Maven JVM is capped in .mvn/jvm.config (the Kotlin
+         compile daemon inherits that ceiling), every forked test JVM here; uncapped, each JVM
+         defaults to 25 % of the host's RAM. The empty argLine keeps @{argLine} resolvable when
+         JaCoCo is skipped. -->
+    <test.fork.maxHeap>3g</test.fork.maxHeap>
+    <argLine></argLine>
+    <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+    <maven-exec-plugin.version>3.6.4</maven-exec-plugin.version>
+    <maven-dependency-plugin.version>3.8.1</maven-dependency-plugin.version>
+    <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>
+    <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
+    <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
+    <jacoco.line.coverage>0.90</jacoco.line.coverage>
+    <jacoco.branch.coverage>0.90</jacoco.branch.coverage>
+    <!-- Default for the -DskipITs flag the CI Test stage passes (no Docker there, so
+         Testcontainers-based ITs cannot run). Overridden to true on the command line; a plain
+         "mvn verify" keeps it false so CLASS-scoped 100 % gates that depend on IT coverage
+         (e.g. kotlin-shared's PayloadExchange, kotlin-xpdf's ResultPublisher) still enforce it
+         once failsafe has actually produced that coverage. -->
+    <skipITs>false</skipITs>
+    <!-- Coverage gates that need failsafe coverage (check-domain-core, check-messaging-core)
+         follow skipITs by default; a scoped agent run passes -Djacoco.gates.skip=true so a
+         partial test selection does not fail on a gate that only a full run can satisfy. -->
+    <jacoco.gates.skip>${skipITs}</jacoco.gates.skip>
+    <!-- The remaining jacoco:check executions (module-wide gate and the class/package-scoped strand
+         gates) must stay enforced in every full run AND in the CI unit stage, so they do not follow
+         skipITs. A run that selects tests with -Dtest=/-Dit.test= can never satisfy them; such a run
+         passes -Djacoco.scoped.skip=true, otherwise it always ends in BUILD FAILURE and the linter
+         executions behind the gates never run. Never set this for a full run. -->
+    <jacoco.scoped.skip>false</jacoco.scoped.skip>
+    <!-- H27-42 — linter gates (ktlint, detekt, ruff) can be skipped with -DskipLinterGates=true -->
+    <skipLinterGates>true</skipLinterGates>
+    <!-- H27-43 — sqlfluff gate: on only where migrations exist (kotlin-invoice overrides). -->
+    <sqlfluff.skip>true</sqlfluff.skip>
+    <!-- Security override: force patched Jackson 3.x where transitive deps pull vulnerable versions.
+         The former netty.version override was removed in AP-M7: Quarkus 3.38.3's own BOM manages
+         every one of the netty-* artifacts below at 4.1.137.Final too (verified via
+         quarkus-bom-3.38.3.pom), the newest 4.1.x release on Maven Central, so the local pin
+         had become a no-op duplicate. -->
+    <tools.jackson.version>3.2.3</tools.jackson.version>
+    <!-- Jackson 2.x: the Quarkus BOM still manages 2.22.2, which has open advisories; the
+         jackson-bom imported ahead of it lifts every 2.x module to one patched release. -->
+    <jackson2.version>2.22.3</jackson2.version>
+    <org.json.version>20260814</org.json.version>
+    <plexus.utils.version>4.1.0</plexus.utils.version>
+    <!-- The Quarkus BOM manages log4j-api 2.26.0, affected by CVE-2026-49844 (fixed in 2.26.1). -->
+    <log4j.version>2.26.1</log4j.version>
+    <jnats.version>2.26.3</jnats.version>
+    <awssdk.version>2.56.0</awssdk.version>
+    <!-- AP-M7: single managed version for Jedis, shared by kotlin-invoice, kotlin-shared, kotlin-xpdf -->
+    <jedis.version>8.0.2</jedis.version>
+    <!-- Single managed versions for the test libraries every module repeated verbatim:
+         Testcontainers (kotlin-shared, kotlin-xpdf, kotlin-invoice, kotlin-e2e-tests),
+         ArchUnit (kotlin-shared, kotlin-xpdf, kotlin-invoice) and Karibu-Testing
+         (kotlin-invoice, kotlin-e2e-tests). -->
+    <testcontainers.version>2.0.5</testcontainers.version>
+    <junit.version>6.1.3</junit.version>
+    <mockito-kotlin.version>6.4.0</mockito-kotlin.version>
+    <assertj.version>3.27.7</assertj.version>
+    <archunit.version>1.5.0</archunit.version>
+    <karibu-testing.version>2.7.3</karibu-testing.version>
+    <!-- Single pin for every Vaadin-dependent module (kotlin-invoice, kotlin-ui-components): was kotlin-invoice's own property until the free-text editor
+         extraction needed the same version in a second module — centralised here instead of
+         duplicated per module, so the platform can only drift by an explicit bump in one place. -->
+    <vaadin.version>25.3.2</vaadin.version>
+    <!-- XLS-1 — Apache POI, Apache-2.0, used only by kotlin-invoice's Excel export writer
+         (de.littletrotter.infrastructure.export.workbook); kotlin-xpdf stays a pure JVM/native
+         PDF module and must not gain it. Pinned here, not left to whatever poi-ooxml itself
+         requests, purely to have one place to bump.
+         No BOM import: Apache POI does not publish one on Maven Central (verified against
+         https://repo1.maven.org/maven2/org/apache/poi/ — the group holds poi/poi-ooxml/
+         poi-ooxml-lite/... jars, no poi-bom), so this is a plain managed dependency instead of an
+         imported one. That carries none of the AWS-SDK-style drift risk a BOM guards against
+         anyway: poi-ooxml 5.5.1's own POM already pins its poi/poi-ooxml-lite/xmlbeans/
+         commons-compress transitives to matching, mutually-tested versions via plain <version>
+         elements, not via a BOM a caller could import selectively. -->
+    <poi.version>5.5.1</poi.version>
+    <!-- One PDFBox and one Saxon release for every module that reads PDFs or runs XSLT. -->
+    <pdfbox.version>3.0.8</pdfbox.version>
+    <saxon.version>12.9</saxon.version>
+    <!-- GiroCode (EPC QR) in the Typst payment block, kotlin-xpdf only. -->
+    <zxing.version>3.5.3</zxing.version>
+    <!-- FreeTextMarkup.fromHtml's sanitizer (kotlin-shared): current stable release on Maven
+         Central (org/jsoup/jsoup/maven-metadata.xml, checked 27.09.2026), MIT-licensed. -->
+    <jsoup.version>1.23.2</jsoup.version>
+    <!-- SBOM (BSI TR-03183-2) — single managed version for kotlin-shared, kotlin-xpdf and
+         kotlin-invoice, all of which run this plugin to produce their own CycloneDX document. -->
+    <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
+    <!-- SonarQube analysis (Forgejo CI, .forgejo/workflows/cicd.yml): the mvn-plugin route is
+         the only complete one for a JVM project — the CLI scanner has no compiled classes
+         (sonar.java.binaries). Managed here so the CI invokes the goal by its short name
+         without a version literal in the workflow. -->
+    <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
+    <!-- BTE-3: de.littletrotter.shared.b2b.codes holds the generated Factur-X code-list value
+         objects (B2bCodeListValuesEn16931/Extended — GENERATED, do not edit, regenerate via the
+         generator in little-trotter-admin-tools). Their large sorted string literals read as
+         DuplicatedCode/size findings to any static analyzer; qodana.yaml already excludes the
+         whole package from every inspection ("All") for the same reason, so Sonar gets the same
+         blanket exclusion instead of triaging false positives on generated data file by file. -->
+    <!-- Generated protobuf Java (target/generated-sources) is neither reviewed nor tested by hand. -->
+    <sonar.exclusions>src/main/kotlin/de/littletrotter/shared/b2b/codes/**,**/target/generated-sources/**,**/de/littletrotter/shared/proto/**</sonar.exclusions>
+    <!-- Coverage stays precise (kotlin-shared/pom.xml's jacoco excludes only the two generated
+         *Values* classes, not the hand-written B2bCodeList.kt) — Sonar mirrors that scope so
+         B2bCodeList.kt's real test coverage still counts. -->
+    <sonar.coverage.exclusions>
+      src/main/kotlin/de/littletrotter/shared/b2b/codes/B2bCodeListValuesEn16931.kt,
+      src/main/kotlin/de/littletrotter/shared/b2b/codes/B2bCodeListValuesExtended.kt,
+      **/target/generated-sources/**,
+      **/de/littletrotter/shared/proto/**
+    </sonar.coverage.exclusions>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Imported before the Quarkus BOM so its versions win; drop once the BOM ships 2.22.3+. -->
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson2.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>${quarkus.platform.group-id}</groupId>
+        <artifactId>${quarkus.platform.artifact-id}</artifactId>
+        <version>${quarkus.platform.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- AWS SDK v2 — vendor-neutral S3 client used against RustFS (any S3-compatible endpoint). -->
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${awssdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- Manages com.vaadin:vaadin-core (kotlin-ui-components) and every other plain Flow
+           component artifact at ${vaadin.version}; kotlin-invoice's vaadin-quarkus-extension
+           keeps its own explicit <version> (that artifact is not part of this BOM). -->
+      <dependency>
+        <groupId>com.vaadin</groupId>
+        <artifactId>vaadin-bom</artifactId>
+        <version>${vaadin.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- Managed here so every module resolves the same kotlin-stdlib as the
+           kotlin-maven-plugin (${kotlin.version}) — plugin/stdlib can't drift apart (H27-28). -->
+      <dependency>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-stdlib</artifactId>
+        <version>${kotlin.version}</version>
+      </dependency>
+      <!-- Managed here so protobuf-kotlin cannot drift from protobuf-java
+           (the protobuf-maven-plugin's generated code uses protobuf-kotlin,
+           which the Quarkus BOM does not always manage at the same version as
+           the root ${protobuf.version} property). -->
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-kotlin</artifactId>
+        <version>${protobuf.version}</version>
+      </dependency>
+      <!-- Declared ahead of the imported Quarkus BOM so the patched release wins. -->
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+      <!-- quarkus-kotlin, jackson-module-kotlin and mockito-kotlin pull kotlin-reflect 2.4.10,
+           which is affected by CVE-2026-53914 (fixed in 2.4.20). -->
+      <dependency>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-reflect</artifactId>
+        <version>${kotlin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-stdlib-jdk7</artifactId>
+        <version>${kotlin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jetbrains.kotlin</groupId>
+        <artifactId>kotlin-stdlib-jdk8</artifactId>
+        <version>${kotlin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-api</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-engine</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- Quarkus BOM pins junit-platform-commons/engine to 6.0.3, which is older than the
+           junit-jupiter-api/engine 6.1.3 pinned above (Quarkus' import wins over the transitive
+           version jupiter itself wants, "nearest wins" pulls it down further). Jupiter 6.1.x and
+           Platform 6.0.x are not wire-compatible: MethodReflectionUtils (jupiter-engine 6.1.3)
+           reflectively calls a private KotlinReflectionUtils method that only exists on
+           platform-commons 6.1.x, so every test errors with IllegalAccess. Pin explicitly to the
+           version jupiter actually ships against. -->
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-commons</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-engine</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- Some Vaadin/third-party dependencies transitively pull tools.jackson.core:jackson-core 3.x;
+           pin to a patched 3.x release to mitigate reported nesting-depth/resource exhaustion issues. -->
+      <dependency>
+        <groupId>tools.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+        <version>${tools.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>tools.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${tools.jackson.version}</version>
+      </dependency>
+      <!-- jackson-databind 3.x still depends on the classic-groupId jackson-annotations (Jackson
+           kept annotations on 2.x, deliberately never renamed/forked to tools.jackson.core — see
+           that module's own POM comment "3.x retains dep to annotations 2.x") and jackson-databind
+           3.2.2 itself wants exactly 2.22. Something else in this tree (Quarkus BOM/AWS SDK) pins
+           it down to 2.21 via nearest-wins, which is missing JsonApplyView — a class added in
+           2.22 — and breaks Quarkus code generation with a NoClassDefFoundError at augmentation
+           time. Pin explicitly to the version jackson-databind actually ships against. -->
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
+        <version>2.22</version>
+      </dependency>
+      <dependency>
+        <groupId>org.json</groupId>
+        <artifactId>json</artifactId>
+        <version>${org.json.version}</version>
+      </dependency>
+      <!-- Managed here (not hardcoded per-module) so kotlin-invoice, kotlin-shared and
+           kotlin-xpdf all resolve the same Jedis version — one place to bump. -->
+      <dependency>
+        <groupId>redis.clients</groupId>
+        <artifactId>jedis</artifactId>
+        <version>${jedis.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.plexus</groupId>
+        <artifactId>plexus-utils</artifactId>
+        <version>${plexus.utils.version}</version>
+      </dependency>
+      <!-- XLS-1 — see ${poi.version}'s own comment above for why this is a plain managed
+           dependency rather than an imported BOM. -->
+      <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>${poi.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jsoup</groupId>
+        <artifactId>jsoup</artifactId>
+        <version>${jsoup.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <modules>
+    <!-- Build-tool-only module (BSI TR-03183-2 / SBOM spec S1+S3): kotlin-invoice and kotlin-xpdf
+         invoke it as an exec-maven-plugin PLUGIN dependency (never a project dependency), so it
+         never appears in either module's own CycloneDX scan. First on purpose, though Maven's
+         reactor would reorder it correctly either way: it has to exist before anything consumes
+         it. -->
+    <module>ci/sbom-postprocess</module>
+    <module>kotlin-shared</module>
+    <!-- Shared ArchUnit rule set; consumed in test scope only (enforcer rule below). -->
+    <module>kotlin-architecture-rules</module>
+    <!-- Published language between invoicing and the mail SCS (ADR-015/016). -->
+    <module>kotlin-mail-contract</module>
+    <!-- Document job wire types and subjects (producer: kotlin-xpdf). -->
+    <module>kotlin-document-job-contract</module>
+    <!-- Master data events and snapshot exchange (producer: kotlin-invoice). -->
+    <module>kotlin-masterdata-contract</module>
+    <!-- Published language between invoicing and the offer component (producer: kotlin-quote). -->
+    <module>kotlin-quote-contract</module>
+    <!-- Trusted-edge identity shared by the self-contained systems (mail, quote). -->
+    <module>kotlin-edge-identity</module>
+    <!-- Machine-readable offer (UBL Quotation) model, writer and validators; plain library. -->
+    <module>kotlin-quotation-xml</module>
+    <module>kotlin-xpdf</module>
+    <module>kotlin-ui-components</module>
+    <module>kotlin-invoice</module>
+    <module>kotlin-e2e-tests</module>
+    <!-- Last on purpose: aggregates the exec data of every module above. -->
+    <module>ci/coverage-report</module>
+  </modules>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito.kotlin</groupId>
+      <artifactId>mockito-kotlin</artifactId>
+      <version>${mockito-kotlin.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>${assertj.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco-maven-plugin.version}</version>
+          <executions>
+            <execution>
+              <id>prepare-agent</id>
+              <phase>initialize</phase>
+              <goals>
+                <goal>prepare-agent</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>report</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>report</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>check</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>check</goal>
+              </goals>
+              <configuration>
+                <skip>${jacoco.scoped.skip}</skip>
+                <rules>
+                  <rule>
+                    <element>BUNDLE</element>
+                    <excludes>
+                      <!-- BTE-10: patterns matching a class name must carry the ".class" suffix —
+                           a bare "*_" segment never matches a real file name (which always ends
+                           in ".class"), so this exclude was a silent no-op. No Panache/JPA
+                           metamodel classes exist in this codebase today, so the fix does not
+                           change any measured ratio; it only stops the pattern from staying
+                           silently broken if such generated classes appear later. -->
+                      <exclude>**/*_.class</exclude>
+                      <exclude>**/db/migration/**</exclude>
+                      <!-- Vormals `**/*$$*`: Maven interpoliert `$$` zu `$`, das Muster wirkt
+                           also als `**/*$*` und warf JEDE verschachtelte Klasse aus der Messung
+                           — Companions, Sealed-Unterklassen, `$WhenMappings`. kotlin-invoice hat
+                           das fuer sein eigenes Gate bereits korrigiert (siehe dort), der Parent
+                           blieb zurueck und mass dadurch zu milde. Die Muster unten kommen ohne
+                           `$` aus, damit die Interpolationsfalle nicht wiederkehrt. -->
+                      <exclude>**/*WhenMappings.class</exclude>
+                      <exclude>**/*DefaultImpls.class</exclude>
+                      <exclude>**/*inlined*.class</exclude>
+                      <!-- Exclude generated Protobuf classes from coverage checks -->
+                      <exclude>**/de/littletrotter/shared/proto/**</exclude>
+                      <!-- Exclude Dagger-generated classes (annotation processor outputs, e.g., Dagger...) -->
+                      <exclude>**/dagger/**</exclude>
+                      <exclude>**/*Dagger*.class</exclude>
+                    </excludes>
+                    <limits>
+                      <limit>
+                        <counter>LINE</counter>
+                        <value>COVEREDRATIO</value>
+                        <minimum>${jacoco.line.coverage}</minimum>
+                      </limit>
+                      <limit>
+                        <counter>BRANCH</counter>
+                        <value>COVEREDRATIO</value>
+                        <minimum>${jacoco.branch.coverage}</minimum>
+                      </limit>
+                    </limits>
+                  </rule>
+                </rules>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+        <!-- Test JVMs keep their java.io.tmpdir inside target/: third-party code that creates
+             temp files without a cleanup hook (e.g. Vaadin's flow-build-info json) then dies
+             with `mvn clean` instead of piling up in the OS temp folder of the test host. -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven-surefire-plugin.version}</version>
+          <configuration>
+            <argLine>@{argLine} -Xmx${test.fork.maxHeap} -Djava.io.tmpdir=${project.build.directory}</argLine>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${maven-failsafe-plugin.version}</version>
+          <configuration>
+            <argLine>@{argLine} -Xmx${test.fork.maxHeap} -Djava.io.tmpdir=${project.build.directory}</argLine>
+          </configuration>
+        </plugin>
+        <!-- SBOM (BSI TR-03183-2) — single managed version; kotlin-shared, kotlin-xpdf and
+             kotlin-invoice each declare their own execution (makeBom / makeAggregateBom) but
+             must never repeat the version literal (H27-style drift risk, see B5 in the SBOM
+             spec: two modules used to hardcode "2.9.3" independently of this module's property). -->
+        <plugin>
+          <groupId>org.cyclonedx</groupId>
+          <artifactId>cyclonedx-maven-plugin</artifactId>
+          <version>${cyclonedx-maven-plugin.version}</version>
+          <configuration>
+            <!-- The SBOM is a compliance artefact of every shipped module, independent of whether
+                 the module is published to a Maven registry. The plugin's default skips makeBom
+                 whenever maven.deploy.skip is true, which would leave the sbom-enrich step
+                 without its bom.json on a branch that denies "mvn deploy" by default. -->
+            <skipNotDeployed>false</skipNotDeployed>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.sonarsource.scanner.maven</groupId>
+          <artifactId>sonar-maven-plugin</artifactId>
+          <version>${sonar-maven-plugin.version}</version>
+        </plugin>
+        <!-- H27-42/H27-43/H27-44: all exec-maven-plugin gates (ktlint, detekt, sqlfluff,
+             config-format) MUST live in a single <plugin> block here. Maven's
+             pluginManagement keys entries by groupId:artifactId; multiple <plugin> blocks
+             for the same key silently collapse to the last one, dropping every execution
+             declared in the earlier blocks from the reactor build (see
+             MavenPluginDedupTest in kotlin-shared for the drift guard).
+             PO 29.08.2026: ktlint is a gate too — the repo convention is codified per rule in
+             .editorconfig (layout opinions off, hygiene rules on); the whole codebase is at
+             0 findings, so agents hit the gate the moment they introduce a new smell. -->
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>${maven-exec-plugin.version}</version>
+          <executions>
+            <execution>
+              <id>ktlint-check</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>exec</goal>
+              </goals>
+              <configuration>
+                <executable>ktlint</executable>
+                <arguments>
+                  <argument>${project.basedir}/src/**/*.kt</argument>
+                </arguments>
+                <skip>${skipLinterGates}</skip>
+              </configuration>
+            </execution>
+            <execution>
+              <id>detekt-check</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>exec</goal>
+              </goals>
+              <configuration>
+                <executable>detekt</executable>
+                <arguments>
+                  <argument>--build-upon-default-config</argument>
+                  <argument>--config</argument>
+                  <argument>${maven.multiModuleProjectDirectory}/detekt.yml</argument>
+                  <argument>--baseline</argument>
+                  <argument>${project.basedir}/detekt-baseline.xml</argument>
+                  <argument>--input</argument>
+                  <argument>${project.basedir}/src</argument>
+                </arguments>
+                <skip>${skipLinterGates}</skip>
+              </configuration>
+            </execution>
+            <!-- H27-43: sqlfluff as SQL lint gate (postgres dialect). Lints database
+                 migrations for explicit column lists, keyword capitalization, and
+                 unqualified references. Baseline captures pre-existing style findings. -->
+            <execution>
+              <id>sqlfluff-check</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>exec</goal>
+              </goals>
+              <configuration>
+                <executable>sqlfluff</executable>
+                <arguments>
+                  <argument>lint</argument>
+                  <argument>${project.basedir}/src/main/resources/db/migration</argument>
+                  <argument>--config</argument>
+                  <argument>${maven.multiModuleProjectDirectory}/.sqlfluff</argument>
+                  <argument>--dialect</argument>
+                  <argument>postgres</argument>
+                </arguments>
+                <!-- Only modules that carry Flyway migrations set sqlfluff.skip=false. -->
+                <skip>${sqlfluff.skip}</skip>
+              </configuration>
+            </execution>
+            <!-- Die Detekt-Baselines duerfen schrumpfen, nie wachsen. Ein Baseline-Eintrag
+                 ist eine Regel, an die sich der Code nicht mehr halten muss; ohne Sperre wird
+                 die Liste nur laenger. Das Skript begruendet auch, warum ein bestehender
+                 Eintrag nie umgeschrieben werden darf, wenn sich der Code aendert. -->
+            <execution>
+              <id>detekt-baseline-ratchet</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>exec</goal>
+              </goals>
+              <configuration>
+                <executable>bash</executable>
+                <arguments>
+                  <argument>${maven.multiModuleProjectDirectory}/ci/scripts/quality/detekt-baseline-ratchet.sh</argument>
+                </arguments>
+                <skip>${skipLinterGates}</skip>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <!-- H27-44: lint-config.sh validates CSS, YAML, TOML, JSON, XML/POM, Python, Go, shell and
+         the Makefile — every one of them PROJECT-WIDE, from the repo root, regardless of which
+         module it is invoked from. It therefore belongs to the aggregator, not to each module:
+
+           * as an inherited pluginManagement execution it ran once per module (3-5x the same
+             work), and a broken CSS file in kotlin-invoice failed the build while Maven was
+             building kotlin-shared — the reported module had nothing to do with the finding.
+           * bound here, it runs ONCE, in the reactor's first project, so a formatting error
+             costs seconds instead of failing after the first module's full compile-and-test.
+
+         `inherited=false` is what keeps it out of the child modules; the skip property is
+         unchanged, so -DskipLinterGates=true still disables it. Fast local pre-check without
+         Maven at all: `make preflight`. -->
+    <plugins>
+      <!-- The shared ArchUnit rule set brings ArchUnit with it; in compile or runtime scope it
+           would ship inside every deployable. Test scope is the only scope it may be used in. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <id>architecture-rules-test-scope-only</id>
+            <goals><goal>enforce</goal></goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>de.littletrotter:kotlin-architecture-rules:*:*:compile</exclude>
+                    <exclude>de.littletrotter:kotlin-architecture-rules:*:*:runtime</exclude>
+                    <exclude>de.littletrotter:kotlin-architecture-rules:*:*:provided</exclude>
+                    <exclude>de.littletrotter:kotlin-architecture-rules:*:*:system</exclude>
+                  </excludes>
+                  <message>kotlin-architecture-rules may only be used with &lt;scope&gt;test&lt;/scope&gt;.</message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>${maven-exec-plugin.version}</version>
+        <inherited>false</inherited>
+        <executions>
+          <!-- Declaring the plugin here also pulls in every OTHER execution this pom's own
+               pluginManagement defines (Maven merges them by id), and those are per-module
+               gates: an aggregator has no src/ for ktlint/detekt to read and no migrations for
+               sqlfluff. Each is switched off here with phase=none.
+
+               `inherited` has to be repeated on EVERY execution, not just on the <plugin>: the
+               plugin-level flag alone does not stop Maven from handing the executions down, which
+               is how the child aggregator (coverage-report) ended up running detekt against a
+               module that contains nothing but a pom — verified by diffing the effective pom of
+               that module. MavenExecGatesTest (kotlin-shared) pins this. -->
+          <execution>
+            <id>ktlint-check</id>
+            <phase>none</phase>
+            <inherited>false</inherited>
+          </execution>
+          <execution>
+            <id>detekt-check</id>
+            <phase>none</phase>
+            <inherited>false</inherited>
+          </execution>
+          <execution>
+            <id>detekt-baseline-ratchet</id>
+            <phase>none</phase>
+            <inherited>false</inherited>
+          </execution>
+          <execution>
+            <id>sqlfluff-check</id>
+            <phase>none</phase>
+            <inherited>false</inherited>
+          </execution>
+          <execution>
+            <id>config-format-check</id>
+            <phase>verify</phase>
+            <inherited>false</inherited>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>bash</executable>
+              <arguments>
+                <argument>${maven.multiModuleProjectDirectory}/ci/scripts/quality/lint-config.sh</argument>
+              </arguments>
+              <skip>${skipLinterGates}</skip>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!-- Mail dispatch SCS (ADR-015 amendment 2026-09-25): own image and release, depends on
+         kotlin-mail-contract + kotlin-edge-identity + kotlin-shared only. Active unless -DskipEmail, so make test, CI and
+         Sonar build it, while the invoice/xpdf image builds (-DskipEmail) need nothing of it — not
+         even its POMs — keeping those images independent of the mail component. -->
+    
+
+    <!-- Offer SCS (Black Forest): own image, own database and bucket, depends on kotlin-shared only.
+         Active unless -DskipQuote, so make test, CI and Sonar build it, while the invoice, xpdf and
+         mail image builds (-DskipQuote) need nothing of it, not even its POMs. -->
+    
+
+    <!-- Inactive by default so make test, Sonar and Qodana see no publishing configuration; the
+         release workflow activates it explicitly with -Prelease when it needs to deploy. -->
+    
+  </profiles>
+</project>

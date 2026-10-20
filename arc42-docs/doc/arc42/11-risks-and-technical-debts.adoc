@@ -1,0 +1,186 @@
+= Risks and Technical Debt
+
+Known risks and open technical debt, surveyed from the program READMEs and specifications, the
+decision records in <<_architecture_decisions,Architecture Decisions>>, and the code itself
+(re-checked 2026-10-02; states only, individual task files are not enumerated here).
+
+== Risks
+
+[cols="1,2,5,1,3,4", options="header"]
+|===
+|ID |Title |Description |Probability / Priority |Impact |Mitigation
+
+|R-1
+|Targeted fault tolerance only
+|`smallrye-fault-tolerance` guards exactly three seams: `DocumentJobDispatchGate.dispatch`
+(`@Bulkhead`, ack wait bounded by `invoice.publish.timeout-ms` on the returned future, no in-process
+`@Retry` — the durable `GenerationJob` recovery loop is the retry), the workbook exports
+(`@Bulkhead`), and `HttpMailDispatchAdapter` (`@Retry`/`@Timeout`). No generic layer wraps every
+cross-service call (KoSIT validation, S3/RustFS access, renderer calls).
+|Low
+|A transient failure in a call outside those seams is not retried at the infrastructure level; it
+surfaces as a failed step in whatever domain-level flow triggered it.
+|Deliberate. The document-generation pipeline is covered twice — the bulkhead sized against
+`LT_INVOICE_MEMORY_LIMIT` (see <<_deployment_view,Deployment View>>) and the `GenerationJob` attempt
+budget (see <<_quality_scenarios,Quality Scenarios>>). Widening fault tolerance to further
+components waits for a concrete failure mode, not speculation.
+
+|R-2
+|Prototype / not-production-ready status
+|The project is explicitly declared a research/prototype in the repository README: feature-complete
+for the core invoicing flow, but not production-ready, provided as-is without warranty.
+|High
+|Adopters cannot assume a support commitment, an SLA, or that every edge case is handled; quality is
+asserted through gates, not through field-proven operational history.
+|Automated quality gates (90/90 coverage default, zero-finding linters, zero-error SonarQube,
+passing Gitleaks/Trivy security scans) are the primary risk-reduction lever in lieu of a formal
+hardening or production-readiness program. The disclaimer is kept explicit rather than implied, so
+expectations are set correctly.
+
+|R-3
+|Market: comparable products and projects
+|Other projects and vendors bring similar e-invoicing products to market — the German B2B
+e-invoicing mandate creates the same demand for every provider, from open-source tools to
+established accounting suites adding X-Rechnung/ZUGFeRD output.
+|Medium
+|The window in which a self-hosted, single-operator solution for freelancers, engineering offices,
+specialty craft businesses and SMEs is distinctive may close; adopters may prefer a product with a
+larger ecosystem, hosted operation or an existing accounting integration.
+|Differentiation is deliberate and documented: data stays on the operator's own hardware
+(<<_architecture_constraints,Architecture Constraints>>), small-budget hardware is a first-class
+target (<<adr-020,ADR-020>>), the compliance gate and the number journal are verifiable rather than
+asserted, and the license keeps the concept open. The market is watched, not modelled; no feature is
+built solely to match a competitor.
+
+|R-4
+|Shared native services on one host
+|On the production-style Ubuntu server, PostgreSQL, RustFS and Caddy run natively once and are
+shared by every instance (prod, dev, demo); see <<_deployment_view,Deployment View>>.
+|Low
+|A maintenance error or an upgrade of one shared service affects all instances at once; a runaway
+dev or demo workload competes with prod for the same database cluster.
+|One database, role trio and bucket per instance keep the data separate; the instance overlay never
+starts a second Postgres or RustFS; backups run per instance. A dedicated host per environment
+remains the escalation path when isolation matters more than footprint.
+
+|R-5
+|X-Rechnung / ZUGFeRD standards maintenance
+|EN 16931 semantic rules and the KoSIT validator
+evolve independently of this project. Validation is provided by pinned third-party libraries:
+Mustang Project `validator` 2.26.0 and `org.kosit:validator` 1.6.3.
+|Medium
+|A missed upstream update can let a since-invalidated invoice structure pass local validation, or an
+upstream rule tightening can reject previously valid invoices without a corresponding local change.
+|Dependency versions are pinned explicitly with rationale comments (`kotlin-xpdf/pom.xml`),
+following the project convention of never downgrading and always moving to the latest version absent
+a contraindicating CVE. There is no automated upstream-changelog watch yet for KoSIT/EN 16931
+releases — open.
+
+|R-6
+|Single-person operations
+|The project is specified and reviewed by a single Product Owner working with AI coding agents under
+a spec-then-delegate workflow (see Organizational Constraints in
+<<_architecture_constraints,Architecture Constraints>>); there is no second human reviewer besides
+the automated gates.
+|High
+|Bus factor of one for architectural sign-off; agent-produced changes are checked by automated gates
+plus a single human review pass rather than a team review process.
+|Heavy reliance on automated enforcement (linters, SonarQube, Gitleaks/Trivy, coverage gates) and on
+written decision records (ADRs, architecture decisions) to substitute for a second reviewer. This is
+a deliberate, documented trade-off of the project's operating model, not an oversight.
+
+|R-7
+|Browser end-to-end tests (Playwright) — planned
+|The idea: a real browser drives the whole chain — Vaadin UI, application, NATS, renderer, object
+storage — against the dev instance on the server, from the Mac through a tunnel or on the server
+itself, with one scenario per use case (happy path plus edge cases) and a UI-surface versus
+test-surface comparison that shows which screens have no scenario yet. The suite lives in
+`little-trotter-admin-tools/e2e-test-playwright/` (39 spec files) and is planned, not yet part of
+any gate.
+|Medium
+|Until the suite runs, no automated check confirms the full browser-to-object-storage chain; the
+unit, integration and Karibu component tests cover the layers separately.
+|First verified run against the dev instance, then the suite joins the acceptance gates; the
+remaining scenario gaps close program by program (dev-server offload specification,
+`e2e-test-playwright/README.md`).
+
+|R-8
+|Kotlin daemon / containerized build fragility
+|Under host memory pressure, the Kotlin compiler daemon can silently emit a partial compile — a
+module reports success but is missing part of its classes — which then surfaces as a confusing
+failure in an unrelated, later module. Disabling the daemon outright is not a fix; it is documented
+as a cause of this failure mode, not a cure.
+|Medium
+|Intermittent, hard-to-diagnose build failures, worse when multiple agent sessions and
+Testcontainers-heavy test phases compete for the same host resources.
+|Mitigated by an in-process compiler execution strategy for containerized runs, a sentinel-class
+compile-integrity check that fails fast with a clear diagnosis, a machine-enforced build mutex (a
+lock directory, since `flock` is unavailable on macOS), and bounded container memory.
+|R-9
+|No defined recovery targets; off-site copy optional
+|No recovery point or recovery time objective is defined. The off-site copy of a backup (external SSD) is optional, and a regular restore test is not part of the routine.
+|Medium
+|On a single host, a disk failure, theft or fire can lose all data written since the last backup that left the host.
+|Open, product-owner decision. Proposal: define the recovery point and recovery time targets, make an off-site copy mandatory, and test a restore periodically.
+
+|R-10
+|Greenfield baseline ends with the first productive instance
+|The schema exists as one baseline migration and one seed migration without upgrade scripts (see <<_database_baselines_what_runs_when,Database Baselines: What Runs When>>). This holds only while no instance has data that must survive an upgrade.
+|High
+|Once a real instance holds invoices, a schema change without a tested migration path would lose or corrupt data.
+|Open. A migration strategy must exist before the first productive installation.
+
+|R-11
+|Operator database writes can change finalised invoices
+|The operator may write to the database directly (see <<_manual_database_writes,Manual Database Writes>>), including to finalised invoices. The audit trigger records each change, but the operator sets the timestamp (`app.now`) in the session.
+|Medium
+|A finalised invoice can be altered, and the recorded time of the change can be wrong or false.
+|Open. Proposal: a database-level write lock for finalised invoices and a plausibility check of `app.now` against the real clock.
+
+|R-12
+|Restoring an older backup can reuse invoice numbers
+|The number counters and the number journal live in the same database as the invoices, so a restore of an older backup rolls them back together. Numbers already sent to customers after that backup could be issued a second time. The journal self-check and the comparison with sent invoices run inside the restored data and do not see this; only a seal recorded outside the system (see <<_the_number_journal,The Number Journal>>) would show the older chain head.
+|Medium
+|Duplicate invoice numbers after a restore.
+|Open. After every restore, compare the journal head with the last externally recorded seal and with the numbers already sent, before issuing new invoices; a documented restore procedure should state this step.
+
+|R-13
+|Interactive documents wait behind bulk jobs
+|Document jobs a user waits for (send, print, credit note issued from the UI) run in an interactive lane: own subject `document-jobs-interactive` and own durable consumer `kotlin-xpdf-interactive` with dedicated worker threads, inside the same stream `LITTLE_TROTTER_JOBS`. Bulk jobs (import, regeneration, reproduction, sweeps, admin maintenance) stay on `document-jobs`. The lane is stored on the job at creation (see <<_generate_e_invoice,Generate E-Invoice>>). Residual: the results subject `document-job-results` is shared by both lanes; interactive and bulk workers compete for CPU on the xpdf host; the load test on the test host is pending at wave close.
+|Medium
+|Backlog no longer delays interactive documents on the queue; the remaining delay comes from CPU contention on the xpdf host and the shared results subject.
+|Mitigated: separate subject, consumer, dispatch bulkhead and fast-path executor for the interactive lane (QS-14). The pending state is still shown instead of an error if the limit is exceeded. Open: load test on the test host at wave close.
+|===
+
+== Technical Debt
+
+[cols="1,2,5,1,3,4", options="header"]
+|===
+|ID |Title |Description |Probability / Priority |Impact |Mitigation
+
+|TD-1
+|Manual accessibility walkthrough outstanding
+|A full manual accessibility walkthrough of the application has not yet been performed.
+|Medium
+|Accessibility defects that automated checks cannot detect may remain unnoticed.
+|Per-change contrast checks (WCAG AA) and automated UI-logic assertions exist; the manual
+walkthrough is the open item.
+|TD-2
+|No structured logging, tracing or alerting
+|`kotlin-invoice` logs in the default console format; there is no project-wide structured logging or trace propagation (see <<_observability,Observability>>), and no alerting.
+|Medium
+|Failures such as a full disk, a failed backup or an expiring certificate are noticed only when someone looks.
+|Open. Minimal alerting for disk space, failed backup and certificate expiry is sufficient; full tracing is not needed at this size.
+|===
+
+=== Resolved Performance and Domain-Model Debt
+
+These items are resolved and no longer tracked as debt: the overview cache evicts by key prefix instead of flushing the whole Valkey database; the object-store write for a receipt happens before the database transaction; the container heap is set only in the Compose file; every foreign-key column has a leading index in the baseline schema; Hibernate statement batching, fetch batching and connection-pool sizing are configured; the read-only rule of an issued invoice is enforced once in the `Invoice` aggregate; child entities have no repositories of their own; domain events are published after commit through one dispatcher; outbound ports live under `port/outbound`; and the ubiquitous language is fixed in <<adr-044,ADR-044>>.
+
+The `Buyer*` and `Seller*` identifiers stay where they name an EN 16931 role or a persisted column (product-owner decision 2026-10-15). The remaining `Offer` and `Storno` code identifiers were renamed to `Quote` and `Cancellation`; the baseline schema comments follow.
+
+NOTE: Backup/restore is not tracked here: it is a deliberate architecture decision (PO,
+2026-09-14), not a deferred feature — backups run exclusively through DevOps and
+`little-trotter-admin-tools` / `little-trotter-admin` (Phase 1 shell automation until Q4/2027, Phase 2 `lt` CLI
+suite from Q4/2027, see <<_operations_and_admin_tooling_little_trotter_admin_tools,Operations and Admin Tooling>>),
+and no in-app backup UI is planned.

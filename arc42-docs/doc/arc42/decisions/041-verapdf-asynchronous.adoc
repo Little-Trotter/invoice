@@ -1,0 +1,31 @@
+[[adr-041]]
+= ADR-041: veraPDF Conformance Check as an Asynchronous Service
+
+== Status
+Accepted (PO 2026-10-12). PO-Freigabe (Datum): 2026-10-12, for the user-visible texts of the new
+report states ("ausstehend", "Prüfung nicht möglich"), the notice "veraPDF-Prüfung läuft noch" and
+the KoSIT setting label and description.
+
+== Context
+The veraPDF check ran as a child JVM inside the render worker. It competed with the export for the
+worker's memory and made one slow document delay the whole job.
+
+== Decision
+* veraPDF runs as its own container (heap 512 MiB, limit 768 MiB) and is called over HTTP by the
+  worker's check lane (one thread, one check at a time). The PDF is streamed from object storage;
+  the worker holds no copy and loads no PDF library for it.
+* After the document is committed, the invoice application writes a check request to the
+  transactional outbox (claim check: object key and SHA-256, schema version 1). The result comes
+  back on its own subject and is appended to the stored validation report as stage `VERAPDF`.
+* The stage has the states pending, passed, findings and check not possible (plus not enabled).
+  It is advisory: findings and a failed check never decide the overall verdict.
+* Sending waits while the stage is pending and the setting `VERAPDF_CHECK` is on. The setting is
+  read at the moment of the decision, so switching it off releases waiting documents.
+* A failed check is redelivered by JetStream; the last delivery publishes an `ERROR` result so a
+  document never waits forever.
+* `KOSIT_CHECK` switches the embedded KoSIT validation off for every profile except XRechnung,
+  which is always validated (PO 2026-10-12).
+
+== Consequences
+The worker image no longer contains veraPDF. The PDF/A stage of the export is the structural
+minimal check; the profile verdict follows asynchronously.

@@ -1,0 +1,112 @@
+Little Trotter
+Copyright (c) 2026 Stefan Zils and contributors (https://github.com/little-trotter)
+
+This product includes software developed by Little Trotter
+under the Apache License 2.0, and design, concept, and documentation assets
+licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0).
+
+ATTRIBUTION REQUIREMENT:
+Any use, reproduction, redistribution, modification, hosting, or embedding
+of this software, its concept, or derivative works—in source, binary, hosted,
+or documented form, including commercial use—must prominently display attribution to:
+"Little Trotter (https://github.com/little-trotter)"
+and retain this NOTICE file, copyright notices, and license terms.
+
+---
+
+Bundled third-party fonts
+
+  Liberation Sans (Regular, Bold, Italic, Bold Italic)
+  Location: kotlin-xpdf/src/main/resources/fonts/
+  Copyright (c) Red Hat, Inc. — Liberation is a trademark of Red Hat, Inc.
+  Licensed under the SIL Open Font License, Version 1.1:
+  https://openfontlicense.org/
+
+  Embedded into generated invoice PDFs, which the SIL OFL permits (document
+  embedding is not "selling the fonts" under clause 1).
+
+  Liberation Sans 2.1.5. Digitized data copyright (c) 2010 Google Corporation
+  with Reserved Font Arimo, Tinos and Cousine. Copyright (c) 2012 Red Hat, Inc.
+  with Reserved Font Name Liberation. The full licence text accompanies the
+  fonts at https://github.com/liberationfonts/liberation-fonts/blob/main/LICENSE
+
+---
+
+Third-party software in the container images
+
+  Eclipse Temurin (OpenJDK 25 JRE)
+  Licensed under GPL-2.0 with the Classpath Exception.
+  Source: https://github.com/adoptium/jdk25u and https://github.com/adoptium/temurin-build
+
+  Typst 0.15.1 (typst/typst), Apache License 2.0
+  https://github.com/typst/typst . Typst's own NOTICE lists the licences of the
+  fonts it embeds (Libertinus Serif, SIL OFL 1.1; New Computer Modern, GUST Font
+  License; DejaVu Sans Mono; Foxit fonts):
+  https://github.com/typst/typst-assets/blob/main/NOTICE
+
+  PostgreSQL client tools (postgresql18-client), PostgreSQL License.
+  Portions Copyright (c) 1996-2026, PostgreSQL Global Development Group;
+  Portions Copyright (c) 1994, The Regents of the University of California.
+
+  curl / libcurl, curl licence. Copyright (c) 1996 - 2026, Daniel Stenberg and
+  many contributors.
+
+  Alpine Linux base image (musl, busybox and others under their own licences).
+  Source packages: https://gitlab.alpinelinux.org/alpine/aports
+
+  Saxon-HE 12.9, Mozilla Public License 2.0. Unmodified.
+  Source: https://github.com/Saxonica/Saxon-HE
+
+  veraPDF 1.30.2 (used under MPL-2.0, dual-licensed GPL-3.0-or-later/MPL-2.0).
+  Mozilla Rhino 1.7.15.1, MPL-2.0. Both unmodified.
+  Sources: https://github.com/veraPDF/veraPDF-library and https://github.com/mozilla/rhino
+
+  JAXB runtime (Eclipse Implementation of JAXB), BSD-3-Clause (EDL 1.0),
+  Copyright (c) 2018 Oracle and/or its affiliates.
+  Bouncy Castle: Copyright (c) 2000 - 2026 The Legion of the Bouncy Castle Inc.
+  (https://www.bouncycastle.org), MIT-style licence.
+  Apache-2.0, MIT, BSD and EPL-2.0 libraries are listed with their licences in
+  docs/legal/third-party-licenses.md.
+
+---
+
+Bundled schemas, rule sets and code lists
+
+  UN/CEFACT Cross Industry Invoice XML schemas (D16B, D22B)
+  Copyright (C) UN/CEFACT (2016). All Rights Reserved. Copied unmodified; the
+  copyright notice inside each schema file must be retained.
+
+  OASIS Universal Business Language (UBL) 2.1 schemas
+  Copyright (c) OASIS Open 2013. All Rights Reserved. Copied unmodified with
+  the in-file notice.
+
+  XML Signature core schema (xmldsig-core-schema.xsd)
+  Copyright 2001 The Internet Society and W3C (MIT, ERCIM, Keio). Governed by
+  the W3C Software Notice and License.
+
+  Factur-X / ZUGFeRD validation artefacts (Schematron XSLT, code database)
+  Factur-X 1.09.2 / ZUGFeRD 2.5.2, FNFE-MPE and Forum elektronische Rechnung
+  Deutschland (FeRD). Used under the FeRD right-of-use statement: free of
+  charge, irrevocable right of use including further development, further
+  processing and combination with other products. The licence does not
+  include the essential patents of FeRD members.
+
+  KoSIT XRechnung validator configuration 3.0.2 and XRechnung Schematron
+  Koordinierungsstelle fuer IT-Standards (KoSIT), Apache License 2.0
+  https://github.com/itplr-kosit/validator-configuration-xrechnung
+
+  EN 16931 validation artefacts (Schematron, code lists)
+  European Commission / CEF eInvoicing, European Union Public Licence 1.2
+  https://github.com/ConnectingEurope/eInvoicing-EN16931
+
+---
+
+Trademarks and brand assets (PROPOSED WORDING, pending PO decision E1)
+
+  The name "Little Trotter" and the horse brand artwork (for example
+  brand-horse.png, the favicon and icon files, little-trotter-horse.png and
+  little-trotter-pixel-horse.png) are excluded from the Apache License 2.0
+  and CC BY 4.0 grants above. No licence to use the name or the artwork as a
+  trademark, product or company name, or in a way that suggests endorsement,
+  is granted except for truthful attribution as required by this NOTICE.
+  Forks and redistributions must replace the brand artwork and use their own name.

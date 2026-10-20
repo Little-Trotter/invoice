@@ -1,0 +1,41 @@
+[[adr-012]]
+= ADR-012: Docker Engine, Not Podman, for Both Development and the Production Host
+
+== Status
+Accepted
+
+== Context
+Podman is a candidate for the dedicated production Linux host: daemonless, rootless by default, with
+systemd/Quadlet unit integration and journald logging — properties that suit a small, single-purpose
+server well in principle. An evaluation kit was built and reverted before completion; it defined
+three hard acceptance criteria: full compose-file fidelity under Podman (including healthcheck-based `depends_on`), rootless port 443 for Caddy, and operational
+parity (admin-tools tunnels, the security-scan tooling against a Podman socket). Development
+machines were never in scope for a switch — macOS Docker Desktop remains free under the project's
+usage threshold and gives the fastest local builds via BuildKit.
+
+== Decision
+The project stays on Docker Engine for both development and the production host. The project's
+position is plainly "Docker, not Podman." No Quadlet units or Podman-specific tooling ship in the
+repository, and no `Quadlet`/`podman` files exist under `admin-tools/` or `docker/`. The host runs
+Docker Engine in rootless mode, retaining part of the security benefit that motivated the evaluation
+without the runtime switch.
+
+== Consequences
+
+=== Positive
+* One container runtime end to end — the same `docker-compose.yml` and overlay files behave
+  identically in development and on the host, with no Podman-compose semantic-diff risk to
+  monitor.
+* Existing admin-tools (backup, deployment, monitoring) that assume a Docker socket need no
+  dual-runtime abstraction layer.
+
+=== Negative
+* Foregoes Podman's daemonless/rootless-by-default properties on the production host; rootless
+  Docker Engine remains the operating model there instead.
+
+=== Mitigation
+* Rootless Docker Engine on the host keeps part of the security benefit the evaluation was after,
+  without a second container runtime to maintain.
+
+'''
+_Architecture Decision Record — source: root `docker-compose.yml`_

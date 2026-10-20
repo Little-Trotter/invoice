@@ -1,0 +1,36 @@
+# Build output
+**/target/
+**/.kotlin/
+**/node_modules/
+
+# Local tooling
+.git/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Unneeded build context
+docs/
+ci/
+# ...except the one file the Maven reactor needs: the parent pom lists
+# ci/coverage-report as a module, so its pom must be in the context or the
+# dependency-warmup layer cannot resolve the build at all. An exception inside an
+# excluded directory is exactly what "!" is for.
+!ci/coverage-report/pom.xml
+# ci/sbom-postprocess is more than reactor-resolvable-only (unlike coverage-report above): both
+# kotlin-invoice's and kotlin-xpdf's Dockerfiles COPY its full pom.xml + src, because it's an
+# exec-maven-plugin PLUGIN dependency they actually run during `package`, not merely a module the
+# reactor has to see. Un-ignoring the directory itself (not just files inside it) is required —
+# a negated path under an excluded ancestor directory needs the ancestor negated too.
+!ci/sbom-postprocess/
+!ci/sbom-postprocess/**
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs and reports
+*.log
+mvn-jacoco.log

@@ -1,0 +1,291 @@
+= Solution Strategy
+
+== Overview
+
+The table below maps each of the six quality goals from
+<<_introduction_and_goals,Introduction and Goals>>, in the same order and under the same names, to
+the architectural approach chosen to meet it, consistent with the
+<<architecture-canvases-reference,Architecture Communication Canvas>>.
+
+[cols="2,3,4", options="header"]
+|===
+|Quality Goal |Approach |Rationale
+
+|Domain correctness
+|EN 16931 domain model as a typed `B2bTerm` enum (`kotlin-shared`, one constant per BT number),
+persisted as `SMALLINT`, never free-text. Multi-stage validation (XSD, EN 16931 Schematron,
+embedded KoSIT) gates issuance.
+|An invalid e-invoice is worse than none; the type system and validation pipeline make the
+invalid state unreachable rather than merely discouraged.
+
+|Test coverage and quality gates
+|A build-enforced JaCoCo gate (90/90, including the UI), mandatory linters, SonarQube plus
+Gitleaks/Trivy, and independent E2E layers — Karibu component and monkey tests
+(`kotlin-e2e-tests`), and Playwright browser E2E (sibling `little-trotter-admin-tools`
+repository).
+|Automated, non-negotiable gates substitute for the manual review bandwidth a solo
+Product-Owner-plus-agents team lacks (quality despite AI-delegated development); each E2E layer
+catches a different failure class.
+
+|Ergonomics (German UI, accessibility)
+|Server-side Vaadin Flow UI in German with UStG-compliant wording (English as fallback locale);
+accessibility and dark-mode support are checked on every UI/color change.
+|The primary user is a single Office Manager, not necessarily an IT specialist; one
+Kotlin toolchain and no separate frontend keep the UI consistent with the domain.
+
+|Operability on small hardware
+|Modulith (`kotlin-invoice`) plus a small renderer/worker (`kotlin-xpdf`) and a
+scheduler-driven job worker (same artifact, `QUARKUS_PROFILE=worker`), one Docker Compose
+stack, Caddy for TLS.
+|No microservice mesh, no API gateway, no service discovery — the target is small-budget
+hardware, not a cloud cluster (ops minimalism).
+
+|Traceability
+|Explicit invoice state model with validation results kept per invoice; DevOps-operated database
+and object-storage backups (Phase 1 scripts under `admin-tools/scripts/backup/`, Phase 2 `lt backup`).
+|State changes and validation results are reconstructable after the fact, for the Office
+Manager's own bookkeeping and for a tax advisor's or auditor's review.
+
+|Green IT (lean payload and storage)
+|Receipts are reduced at upload and appear in a produced e-invoice as one XML copy plus
+rasterised pages (<<_document_size_budget,Document Size Budget>>, <<adr-032,ADR-032>>, <<adr-039,ADR-039>>); small NATS envelopes keep
+payloads out of the messaging layer.
+|Every copy of a receipt or generated document occupies hardware across the whole invoice chain
+for the retention period, so volume is kept lean at the source.
+|===
+
+=== Further Strategies
+
+Strategies that serve several goals at once and therefore have no single quality-goal row.
+
+[cols="2,3,4", options="header"]
+|===
+|Topic |Approach |Rationale
+
+|Robust messaging on small hardware
+|NATS JetStream carries only small job envelopes; text payloads live in Valkey, PDFs and
+receipts in RustFS.
+|Small message bodies keep NATS itself small and fast (128 MB budget) and avoid duplicating
+large payloads across redeliveries.
+
+|Greenfield velocity
+|The Flyway baseline migration is edited in place rather than accumulating incremental
+migrations; legacy/deprecated code is deleted outright.
+|Avoids schema-migration archaeology and dead-code accumulation while the domain model is
+still settling.
+|===
+
+== Technology Stack
+
+The module `pom.xml` files and `docker-compose.yml` are authoritative; versions below move with
+them. Given as major.minor (or the exact release where the version is itself architecturally
+significant, e.g. a pinned validation/conformance engine).
+
+[cols="2,3,1,3", options="header"]
+|===
+|Layer |Technology |Version |Where
+
+|Language
+|Kotlin
+|2.4.21
+|All modules (`kotlin.version`, root `pom.xml`)
+
+|Runtime
+|Java (JDK)
+|25
+|All modules (`java.version`, root `pom.xml`)
+
+|Application framework
+|Quarkus
+|3.40.1
+|`kotlin-invoice`, `kotlin-xpdf`, `kotlin-email`, `kotlin-quote` (`quarkus.platform.version`, root `pom.xml`)
+
+|UI
+|Vaadin Flow
+|25.3.2
+|`kotlin-invoice`
+
+|Database
+|PostgreSQL
+|18
+|`docker-compose.yml`
+
+|Schema migration
+|Flyway
+|(Quarkus-managed)
+|`kotlin-invoice` (`quarkus-flyway`, version pinned by the Quarkus BOM)
+
+|Messaging
+|NATS JetStream
+|2.15
+|`docker-compose.yml`; client library `jnats` 2.26.3
+
+|Cache / text payloads
+|Valkey (Redis-protocol)
+|9.1
+|`docker-compose.yml`; client library Jedis 8.0.2
+
+|Object storage
+|RustFS (S3-compatible)
+|1.0.1
+|`docker-compose.yml`; client library AWS SDK v2 2.56.0
+
+|E-invoice XML generation + schema/Schematron validation
+|Mustang Project `validator`
+|2.26.0
+|`kotlin-xpdf`
+
+|EN 16931/X-Rechnung validation
+|KoSIT `validator` (embedded)
+|1.6.3
+|`kotlin-xpdf`
+
+|PDF/A-3b conformance
+|veraPDF (REST container, <<adr-041,ADR-041>>)
+|1.30.2
+|`verapdf` (standalone container, called asynchronously by `kotlin-xpdf`)
+
+|PDF rendering (layout engine, <<adr-030,ADR-030>>)
+|Typst (CLI, subprocess; installed in the worker image by default)
+|0.15.1
+|`kotlin-xpdf`
+
+|PDF manipulation
+|Apache PDFBox
+|3.0.8
+|`kotlin-xpdf`
+
+|GiroCode QR matrix (EPC069-12 v002)
+|ZXing `core` (Apache-2.0; started at Google in 2007, community-maintained since 2014 — the
+`com.google.zxing` group id is historical)
+|3.5.3
+|`kotlin-xpdf` (`QrSvg`; SVG rasterization is in-house, `zxing:javase` is test-only for the
+render-then-scan round trip)
+
+|Schematron/XSLT engine
+|Saxon-HE
+|12.9
+|`kotlin-xpdf`
+
+|Excel export
+|Apache POI (`poi-ooxml`)
+|5.5.1
+|`kotlin-invoice` only — `kotlin-xpdf` stays free of it
+
+|JSON
+|Jackson (`tools.jackson.core`)
+|3.2.3
+|All modules
+
+|Testing
+|JUnit Jupiter
+|6.1.3
+|All modules
+
+|Component testing
+|Karibu-Testing
+|2.7.3
+|`kotlin-invoice`, `kotlin-e2e-tests`
+
+|Architecture tests
+|ArchUnit
+|1.5.0
+|`kotlin-shared`, `kotlin-xpdf`, `kotlin-invoice`, `kotlin-email`, `kotlin-quote`
+
+|Integration testing
+|Testcontainers
+|2.0.5
+|`kotlin-shared`, `kotlin-xpdf`, `kotlin-invoice`, `kotlin-e2e-tests`, `kotlin-email`, `kotlin-quote`
+
+|Metrics
+|Micrometer + Prometheus registry
+|(Quarkus-managed)
+|`kotlin-invoice`, `kotlin-xpdf`, `kotlin-email`, `kotlin-quote`
+
+|Coverage gate
+|JaCoCo
+|0.8.15
+|All modules, aggregated by `ci/coverage-report` (90% line / 90% branch)
+
+|CI orchestration
+|Dagger
+|0.21.10
+|`ci/` (Go module, `ci/dagger.json`)
+
+|SBOM
+|CycloneDX Maven plugin
+|2.9.3
+|One CycloneDX document (`bom.json`) per Maven module with reproducible `project.build.outputTimestamp`, written into the module's classes and enriched by `ci/sbom-postprocess` (BSI TR-03183-2); `kotlin-invoice` additionally merges the npm dependencies. There is no per-image SBOM; the Dagger `Sbom` function builds an aggregate BOM (`ci/main.go`)
+|===
+
+== Architectural Approach
+
+* *Modulith, not microservices* — `kotlin-invoice` is a single deployable Quarkus/Vaadin
+  application organized internally by package (`ui`, `application`, `domain`, `infrastructure`,
+  `spi`; see <<_building_block_view,Building Block View>>) with explicit, enforced module
+  boundaries rather than an undifferentiated codebase. The renderer/worker (`kotlin-xpdf`) and
+  the job worker (same artifact, different Quarkus profile) are the only other JVM services
+  within this same self-contained system, split out because rendering and scheduled
+  re-publishing benefit from running outside the request-handling JVM. A capability with its own
+  release cycle and no shared internals becomes its own self-contained system instead, as mail
+  dispatch does (<<adr-015,ADR-015>>).
+* *Hexagonal-leaning layering inside the app* — `domain` defines repository ports
+  (`de.littletrotter.domain.repository.*`); `infrastructure.persistence` provides the Panache/JPA
+  adapters (e.g. `PanacheReceiptRepository`); `application` orchestrates use cases; `ui` only
+  talks to `application`.
+* *Server-side UI, no separate frontend build* — Vaadin Flow keeps the UI in Kotlin alongside the
+  domain, avoiding a second toolchain and a REST/GraphQL API surface for a single-operator
+  browser UI.
+* *Asynchronous document generation* — PDF/XML generation is never inline with a user request; it
+  is queued as a `GenerationJob`, delegated over NATS, and pushed back to the UI (Vaadin push)
+  when the renderer finishes, keeping request latency independent of rendering time.
+* *Shared types, not duplicated logic* — `kotlin-shared` compiles into both `kotlin-invoice` and
+  `kotlin-xpdf` (B2B/EN 16931 terms, `Money`, NATS stream setup, payload contracts), so both
+  processes agree on wire formats without a runtime dependency between them.
+* *Test projects as first-class citizens* — every test-pyramid layer is its own project
+  (`kotlin-e2e-tests`, `coverage-report` in this reactor; `e2e-test-playwright` in the sibling
+  `little-trotter-admin-tools` repository); see <<_building_block_view,Building Block View>>.
+
+== Correctness Strategy
+
+* *Typed B2B terms* — `B2bTerm` (`kotlin-shared`) models every EN 16931 business term as an enum
+  constant carrying its BT number, binding kind, and value-domain metadata; invariants (e.g. a
+  `FREE` binding requires an xpath) are enforced in `init` and unit-tested against invalid input.
+* *Multi-stage validation before issuance* — generated ZUGFeRD/X-Rechnung XML passes XSD schema
+  validation, EN 16931 Schematron rules, and the embedded KoSIT validator (Mustang Project
+  library, `kotlin-xpdf`); an asynchronous veraPDF check (PDF/A-3b, <<adr-041,ADR-041>>) runs in a
+  dedicated container, and optional LLM-based checks can be enabled per deployment.
+* *Money as a value type* — monetary amounts use a dedicated `Money` type (`kotlin-shared`); raw
+  `BigDecimal` is reserved for quantities and factors.
+* *Enums as integer codes* — every enumeration is persisted through a JPA attribute converter to
+  a small integer column, never `EnumType.STRING` or a free-text code, so an invalid value cannot
+  silently enter the database as a string that happens to look right.
+
+== Quality Assurance Strategy
+
+.Quality gates from commit to release
+image::quality-gates.svg[Flow of quality gates from commit to release]
+
+* *Coverage gate* — an aggregated JaCoCo bundle check (`coverage-report`, `report-aggregate`)
+  enforces 90% line and 90% branch coverage across every module including the UI, combining
+  unit, integration, and E2E exec data into one report so no layer under-counts the others'
+  coverage.
+* *Mandatory linters* — ktlint, detekt, and sqlfluff (for migrations) run as Maven build-gate
+  executions (`make test`), not optional CI steps; a missing linter binary fails the build
+  preflight rather than silently skipping the gate.
+* *Static analysis* — SonarQube Community Edition analyzes compiled bytecode via the Maven
+  scanner plugin against the LAN instance, fed by the same JaCoCo coverage data, and runs on
+  release tags and manual dispatch (`.forgejo/workflows/cicd.yml`); false positives are a
+  Product Owner decision, never a blanket exclusion (CDI findings in particular are always
+  resolved architecturally, e.g. via constructor injection, never excluded).
+* *Security gates* — Gitleaks scans staged changes on every commit (pre-commit hook installed by
+  `git config core.hooksPath .githooks`) and the full git history on release tags in CI; Trivy scans the checkout's
+  dependencies and Dockerfile/compose configuration (`trivy fs`, `.trivyignore.yaml`) on the same
+  release-tag job, then gates every container image again before it is pushed (`make publish`,
+  `.github/workflows/publish-images.yml`).
+* *Layered E2E strategy* — Karibu-based component tests (`kotlin-e2e-tests`) exercise Vaadin
+  views without a browser; the same project's Karibu-based monkey tests (tagged `monkey`) generate
+  randomized interaction sequences to surface robustness issues the scripted suites do not
+  anticipate; Playwright drives a real browser against an isolated compose stack from the sibling
+  `little-trotter-admin-tools` repository. See <<_building_block_view,Building Block View>> for how
+  each is invoked.

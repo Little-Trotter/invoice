@@ -1,0 +1,133 @@
+@startuml invoice-state-machine
+
+' A42-11 — laid out left to right so the happy path DRAFT -> IN_REVIEW ->
+' ISSUED reads as one line, entry at the left, both exits at the right. The
+' IN_REVIEW -> DRAFT back-edge stays a short local return arrow between the
+' two adjacent boxes (no direction hint on it: PlantUML/Graphviz drops one
+' of a pair of same-rank edges that carry opposing -left-/-right- hints —
+' verified against docker plantuml/plantuml:1.2023.12, the version `make
+' publish` renders with).
+' The storno document's [*] --> CANCELLED entry used to share the diagram's
+' single real start pseudostate with [*] --> DRAFT, which pulled that dot
+' into a crossing-heavy spot between the two flows. It is now its own
+' <<start>>-stereotyped pseudostate (StornoEntry) placed right next to
+' CANCELLED — same solid-dot look as a real start, but visually a distinct
+' second entry, which is the point: a storno document is never created via
+' DRAFT, it is born directly in CANCELLED. One shared <<end>> pseudostate
+' (End) is the single exit for ISSUED (stays sent), CANCELLED and VOIDED —
+' PO 2026-09-12: one exit, two confused readers.
+'
+' State colours follow the shared status chip tones (lifecycleTone in the UI; the
+' same meaning carries the same colour in the offer diagram,
+' quote-state-machine.puml). The real chips are pale-tint pills sized for 12px UI
+' labels; for a diagram box the tone colour becomes a solid fill with white label
+' text (FontSize 12 bold is "normal text", AA bar 4.5:1). Contrast against white:
+'   DRAFT      NEUTRAL --lt-text-secondary #5F6368 = 6.05:1
+'   IN_REVIEW  REVIEW  #C34118 (darkened --lt-review #F4511E) = 5.13:1
+'   ISSUED       ACCENT  #1A73E8 = 4.51:1
+'   CANCELLED  STORNO  #455A64 = 7.24:1
+'   VOIDED     ERROR   #D93025 = 4.77:1
+' Borders are a darker shade of the same hue; they are decoration and carry no
+' AA requirement of their own.
+
+left to right direction
+
+skinparam nodesep 30
+skinparam ranksep 40
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+
+skinparam state {
+  FontSize 12
+  FontStyle bold
+  FontColor #ffffff
+  ArrowColor #5F6368
+  ArrowFontColor #202124
+  ArrowFontSize 11
+}
+
+skinparam state<<draft>> {
+  BackgroundColor #5F6368
+  BorderColor #4A4D51
+}
+
+skinparam state<<review>> {
+  BackgroundColor #C34118
+  BorderColor #9C3412
+}
+
+skinparam state<<sent>> {
+  BackgroundColor #1A73E8
+  BorderColor #145AB5
+}
+
+skinparam state<<cancelled>> {
+  BackgroundColor #455A64
+  BorderColor #36464E
+}
+
+skinparam state<<voided>> {
+  BackgroundColor #D93025
+  BorderColor #A9251D
+}
+
+state DRAFT <<draft>>
+state IN_REVIEW <<review>>
+state ISSUED <<sent>>
+state CANCELLED <<cancelled>>
+state VOIDED <<voided>>
+state "  " as StornoEntry <<start>>
+state "  " as End <<end>>
+
+[*] --> DRAFT : new invoice
+DRAFT --> IN_REVIEW
+' [norank]: the return edge must not influence the left-to-right rank order,
+' otherwise Graphviz may put IN_REVIEW left of DRAFT when it breaks the cycle.
+IN_REVIEW -[norank]-> DRAFT
+IN_REVIEW --> ISSUED : e-invoice generated\nsuccessfully
+note on link
+  Not a direct action: "Senden" requests a SEND-triggered
+  e-invoice generation job (GenerationJobResultHandler.resolveSendOutcome);
+  the invoice stays IN_REVIEW until that job completes and
+  validation resolves VALID. See Runtime View, "Send an Invoice".
+  A VALID-tooling-UNAVAILABLE result can still be forced through
+  with an audited override reason (finalize-override) — the one
+  case this edge remains a direct, synchronous action.
+end note
+ISSUED --> End : stays sent
+
+DRAFT -down-> VOIDED
+IN_REVIEW -down-> VOIDED
+ISSUED -down-> CANCELLED : storno
+note top of CANCELLED
+  Original invoice is tagged
+  CANCELLED on storno and stays so;
+  the storno document is a
+  separate invoice (type code 384)
+  created in CANCELLED via
+  Invoice.withInitialStatus(CANCELLED)
+  (ADR-025) — status has a private
+  setter, so this factory is the
+  construction-time-only door
+  around it, deliberately outside
+  InvoiceStateMachine's own edge
+  table (no prior status to check).
+end note
+
+StornoEntry -down-> CANCELLED : storno document is\ncreated directly\nin CANCELLED
+
+VOIDED -down-> End
+CANCELLED -down-> End
+
+legend right
+  |= Status |= Color |
+  |DRAFT|<back:#5F6368><color:#FFFFFF> editable </color></back>|
+  |IN_REVIEW|<back:#C34118><color:#FFFFFF> awaiting review </color></back>|
+  |ISSUED|<back:#1A73E8><color:#FFFFFF> read-only; final unless cancelled </color></back>|
+  |CANCELLED|<back:#455A64><color:#FFFFFF> terminal: storno </color></back>|
+  |VOIDED|<back:#D93025><color:#FFFFFF> terminal: discarded unsent </color></back>|
+endlegend
+
+@enduml

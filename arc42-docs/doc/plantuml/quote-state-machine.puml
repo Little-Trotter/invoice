@@ -1,0 +1,105 @@
+@startuml quote-state-machine
+
+' Offer lifecycle, target state: one status field, no "invoiced" status. Whether
+' an invoice was created from an accepted offer is recorded on the invoice order
+' and in the offer protocol, never as a status, so ACCEPTED is terminal.
+' Same left-to-right layout and the same rules as invoice-state-machine.puml:
+' happy path on one line, the review back-edge kept out of the rank order, one
+' shared end pseudostate.
+' Colours follow the shared status chip tones (lifecycleTone): the same meaning carries
+' the same colour as the invoice ("Annulliert" is red in both). Solid fills of the tone
+' colours in styles.css with white bold labels, contrast against white:
+'   DRAFT     NEUTRAL --lt-text-secondary #5F6368 = 6.05:1
+'   REVIEW    REVIEW  #C34118 (darkened --lt-review) = 5.13:1
+'   SENT      ACCENT  #1A73E8 = 4.51:1
+'   ACCEPTED  OK      #188038 = 5.02:1
+'   REJECTED  STORNO  #455A64 = 7.24:1
+'   CANCELLED ERROR   #D93025 = 4.77:1
+
+left to right direction
+
+skinparam nodesep 30
+skinparam ranksep 40
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+
+skinparam state {
+  FontSize 12
+  FontStyle bold
+  FontColor #ffffff
+  ArrowColor #5F6368
+  ArrowFontColor #202124
+  ArrowFontSize 11
+}
+
+skinparam state<<draft>> {
+  BackgroundColor #5F6368
+  BorderColor #4A4D51
+}
+
+skinparam state<<review>> {
+  BackgroundColor #C34118
+  BorderColor #9C3412
+}
+
+skinparam state<<sent>> {
+  BackgroundColor #1A73E8
+  BorderColor #145AB5
+}
+
+skinparam state<<accepted>> {
+  BackgroundColor #188038
+  BorderColor #13642C
+}
+
+skinparam state<<rejected>> {
+  BackgroundColor #455A64
+  BorderColor #36464E
+}
+
+skinparam state<<voided>> {
+  BackgroundColor #D93025
+  BorderColor #A9251D
+}
+
+state DRAFT <<draft>>
+state REVIEW <<review>>
+state SENT <<sent>>
+state ACCEPTED <<accepted>>
+state REJECTED <<rejected>>
+state CANCELLED <<voided>>
+state "  " as End <<end>>
+
+[*] --> DRAFT : new offer
+DRAFT --> REVIEW : submit
+REVIEW -[norank]-> DRAFT : return
+REVIEW --> SENT : send / e-mail
+SENT --> ACCEPTED : accept\n(date, order no.)
+SENT -down-> REJECTED : reject
+note bottom of ACCEPTED
+  Terminal. "Create invoice" places an
+  invoice order; the reply links the
+  invoice and writes the protocol,
+  the status stays ACCEPTED.
+end note
+
+DRAFT -down-> CANCELLED : cancel
+REVIEW -down-> CANCELLED : cancel
+
+ACCEPTED --> End
+REJECTED -down-> End
+CANCELLED -down-> End
+
+legend right
+  |= Status |= Meaning |
+  |DRAFT|<back:#5F6368><color:#FFFFFF> Entwurf, editable </color></back>|
+  |REVIEW|<back:#C34118><color:#FFFFFF> In Prüfung </color></back>|
+  |SENT|<back:#1A73E8><color:#FFFFFF> Versendet, read-only </color></back>|
+  |ACCEPTED|<back:#188038><color:#FFFFFF> Angenommen, terminal </color></back>|
+  |REJECTED|<back:#455A64><color:#FFFFFF> Abgelehnt, terminal </color></back>|
+  |CANCELLED|<back:#D93025><color:#FFFFFF> Annulliert, discarded unsent </color></back>|
+endlegend
+
+@enduml

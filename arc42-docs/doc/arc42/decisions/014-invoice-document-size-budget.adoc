@@ -1,0 +1,82 @@
+[[adr-014]]
+= ADR-014: Invoice Document Size Budget — Early Guard Plus Export Backstop
+
+== Status
+Accepted
+
+== Context
+A guard that lives only in the export worker (`kotlin-xpdf`) refuses an annex above 20 MiB of raw
+receipt bytes, but only after the user has already assembled the whole invoice and sent it for
+generation. A second, unrelated limit that capped receipts per position or per invoice at a fixed
+count would have no size-related reason. Recipients' mail gateways and the archiving path bound how
+large a legally transmitted invoice may be (<<_architecture_constraints,Architecture Constraints>>),
+so the size limit is an architecture concern, not an implementation detail of one worker.
+
+== Decision
+One rule is enforced in four places: upload, receipt-assignment linking, document generation and
+export. The budget is checked early, at receipt assignment, before the invoice ever reaches the
+export worker; document-generation re-checks it once more before a `GenerationJob` is even
+created; and the export worker keeps its own backstop pulling the same constants from the shared
+policy rather than a locally duplicated number. There is no per-target count cap; the one rule is
+19 distinct receipts per invoice, counted across positions and invoice level together and
+deduplicated by object key. Of the two things a receipt set can violate, only the count refuses a
+write at linking time — an estimated size above 20 MiB warns instead, since a single oversized
+receipt is fixed by re-normalizing it in the pool, not by picking different receipts.
+
+The numbers are one source of truth (`ReceiptSizePolicy`, `kotlin-shared`,
+`de.littletrotter.shared.receipt`), chosen to add up: 19 receipts, each normalized at
+upload towards `TARGET_RECEIPT_SIZE` (440 KiB) and counted twice for the estimate (Base64 in the XML
+and rasterised pages in the PDF, <<adr-039,ADR-039>>), plus a 512 KiB reserve for the invoice
+document itself, stay inside 20 MiB. A user may
+still decline reduction up to `MAX_UNREDUCED_RECEIPT_SIZE` (1 MiB); nothing above
+`MAX_UPLOAD_SIZE` (10 MiB) is accepted at all, reduction or not. The subdomain lives in
+`kotlin-shared` for the same reason as `Money` (<<adr-001,ADR-001>>): `kotlin-xpdf` depends on
+`kotlin-shared` but not on `kotlin-invoice`, so only `kotlin-shared` lets the application, the UI
+and the export worker share one rule instead of separate copies of the same numbers.
+
+Measuring only the finished artifact was rejected: it would give the user no early hint, since the
+failure would surface only after generation is attempted. Keeping both the old count cap and the
+new size rule was rejected too: a receipt set could be refused by the count cap while comfortably
+inside the size budget, or vice versa, with no shared vocabulary to explain either refusal.
+<<adr-032,ADR-032>> narrows what the estimate has to account for: the container holds exactly one
+copy of each receipt, with no second or third embedding on top of the Base64 copy — see that
+record for the reasoning.
+
+== Consequences
+
+=== Positive
+* One user-visible rule instead of two unrelated ones: "19 distinct receipts, 20 MiB total" is the
+  whole story, stated at capture time rather than discovered at export.
+* A unit test in `kotlin-shared` pins the invariant
+  `19 × TARGET_RECEIPT_SIZE.base64Encoded() + INVOICE_DOCUMENT_RESERVE == MAX_INVOICE_DOCUMENT_SIZE`,
+  and the export worker's own configuration default is asserted equal to
+  `ReceiptSizePolicy.MAX_INVOICE_DOCUMENT_SIZE` rather than carrying its own copy.
+* Deduplication by object key matches what the export path already does, so the budget never
+  refuses a receipt set the exporter would in fact handle fine.
+* Upload-time normalization (<<adr-032,ADR-032>>) means most receipts land well under the 440 KiB
+  target the invariant is built on, so the estimate is close to the produced container's
+  actual size rather than a deliberately optimistic lower bound.
+
+=== Negative
+* The early estimate still is not a byte-exact measurement of the produced file
+  (<<_cross_cutting_concepts,Cross-cutting Concepts>>): reserve-only overhead (invoice body,
+  surrounding XML text, embedded fonts) is a fixed allowance, not computed per invoice.
+* Four enforcement points mean four places whose numbers must be kept aligned by test, rather than
+  one place enforcing the rule once.
+
+=== Mitigation
+* The estimator is one small, replaceable component (`InvoiceDocumentSizeEstimator`); when a more
+  accurate projection is worth having, it replaces that component alone, and the application, UI
+  and export worker do not change.
+* The export worker keeps its own hard check as the backstop, so an undercounted estimate still
+  cannot ship an oversized document.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/receipt/`
+(`DocumentSize`, `ReceiptSizePolicy`, `ReceiptSize`, `InvoiceDocumentSizeEstimator`,
+`CombinedDocumentSizeEstimator`, `InvoiceDocumentBudget`),
+`kotlin-invoice/src/main/kotlin/de/littletrotter/application/invoice/`
+(`ReceiptUploadService`, `ReceiptLinkService`, `ReceiptBudgetService`,
+`GenerationJobCreationService`),
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/PdfExportServiceImpl.kt`._

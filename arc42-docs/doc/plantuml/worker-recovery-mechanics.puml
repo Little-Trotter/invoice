@@ -1,0 +1,90 @@
+@startuml worker-recovery-mechanics
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+' Straight segments (polyline) instead of ortho: ortho routing let relation labels cover
+' nodes and each other here; straight segments keep every arrow straight and readable.
+skinparam linetype polyline
+skinparam roundCorner 0
+skinparam nodesep 50
+skinparam ranksep 70
+
+skinparam rectangle {
+  FontSize 12
+  FontStyle bold
+  FontColor #ffffff
+  BorderColor #2D66B0
+  BackgroundColor #3C88EB
+}
+
+skinparam database {
+  FontSize 12
+  FontStyle bold
+  FontColor #ffffff
+  BorderColor #1456AE
+  BackgroundColor #1662C5
+}
+
+skinparam queue {
+  FontColor #202124
+}
+
+skinparam arrow {
+  Color #5F6368
+  FontColor #202124
+  FontSize 11
+}
+
+rectangle "kotlin-invoice\n<color:#D5E8FF>Domain & Post-Commit Publish</color>" as Invoice #1A73E8
+
+rectangle "Fast Path\n<color:#D5E8FF>document-jobs publish</color>" as FastPath #3C88EB
+
+rectangle "kotlin-xpdf JobConsumer\n<color:#D5E8FF>Lease + Heartbeat (ackWaitSeconds 120s)</color>" as Consumer #3C88EB
+
+rectangle "Result Consumer\n<color:#D5E8FF>Retry loop 3x, DLQ</color>" as ResultConsumer #5F6368
+
+database "PostgreSQL\n<color:#D5E8FF>Job persistence</color>" as PG
+
+queue "document-jobs\nJetStream stream" as JobsQ
+queue "document-job-results\nJetStream stream" as ResultsQ
+queue "<color:#FFFFFF>LITTLE_TROTTER_DLQ</color>\n<color:#FFFFFF>Dead letters</color>" as DLQ #D93025
+queue "<color:#FFFFFF>document-jobs-dlq</color>\n<color:#FFFFFF>Poison</color>" as JobsDLQ #D93025
+queue "<color:#FFFFFF>document-job-results-dlq</color>\n<color:#FFFFFF>Retry exhausted</color>" as ResultsDLQ #D93025
+
+Invoice -down-> PG : JPA persist
+Invoice -down-> FastPath : post-commit
+FastPath -down-> JobsQ : publish
+
+JobsQ -down-> Consumer : Pull consumer delivery
+Consumer -up-> Consumer : Heartbeat renewal\n(per pool hand-off)
+Consumer -up-> ResultsQ : publish result envelope
+
+ResultsQ -up-> ResultConsumer
+ResultConsumer -up-> Invoice : resolveSendOutcome\n(if SEND trigger)
+
+Consumer .down.> JobsDLQ : Poison message\n(lease exhausted)
+ResultConsumer .right.> ResultsDLQ : Nak exhaust
+ResultsQ .right.> DLQ : Terminal\nresult failure
+JobsQ .left.> DLQ : Delivery\nexhausted
+
+note right of PG
+<b>Safety nets (re-publish from PostgreSQL):</b>
+* FastPathExecutor startup catch-up
+* 15-s bulkhead rescue pass (pollPendingJobs)
+* 1-h recovery scan
+  (includes stale-DELEGATED probe, staleCutoffMinutes=2 min)
+end note
+
+note bottom of Consumer
+<b>Stale-DELEGATED Probe</b>
+(StaleDelegatedResetCoordinator /
+ DelegatedMessageProbe):
+* Stream purged → reset
+* Not yet delivered → leave
+* In flight → leave
+* Broker says gone → reset
+* No sequence → reset
+end note
+
+@enduml

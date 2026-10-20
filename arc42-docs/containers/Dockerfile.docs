@@ -1,0 +1,25 @@
+# Publishes the built arc42 documentation (arc42-docs/html/, produced by `make build` via
+# ci/main.go's DocsGate — see ../README.md) as a standalone, servable image. Same nginx base
+# as docker-compose.docs.yml (local bind-mount serving); this image instead bakes html/ in,
+# so nothing needs to be built on the machine that runs it — e.g. the admin tooling's dev
+# server, via its opt-in `docs` compose profile (see ../README.md, "Container image").
+#
+# Build context is arc42-docs/ and html/ must already exist (run `make build` first, or
+# `make image`, which depends on it):
+#   docker build -f containers/Dockerfile.docs -t ghcr.io/eifel42/little-trotter-invoice/docs:local .
+FROM nginx:1.31-alpine
+
+# util-linux/libuuid CVEs fixed upstream after this base image tag was cut (Trivy gate in
+# ../.github/workflows/publish-images.yml) — pull the patched Alpine packages at build time
+# instead of waiting for a new nginx:1.31-alpine release.
+RUN apk upgrade --no-cache
+
+LABEL org.opencontainers.image.source="https://github.com/eifel42/little-trotter-invoice" \
+      org.opencontainers.image.description="Little Trotter arc42 architecture documentation (English)"
+
+# Mirrors nginx-docs.conf (same index fallback and try_files), rooted at nginx's default
+# docroot instead of the bind-mounted /srv/docs the compose service uses.
+COPY containers/nginx-docs-image.conf /etc/nginx/conf.d/default.conf
+COPY html/ /usr/share/nginx/html/
+
+EXPOSE 80

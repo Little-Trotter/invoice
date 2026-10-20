@@ -1,0 +1,115 @@
+= Little Trotter X-Invoice — Architecture Inception Canvas
+:author: Projektinitiator (https://github.com/eifel42[eifel42])
+:revnumber: 0.9.59-SNAPSHOT
+:revdate: {docdate}
+:description: One-page architecture overview based on the Architecture Inception Canvas by arc42
+:doctype: article
+:docrole: aic-page
+:toc: left
+:toclevels: 2
+:sectanchors:
+:sectlinks:
+:sectnums:
+:docinfodir: docinfo
+:stylesdir: css
+:stylesheet: arc42-canvas.css
+:linkcss:
+:docinfo: shared-head
+// SOURCE OF TRUTH for doc/architecture-inception-canvas.drawio: that file is generated from the [.canvas-*]
+// sections below by scripts/generate-canvas-drawio.py. Keep every [.canvas-<slug>] role line;
+// the generator fails on a missing or extra section.
+// PO rule (2026-09-02): no CDN loads — see arc42-docs.adoc for the full note.
+:icons!:
+:source-highlighter!:
+:imagesdir: images
+:lang: en
+:toc-title: Canvas Sections
+:project-name: Little Trotter X-Invoice
+:project-version: 0.9.59-SNAPSHOT
+
+[.canvas-business]
+== Business Case
+
+* *B2B E-Invoicing Mandate*: Solves EN 16931 obligations (XRechnung, ZUGFeRD) under German UStG for freelancers, craft businesses, and SMEs.
+* *Local-First Self-Hosting*: Full data sovereignty on operator-owned hardware without SaaS subscriptions or cloud lock-in.
+* *Integrated Document Store*: RustFS provides local, S3-compatible storage designed for secure, long-term receipt archiving.
+* *Open Architecture*: Its open architecture supports integration with hybrid and S3-compatible cloud providers.
+* *Lean TCO*: Minimized operating and hardware costs via low-memory services designed for quiet mini PCs.
+
+[.canvas-functional]
+== Functional Overview
+
+* *Master Data Management*: Aggregates for issuers, recipients, items, B2B terms, and tax configurations.
+* *Invoice Lifecycle*: Strict state machine (draft, issued, cancelled) with atomic command-driven mutations.
+* *Hybrid Invoice Generation*: Asynchronous PDF/A-3b rendering and embedded ZUGFeRD/XRechnung XML synthesis.
+* *Automated Validation*: Multi-stage compliance checking via embedded KoSIT validator and Schematron rules.
+* *Receipt & Audit Vault*: Checksum-based deduplication, structured expense tracking, and business reporting.
+* *Mail Dispatch (optional)*: Self-contained mail component — templates, SMTP submission, append-only send journal, signed archive package, journal-copy handover to the operator's mail archive (ADR-037); off by default.
+
+[.canvas-quality]
+== Quality Goals
+
+* *Domain Correctness (Legal & Norm Conformance)*: Strict EN 16931, UStG, and GoBD compliance verified prior to issuing invoices.
+* *High-Assurance Testing & Quality Gates*: 90% line/branch JaCoCo gates, Karibu headless UI tests, and Playwright E2E suites.
+* *Ergonomics & Accessibility*: German-first accessible UI (`aria-label`s, keyboard navigation, dark mode theme).
+* *Operability on Small Hardware*: Lean footprints, bounded memory budgets, restart resilience, and staged operations tooling.
+* *Traceability & Recovery*: Reconstructable invoice lifecycle, audit trail, and age-encrypted backups.
+* *Green-IT Resource Thrift*: Size-budget policies, receipt downscaling at upload, and single-node energy efficiency.
+
+[.canvas-hypotheses]
+== Architecture Hypotheses
+
+* *H1 (Modulith over Microservices)*: Quarkus/Vaadin modulith plus two satellites — renderer (`kotlin-xpdf`) and optional mail SCS (`kotlin-email`) — minimizes ops overhead for single operators.
+* *H2 (Lean Event Backbone)*: NATS JetStream job envelopes with S3/Valkey payloads beat heavy brokers (Kafka) on small-budget hardware.
+* *H3 (Strict Database Baselines)*: Exactly two editable Flyway baselines (V1 schema, V2 seed) ensure deterministic greenfield deployments.
+* *H4 (Out-of-Process Renderer)*: Isolating PDFBox/Mustang rendering protects the interactive core web application from memory spikes.
+* *H5 (Spec-First AI Delegation)*: Strict architectural boundaries and ArchUnit quality gates sustain high agent-driven velocity.
+
+[.canvas-context]
+== Business Context
+
+* *Office Manager / Owner*: Edits master data, writes invoices, and tracks business receipts via the web UI.
+* *Invoice Recipient*: Receives legally compliant hybrid PDF/A-3b invoices and structured XML data (e-mail optional).
+* *Tax Advisor / Auditor*: Consumes GoBD-compliant e-invoice archives, receipt records, and export reports.
+* *DevOps / Operator*: Runs local server, manages backups, and configures TLS/systemd via operational scripts.
+* *Out of Scope*: Peppol AS4 routing, multi-tenant SaaS hosting, and double-entry accounting.
+
+.Business context (C4 system context)
+image::c4-system-context.png[C4 system context: Little Trotter X-Invoice with its people and neighboring systems]
+
+[.canvas-risks]
+== Technical Challenges and Risks
+
+* *Regulatory Churn*: Frequent shifts in EN 16931, X-Rechnung profiles, and KoSIT Schematron release schedules.
+* *Rendering Complexities*: Dynamic page-break layout math, DIN 5008 precision on the sole Typst engine, and PDF/A-3b compliance.
+* *Memory Constraints*: Tight RAM limits (mini PC target) requiring aggressive garbage collection and lean caching.
+* *UI Automation Overhead*: Shadow-DOM and stateful Vaadin Flow lifecycles complicate resilient browser testing.
+* *Single Maintainer / Bus Factor*: High architectural leverage requires dense documentation and automated quality gates.
+
+[[_organisational_constraints]]
+[.canvas-org-constraints]
+== Organizational Constraints
+
+* *AI-Pair Development*: Human architect directs strategy; autonomous AI coding agents implement and test.
+* *Language Split*: English technical codebase/architecture docs; German user-facing UI and business domain specifications.
+* *Clean Licensing*: Apache-2.0 software license; CC BY 4.0 attribution requirement for overall design concept.
+* *Private Repository*: Greenfield MVP (Minimum Viable Product); internal development workflow with decoupled releases.
+* *Zero Skip Policy*: Prohibited test skips (`@Disabled`, `assumeTrue`); all quality gates must pass cleanly.
+
+[.canvas-tech-constraints]
+== Technical Constraints
+
+* *Runtime Stack*: Kotlin 2.x, JVM 25, Quarkus 3.x, Vaadin Flow 25, Typst layout engine (sole PDF layout engine).
+* *Storage Foundation*: PostgreSQL 18 (authoritative JPA store), Valkey (caching), RustFS (S3-compatible object store).
+* *Event Backbone*: NATS JetStream (generation jobs, maintenance events, mail requests/results via a frozen contract).
+* *Container Standard*: Multi-engine OCI compliance (Docker Engine, Podman, Colima, Rancher Desktop).
+* *Deployment Topology*: Single-node bare-metal Linux or mini PC; Caddy reverse proxy with automated TLS.
+
+'''
+
+[small]#arc42 template: https://canvas.arc42.org/architecture-inception-canvas[Architecture Inception Canvas]. +
+Canvas as draw.io (generated from this page): link:architecture-inception-canvas.drawio[architecture-inception-canvas.drawio]. +
+Related canvas: link:architecture-communication-canvas.html[Architecture Communication Canvas] | link:architecture-communication-canvas.drawio[draw.io]. +
+Full documentation: link:arc42-docs.html[arc42 Architecture Documentation]. +
+Notice: AI-assisted documentation. All examples, organizations, and fixtures represent randomly generated synthetic test data (`datagen`). +
+License: software Apache-2.0; concept, design and this canvas CC BY 4.0 with attribution to link:LICENSE[Little Trotter] (see link:LICENSE[LICENSE] / link:NOTICE[NOTICE]).#

@@ -1,0 +1,50 @@
+[[adr-003]]
+= ADR-003: Reverse Charge Is an Invoice-Level Decision, Not Derived from Line Items
+
+== Status
+Accepted
+
+== Context
+Reverse Charge (cross-border EU B2B, VAT category `AE`) was originally a line-item decision: the
+user picked a tax rule per line, and `Invoice.reverseCharge` was purely derived
+(`reverseCharge = hasReverseChargeItems()`). Fiscally, though, Reverse Charge is a property of
+the transaction as a whole, not of individual lines — a mix of Reverse-Charge and standard-rate
+lines on one invoice is almost always a data-entry error, and the previous design only caught
+that after the fact, via per-line deviation hints.
+
+== Decision
+`Invoice.reverseCharge` becomes the leading decision, set by the user at the invoice header, no
+longer derived from the lines. It can only be enabled when the recipient is Reverse-Charge
+eligible (EU cross-border, business, verified VAT ID); enabling it retags every existing line to
+the Reverse-Charge rule (0%, category `AE`, exemption text snapshotted) with a confirmation
+dialog naming the affected line count, and disabling it re-applies the standard rule suggestion
+per line, likewise with confirmation. While the decision is active, the tax-rule selector on line
+items is locked to the Reverse-Charge rule. A hard gate blocks finalizing the invoice if any line
+disagrees with the header decision, or if the recipient no longer meets the Reverse-Charge
+prerequisites (e.g. master data changed after the decision was made) — a validation error citing
+the offending line numbers, not merely a warning.
+
+The `reverse_charge` column is written directly by the user's header decision and propagated to
+the lines; it is not computed on save.
+
+== Consequences
+
+=== Positive
+* Eliminates by construction the invoice state that would otherwise require post hoc detection
+  (mixed AE/standard lines on one invoice).
+* Export (XML `AE` + `VATEX-EU-AE`, PDF exemption-text hint) is unchanged — it already read off
+  the per-line tax rule, which always agrees with the header.
+
+=== Negative
+* A profile/master-data change after the Reverse-Charge decision is made (e.g. the recipient's
+  VAT ID becomes unverified) can retroactively invalidate a decision that was correct when made;
+  this is caught at finalization time, not at the moment the master data changes.
+
+=== Mitigation
+* The finalization gate re-validates recipient eligibility every time, so a stale decision can
+  never reach a finalized invoice undetected.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/main/kotlin/de/littletrotter/domain/invoice/Invoice.kt` (`reverseCharge`),
+`ReverseChargeConsistency.kt`._

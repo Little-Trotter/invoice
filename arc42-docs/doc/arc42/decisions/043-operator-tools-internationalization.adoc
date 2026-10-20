@@ -1,0 +1,27 @@
+[[adr-043]]
+= ADR-043: Operator Tools: English Source Language, German Second Catalog, Machine Values Never Translated
+
+== Status
+Accepted (implementation); date: 2026-10-13
+
+== Context
+`lt`, `lhorse` and `lhorse web` mixed English and German in texts and in machine values
+(`status.json` carried German result and step names). There was no catalog and no language
+selection. The operators (administrators) may work in English, while the customer reads German.
+
+== Decision
+* English is the source language and the default; German is a second catalog of the same IDs.
+* Operator language: `LT_LANG`, then `LC_ALL`, `LC_MESSAGES`, `LANG`, else `en` for `lt` and the TUI;
+  for `lhorse web` the header switch, then `Accept-Language`, then `en`. No new CLI flag.
+* Customer files (`README.txt`, `STATUS.txt`, `ALARM.txt`) follow the instance setting `LT_LOCALE`,
+  derived by `lt setup` from the wording profile; their names are fixed English names.
+* Machine values (`status.json` values, JSON fields, exit codes, alarm codes) and logs stay English
+  and are never translated; `status.json` values are `ok`/`warning`/`error`/`skipped`.
+* Catalogs are split by area and language so parallel work does not collide.
+* Completeness, usage and literal-lint tests fail the build on a missing translation, an unknown
+  ID or a new hard-coded user-facing string.
+
+== Consequences
+* A new text needs an English and a German entry in the same commit.
+* The invoice application reads the English `status.json` values.
+* The customer file `LIESMICH.txt` is now `README.txt`; `STATUS.txt` and `ALARM.txt` keep their names.

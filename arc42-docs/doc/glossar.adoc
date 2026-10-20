@@ -1,0 +1,32 @@
+= Fachglossar: E-Rechnung, Steuerrecht & Praxis
+:author: Projektleitung (https://github.com/eifel42[eifel42])
+:revnumber: 0.9.59-SNAPSHOT
+:revdate: {docdate}
+:description: Zentrales Fachglossar: E-Rechnungsstandards (EN 16931, ZUGFeRD, XRechnung), deutsches Steuer- und Handelsrecht (UStG, GoBD, BEG IV) und Praxisbegriffe
+:doctype: book
+:toclevels: 2
+:sectanchors:
+:sectlinks:
+:sectnums:
+:sectnumlevels: 3
+:toc: left
+:docinfodir: docinfo
+:stylesdir: css
+:stylesheet: arc42-docs.css
+:linkcss:
+:experimental:
+:docinfo: shared-head
+:icons!:
+:source-highlighter!:
+:imagesdir: images
+:title-logo-image: image:little-trotter-horse.png[Little Trotter Logo: stilisiertes Pferd,300,align="center"]
+:lang: de
+:toc-title: Inhaltsverzeichnis
+:project-name: Little Trotter X-Invoice
+:copyright: Copyright (C) 2026 https://github.com/little-trotter/invoice
+
+[abstract]
+.Zusammenfassung
+Dieses Dokument dient als verbindliches Fachglossar für den geschäftlichen, rechtlichen und praktischen Einsatz von *Little Trotter X-Invoice*. Es definiert die relevanten Normen des deutschen Steuer- und Handelsrechts (UStG, GoBD, AO, BEG IV) sowie die Vorgaben der europäischen E-Rechnungsstandards (EN 16931).
+
+include::arc42/domain-glossary-terms-de.adoc[]

@@ -1,0 +1,124 @@
+{
+  "description": "Per-diem calculation test vectors for RK-8. These vectors match the domain formula from RK-2's PerDiemCalculator and are shared with the Kotlin side to ensure byte-identical calculations across platforms.",
+  "rounding_scale": 2,
+  "formula_notes": "calculated_amount = max(base_rate - meal_deductions - employer_contribution, 0.00), rounded to 2 decimals; meal deductions are 20% breakfast and 40% each lunch/dinner, based on full_day_rate for inland rules and the day's base rate otherwise",
+  "vectors": [
+    {
+      "id": "full_day_no_deductions",
+      "description": "Full day rate with no meal deductions",
+      "is_arrival_departure": false,
+      "full_day_rate": "45.00",
+      "arrival_departure_rate": "24.00",
+      "inland_rules": false,
+      "breakfast": false,
+      "lunch": false,
+      "dinner": false,
+      "employer_contribution": "0.00",
+      "expected_calculated_amount": "45.00"
+    },
+    {
+      "id": "full_day_all_deductions",
+      "description": "Full day rate with all meal deductions",
+      "is_arrival_departure": false,
+      "full_day_rate": "59.00",
+      "arrival_departure_rate": "32.00",
+      "inland_rules": false,
+      "breakfast": true,
+      "lunch": true,
+      "dinner": true,
+      "employer_contribution": "0.00",
+      "expected_calculated_amount": "0.00",
+      "deduction_note": "59.00 - (11.80 + 23.60 + 23.60) = 0.00"
+    },
+    {
+      "id": "arrival_day_no_deductions",
+      "description": "Arrival/departure day rate with no deductions",
+      "is_arrival_departure": true,
+      "full_day_rate": "45.00",
+      "arrival_departure_rate": "24.00",
+      "inland_rules": false,
+      "breakfast": false,
+      "lunch": false,
+      "dinner": false,
+      "employer_contribution": "0.00",
+      "expected_calculated_amount": "24.00"
+    },
+    {
+      "id": "arrival_day_breakfast_lunch",
+      "description": "Arrival/departure day with breakfast and lunch deductions",
+      "is_arrival_departure": true,
+      "full_day_rate": "45.00",
+      "arrival_departure_rate": "18.00",
+      "inland_rules": true,
+      "breakfast": true,
+      "lunch": true,
+      "dinner": false,
+      "employer_contribution": "0.00",
+      "expected_calculated_amount": "0.00",
+      "deduction_note": "18.00 - (9.00 + 18.00) = 0.00"
+    },
+    {
+      "id": "full_day_partial_deductions",
+      "description": "Full day rate with dinner deduction only",
+      "is_arrival_departure": false,
+      "full_day_rate": "28.00",
+      "arrival_departure_rate": "14.00",
+      "inland_rules": true,
+      "breakfast": false,
+      "lunch": false,
+      "dinner": true,
+      "employer_contribution": "0.00",
+      "expected_calculated_amount": "16.80",
+      "deduction_note": "28.00 - 40% of 28.00 = 16.80"
+    },
+    {
+      "id": "low_rate_zero_result",
+      "description": "Arrival/departure day where deductions exceed the rate, result is zero",
+      "is_arrival_departure": true,
+      "full_day_rate": "45.00",
+      "arrival_departure_rate": "14.00",
+      "inland_rules": false,
+      "breakfast": true,
+      "lunch": true,
+      "dinner": true,
+      "employer_contribution": "0.00",
+      "expected_calculated_amount": "0.00",
+      "deduction_note": "14.00 - (2.80 + 5.60 + 5.60) = 0.00"
+    },
+    {
+      "id": "high_rate_68",
+      "description": "High-rate country full day with lunch deduction",
+      "is_arrival_departure": false,
+      "full_day_rate": "68.00",
+      "arrival_departure_rate": "32.00",
+      "inland_rules": false,
+      "breakfast": false,
+      "lunch": true,
+      "dinner": false,
+      "employer_contribution": "0.00",
+      "expected_calculated_amount": "40.80",
+      "deduction_note": "68.00 - 40% of 68.00 = 40.80"
+    },
+    {
+      "id": "international_employer_contribution",
+      "description": "International full day with an employer contribution",
+      "is_arrival_departure": false,
+      "full_day_rate": "59.00",
+      "arrival_departure_rate": "40.00",
+      "inland_rules": false,
+      "breakfast": false,
+      "lunch": false,
+      "dinner": false,
+      "employer_contribution": "2.50",
+      "expected_calculated_amount": "56.50",
+      "deduction_note": "59.00 - 2.50 employer contribution = 56.50"
+    }
+  ],
+  "metadata": {
+    "created": "2026-09-11",
+    "related_classes": [
+      "kotlin-invoice: PerDiemCalculator (domain/invoice/PerDiemCalculator.kt)",
+      "python datagen: insert_trip per_diem_days calculation"
+    ]
+  }
+}

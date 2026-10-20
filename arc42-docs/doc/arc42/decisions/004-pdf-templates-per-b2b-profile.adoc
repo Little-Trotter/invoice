@@ -1,0 +1,53 @@
+[[adr-004]]
+= ADR-004: PDF Templates Assigned per B2B Profile, Chosen at Print Time
+
+== Status
+Superseded by <<adr-030,ADR-030>>
+
+== Context
+The product ships one Typst template and no user-assignable PDF templates; per-profile template
+selection and the print-time template choice do not exist. The original problem and decision
+are kept below as the record this ADR supersedes.
+
+=== Original context
+PDF template management already existed (upload with compile-check via the `kotlin-xpdf`
+worker, display name, a GERMAN/INTERNATIONAL format axis, fallback to the shipped
+`invoice-report.jrxml`), but template assignment was keyed to the *invoice issuer* (issuer profile),
+one template per format, and the print flow offered no choice — resolution happened silently in
+the DTO mapper. Different B2B invoice recipients legitimately need different layouts (e.g. a
+craftsman-oriented invoice showing cost-center/order/project references and customer article
+numbers), which an issuer-keyed, no-choice model could not express.
+
+== Decision
+Templates are additionally assignable to a `B2bProfile` (nullable FK on `pdf_template`; `NULL`
+stays a general-purpose template usable by any profile), managed in the existing template
+administration screen. The issuer-keyed assignment remains as the fallback when the
+recipient's profile carries no specific template. At print time, the export panel quotes a
+choice from exactly the set "templates of the recipient's profile, plus general templates, plus
+the shipped default" — a per-print-job choice that overrides the silent resolution. The Jasper
+data context was extended per line (BT-155/BT-156 seller/buyer item numbers, line service
+period) and per header (cost center BT-19, purchase order BT-13, project BT-11, contract BT-12,
+internal order BT-18) so templates can render these values. A shipped "Nekar craftsman invoice"
+template exercises the full field set and is seeded against the one remaining demo profile
+("Nekar" — the generic "B2B-Standard" demo profile was retired in the same cleanup).
+
+== Consequences
+
+=== Positive
+* Template choice follows the actual business relationship (the invoice recipient's profile), not
+  only the invoice issuer issuing the invoice.
+* The print-time override means a one-off exception does not require changing master data first.
+
+=== Negative
+* Three resolution layers now exist (explicit print-time choice, profile assignment, issuer
+  fallback) instead of one silent lookup — more surface for an Office Manager to reason about when a
+  printed invoice does not look as expected.
+
+=== Mitigation
+* The choice is always a bounded, explicit set shown in the UI (never a hidden precedence the
+  Office Manager has to remember), and a `NULL` profile assignment keeps behaving exactly as a
+  general-purpose template always did.
+
+'''
+_Architecture Decision Record — source: `pdf_template.b2b_profile_id`, the template administration
+view and export panel in `kotlin-invoice`, `InvoiceDtoMapper`._

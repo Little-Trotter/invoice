@@ -1,0 +1,80 @@
+[[adr-040]]
+= ADR-040: Resource Budget of a Print Job
+
+== Status
+Accepted. Refines <<adr-039,ADR-039>> (combined invoice document) with the memory behaviour of its
+export.
+
+PO approval (date): not required (2026-10-12). The visible output is unchanged: the same marks are stamped on the same
+pages, only earlier in the pipeline.
+
+== Context
+A combined document with up to 19 receipts is assembled in one JVM: layout render, receipt
+rasterisation, ZUGFeRD embedding, validation. Measured by reading the code, not yet by a run:
+every receipt page was rasterised at 150 dpi of its original size without an upper bound on the
+bitmap; PDFBox held each document fully in the heap and every save made two copies of it; the
+stamp was applied in a pass of its own after validation, so the validated PDF was not the
+delivered one; and the worker threads limited the number of jobs but not their bytes, so a few
+heavy jobs could run together. A single faulty receipt or a burst of heavy jobs could therefore end
+in an out-of-memory kill of the worker.
+
+== Decision
+* *Fixed page memory*: a receipt page is rendered relative to its display size (original size, at
+  most the A4 print area, <<adr-039,ADR-039>>), so its bitmap is at most the A4 raster (about
+  1240 × 1754 px). A further limit, `xpdf.receipt-annex.max-pixels` (default 4,500,000), lowers the
+  resolution if the dpi setting is ever raised far beyond the A4 target. It never refuses a page.
+* *One PDFBox pass*: receipt pages and the post-render mark are added in the same load/save of the base
+  document, before the ZUGFeRD embedding. Which mark is stamped is decided as before
+  (`ExportMarkSelector`: storno, draft, brand, or only the demo text where an output intent
+  grant covers the seller); only the place changed. The PDF that is validated is the PDF that is
+  stored and delivered. Stamped pages must survive the PDF/A-3 conversion; `VeraPdfConformanceIT`
+  covers all four stamp cases with receipt pages.
+* *Off-heap intermediates*: `PdfBoxWorkingSet` opens documents with a stream cache that keeps up to
+  `xpdf.pdfbox.memory-threshold-bytes` (default 8 MiB) per document in memory and spills the rest
+  to the scratch directory. A saved document is collected into one array of its final size
+  (`SpillingOutputStream`) instead of a growing buffer plus a copy. Byte arrays are created only
+  where the contract needs them: the store and the message boundary.
+* *Admission by weight*: `JobWeightBudget` lets a job run only when the sum of the receipt bytes of
+  the running jobs stays within `xpdf.job-weight-budget-kib` (default derived from the heap
+  headroom after boot and all threads: one maximum combined document of 19 receipts, 8360 KiB, plus
+  small ones, never two maximum documents; START 9339 KiB; shared by both lanes, FIFO). The job message carries no receipt sizes, so each distinct receipt counts with the
+  upload target size (440 KiB). A waiting job keeps its heartbeat on the shared scheduler, so the
+  broker does not redeliver it. A job heavier than the whole budget runs alone.
+* *Thread base and receipt reserve (PO decision 2026-10-12)*: the heap formula no longer reserves
+  the heaviest document per thread (was 400 MiB, which also covered the veraPDF child that is now its
+  own service). Each thread gets a base of 150 MiB (measured: a job without receipts needs about
+  150 MiB above boot), and 256 MiB are reserved once for the receipt pages of one maximum document,
+  which the weight budget admits one at a time. START (1536 MiB heap) yields 4 bulk threads plus the
+  interactive one instead of 1, with the same RAM. Visible output is unchanged; PO approval (date):
+  not required (2026-10-12). The effective values are logged at startup.
+* *Valkey PDF cache*: PDFs above `VALKEY_PDF_CACHE_MAX_BYTES` (default 2 MiB) are not cached and
+  evict an older cached version; they are served from the document store. Combined documents
+  would otherwise push the overview caches out of the small `volatile-lru` memory.
+
+== Alternatives Considered
+Stamp after validation (unchanged)::
+Rejected: the validated document differs from the delivered one, and a second full load/save
+doubles the peak memory.
+
+Admission by thread count only::
+Rejected: counts jobs, not bytes; the heavy case is the one that needs the limit.
+
+Reject oversized receipt pages::
+Rejected: receipts are A4 or smaller (<<adr-039,ADR-039>>); a faulty page size is a defect of the
+file, not a reason to fail the export.
+
+== Consequences
+* The worker's heap use per job is bounded by constants and configuration, not by the receipt
+  content.
+* Stamping before the ZUGFeRD embedding relies on Mustang keeping the transparency of the stamp
+  PDF/A-3 conformant; the conformance integration test is the guard.
+* A waiting job occupies a worker thread. Thread count, heap and byte budget are tuned together
+  (resource profiles in chapter 7); the values are estimates until the stress run measures them.
+* The stage timers (render, annex, mustang, stamp, store) still time the moved steps; the
+  stamp timer now runs inside the base-document pass.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/` (`BasePdfStage.kt`, `ReceiptAnnexBuilder.kt`,
+`ExportMarkSelector.kt`, `PdfBoxWorkingSet.kt`), `infrastructure/messaging/JobWeightBudget.kt`,
+`kotlin-invoice` `ValkeyInvoiceCacheClient`._

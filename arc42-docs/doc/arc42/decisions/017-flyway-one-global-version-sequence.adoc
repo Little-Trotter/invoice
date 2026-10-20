@@ -1,0 +1,77 @@
+[[adr-017]]
+= ADR-017: Flyway Versions Are One Global Sequence Across `ddl/` and `seed/`, Not Two Blocks
+
+== Status
+Superseded by <<adr-011,ADR-011>>, 2026-09-16
+
+== Context
+Superseded for greenfield development by the PO decision of 2026-09-16 and <<adr-011,ADR-011>>.
+The historical rationale below applies when incremental upgrades become necessary; it does
+not authorize additional migration files during the current greenfield phase.
+The current hygiene guard requires exactly `ddl/V1__baseline_schema.sql` and
+`seed/V2__baseline_seed.sql`.
+
+Flyway is configured with two locations, `db/migration/ddl` and `db/migration/seed`
+(`quarkus.flyway.locations`), and orders migrations by *version* across all of them. Folder
+membership is a filing convention of this repository — schema changes here, reference/seed data
+there — and means nothing to Flyway itself.
+
+`MigrationDirectoryHygieneTest` guards that filing. Alongside the guarantees it exists for, it
+also asserted something stronger that nobody had decided: that `ddl/` is a gap-free run `V1..Vn`
+*and* that `seed/` continues at `Vn+1`. That is a **block** layout — every DDL migration before
+every seed migration — and it broke the first time a new DDL migration had to be added after both
+folders already held files: the block rule demanded the next `ddl/` file reuse a version `seed/`
+already used, and satisfying it would mean renumbering an already-applied seed migration, i.e.
+rewriting the filename, checksum and history row of a file already applied wherever an instance
+runs. The property being defended is not one Flyway has: an interleaved sequence across the two
+folders is a perfectly ordinary one for it.
+
+== Decision
+The guard asserts the *single global sequence* and nothing about folder order: the union of
+`ddl/` and `seed/` is a gap-free run `V1..Vn` starting at 1, no version number is used twice
+within a folder or shared between the folders, and every filename matches
+`V<digits>__<description>.sql`. Together these still mean every version exists exactly once,
+globally, with no gap a later migration could fill out of order and no slot that could be applied
+twice — the guarantees the guard was written for.
+
+The guard deliberately no longer asserts that every `ddl/` version precedes every `seed/`
+version. Migrations interleave (`ddl/V1`, `seed/V2`, `ddl/V3`, …): a change takes the next free
+number and lives in the folder its content belongs to.
+
+Renumbering the seed migrations on every future DDL migration is rejected: it rewrites files
+Flyway has already applied and the cost recurs forever, to preserve a property Flyway does not
+have. Folding new columns into the frozen baseline instead of adding a migration is rejected as
+out of scope: direct baseline editing is its own decision
+(<<adr-011,ADR-011>>) with its own preconditions. Loosening the guard so a change passes without
+fixing the underlying assertion is rejected outright — a guard weakened to fit the change under
+review is the failure mode it exists to prevent.
+
+In a working tree shared by concurrent work streams, the next free version number should be
+reserved explicitly when work starts rather than derived from a directory listing when the file is
+written, since an uncommitted migration file is invisible to that derivation but visible to
+anyone listing the directory, and two streams can otherwise pick the same number.
+
+== Consequences
+
+=== Positive
+* A new migration is one new file with the next free number; nothing existing is touched.
+* The guard now states an invariant Flyway actually has, so it can be reasoned about from the test
+  alone.
+* The DDL/seed split stays a readable filing convention instead of becoming an ordering
+  constraint.
+
+=== Negative
+* The two folders no longer read top-to-bottom as "schema, then data"; the chronological order is
+  the version numbers, across both folders.
+* A reader who expects the old block layout may briefly mistake the interleaving for a mistake.
+
+=== Mitigation
+* The test's own documentation states plainly what it does and does not assert.
+* Reserving a migration version explicitly, rather than deriving it from a directory listing,
+  avoids the collision a shared working tree would otherwise risk.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-invoice/src/test/kotlin/de/littletrotter/infrastructure/persistence/MigrationDirectoryHygieneTest.kt`,
+`kotlin-invoice/src/main/resources/db/migration/{ddl,seed}`, `application.properties`
+(`quarkus.flyway.locations`)._

@@ -1,0 +1,5 @@
+= Glossary
+
+German legal and domain terms are kept in German (not translated) and explained in English alongside their official German designations below, per project convention. Official foreign-language VAT-ID designations are kept in their own language, never translated to a German or English equivalent. Always spelled "Factur-X" — never "Factor-X".
+
+include::architecture-glossary-terms.adoc[]

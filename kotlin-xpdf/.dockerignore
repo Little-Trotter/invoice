@@ -1,0 +1,10 @@
+# Maven build output
+target/
+.kotlin/
+node_modules/
+
+# Local IDE files
+.idea/
+*.iml
+*.ipr
+*.iws

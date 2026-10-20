@@ -1,0 +1,82 @@
+{
+  "versions": {
+    "kositScenarioRelease": "2026-01-31"
+  },
+  "positive": [
+    {
+      "id": "inland-b2b-19-s",
+      "file": "positive/inland-b2b-19-s.xml",
+      "description": "Inland B2B, Regelsatz 19% / Kategorie S"
+    },
+    {
+      "id": "eu-b2b-reverse-charge-ae",
+      "file": "positive/eu-b2b-reverse-charge-ae.xml",
+      "description": "EU-B2B Reverse Charge (Kategorie AE) mit VATEX-EU-AE, beide USt-IDs vorhanden"
+    },
+    {
+      "id": "eu-b2c-19-s",
+      "file": "positive/eu-b2c-19-s.xml",
+      "description": "EU-B2C, Regelsatz 19% / Kategorie S, Kaeufer in Frankreich ohne USt-ID"
+    },
+    {
+      "id": "steuerbefreit-e-mit-pflichtgrund",
+      "file": "positive/steuerbefreit-e-mit-pflichtgrund.xml",
+      "description": "Steuerbefreit (Kategorie E) mit Pflichtgrund VATEX-EU-132"
+    },
+    {
+      "id": "nicht-steuerbar-o",
+      "file": "positive/nicht-steuerbar-o.xml",
+      "description": "Nicht steuerbar (Kategorie O), Verkaeufer ohne USt-ID"
+    },
+    {
+      "id": "oeffentlicher-auftraggeber-leitweg-id",
+      "file": "positive/oeffentlicher-auftraggeber-leitweg-id.xml",
+      "description": "Deutscher oeffentlicher Auftraggeber mit Leitweg-ID (BT-10), getrennte BT-34/BT-49-Adressen"
+    }
+  ],
+  "negative": [
+    {
+      "id": "fehlende-leitweg-id",
+      "file": "negative/fehlende-leitweg-id.xml",
+      "description": "BuyerReference (traegt die Leitweg-ID) fehlt",
+      "expectedStage": "KOSIT",
+      "expectedRuleId": "BR-DE-15"
+    },
+    {
+      "id": "fehlende-scheme-id",
+      "file": "negative/fehlende-scheme-id.xml",
+      "description": "schemeID auf der Steuerregistrierung des Verkaeufers fehlt",
+      "expectedStage": "KOSIT",
+      "expectedRuleId": "BR-DE-16"
+    },
+    {
+      "id": "ae-ohne-kaeufer-ustid",
+      "file": "negative/ae-ohne-kaeufer-ustid.xml",
+      "description": "Reverse Charge (Kategorie AE) ohne Kaeufer-USt-ID",
+      "expectedStage": "KOSIT",
+      "expectedRuleId": "BR-AE-02"
+    },
+    {
+      "id": "fehlende-zahlungsbedingungen-br-co-25",
+      "file": "negative/fehlende-zahlungsbedingungen-br-co-25.xml",
+      "description": "Zahlungsbedingungen fehlen bei positivem Zahlbetrag",
+      "expectedStage": "KOSIT",
+      "expectedRuleId": "BR-CO-25"
+    },
+    {
+      "id": "nicht-wohlgeformtes-xml",
+      "file": "negative/nicht-wohlgeformtes-xml.xml",
+      "description": "XML ist nicht wohlgeformt (fehlender schliessender Tag)",
+      "expectedStage": "SYNTAX",
+      "expectedRuleId": null
+    }
+  ],
+  "specialNegative": [
+    {
+      "id": "pdf-ohne-eingebettetes-xml",
+      "description": "PDF ohne eingebetteten XML-Anhang (kein Hybrid-PDF)",
+      "expectedStage": "PDFA",
+      "expectedRuleId": null
+    }
+  ]
+}

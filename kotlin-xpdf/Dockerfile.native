@@ -1,0 +1,43 @@
+# Global args for all stages
+ARG QUARKUS_MANDREL_BUILDER_TAG=latest
+ARG QUARKUS_MICRO_IMAGE_TAG=3.0
+
+# ── Stage 1: Native build ─────────────────────────────────────
+FROM quay.io/quarkus/ubi-quarkus-mandrel-builder-image:${QUARKUS_MANDREL_BUILDER_TAG} AS build
+USER quarkus
+WORKDIR /code
+
+# Copy POMs for dependency caching
+COPY --chown=quarkus:quarkus pom.xml /code/
+COPY --chown=quarkus:quarkus kotlin-shared/pom.xml /code/kotlin-shared/
+COPY --chown=quarkus:quarkus kotlin-invoice/pom.xml /code/kotlin-invoice/
+COPY --chown=quarkus:quarkus kotlin-xpdf/pom.xml /code/kotlin-xpdf/
+COPY --chown=quarkus:quarkus kotlin-ui-components/pom.xml /code/kotlin-ui-components/
+COPY --chown=quarkus:quarkus kotlin-e2e-tests/pom.xml /code/kotlin-e2e-tests/
+# Reactor-only module: Maven parses every <module> of the parent even for `-pl <one>`,
+# so the directory has to exist. Nothing is built from it here.
+# Repo split 05.09.2026 — see the JVM Dockerfile: the aggregator lives in ci/ now.
+COPY --chown=quarkus:quarkus ci/coverage-report/pom.xml /code/ci/coverage-report/
+
+# Pre-fetch dependencies using embedded Maven
+RUN mvn -B -q dependency:go-offline -pl kotlin-xpdf -am 2>/dev/null || true
+
+# Copy sources and native build
+COPY --chown=quarkus:quarkus kotlin-shared/src /code/kotlin-shared/src
+COPY --chown=quarkus:quarkus kotlin-xpdf/src /code/kotlin-xpdf/src
+RUN mvn -B -DskipTests -Pnative -pl kotlin-xpdf -am package
+
+# ── Stage 2: Minimal runtime image ───────────────────────────
+FROM quay.io/quarkus/quarkus-micro-image:${QUARKUS_MICRO_IMAGE_TAG}
+WORKDIR /work/
+COPY --from=build /code/kotlin-xpdf/target/*-runner /work/application
+
+RUN chmod 775 /work /work/application \
+  && chown -R 1001 /work \
+  && chmod -R "g+rwX" /work \
+  && chown -R 1001:root /work
+
+EXPOSE 8081
+USER 1001
+
+CMD ["./application", "-Dquarkus.http.host=0.0.0.0"]

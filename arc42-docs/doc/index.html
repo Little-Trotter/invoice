@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1A73E8">
+    <link rel="icon" type="image/svg+xml" href="images/little-trotter-head-icon.svg">
+    <title>Little Trotter | Architecture Documentation</title>
+    <style>
+        /* ==================================================================
+           Little Trotter X-Invoice — documentation landing page (A42-11)
+
+           Same design system as arc42-common.css (Bauhaus geometry on the
+           app's Material palette): flat, rectangular, one action colour, the
+           primaries only as marks. This page is standalone (no shared CSS,
+           no CDN, no webfonts), so the tokens are repeated here — verified
+           against kotlin-invoice/src/main/frontend/themes/littletrotter/
+           styles.css:
+             --lt-text-primary   #202124 / #E8EAED
+             --lt-text-secondary #5F6368 / #BDC1C6
+             --lt-accent         #1A73E8 / #8AB4F8
+             --lt-ok             #188038 / #81C995
+             --lt-warn           #F9AB00 / #FDD663
+             --lt-error          #D93025 / #F28B82
+             --lt-bg             #FFFFFF / #202124
+             --lt-surface        #FFFFFF / #292A2D
+             --lt-rule           #DADCE0 / #3C4043
+             --lt-hover          #E8F0FE / #33363E (app: color-mix 12% accent)
+             --lt-header-bg      app .main-header background-color literal
+               (#003366 light; dark mode there swaps to --lt-surface)
+           Dark mode follows the OS setting (prefers-color-scheme); the
+           static page has no theme attribute like the app.
+
+           The three tiles carry Kandinsky's Bauhaus pairing — blue circle,
+           red square, yellow triangle — as pure marks: every link stays in
+           the action colour.
+           ================================================================== */
+        :root {
+            --lt-text-primary: #202124;
+            --lt-text-secondary: #5F6368;
+            --lt-accent: #1A73E8;
+            --lt-ok: #188038;
+            --lt-warn: #F9AB00;
+            --lt-error: #D93025;
+            --lt-bg: #FFFFFF;
+            --lt-surface: #FFFFFF;
+            --lt-rule: #DADCE0;
+            --lt-hover: #E8F0FE;
+            --lt-header-bg: #003366;
+            --lt-header-text: #FFFFFF;
+            --link-hover: #145AB5;
+            --stripe: 6px;
+            --transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+            --font-main: system-ui, -apple-system, "Segoe UI", roboto, "Helvetica Neue", arial, sans-serif;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --lt-text-primary: #E8EAED;
+                --lt-text-secondary: #BDC1C6;
+                --lt-accent: #8AB4F8;
+                --lt-ok: #81C995;
+                --lt-warn: #FDD663;
+                --lt-error: #F28B82;
+                --lt-bg: #202124;
+                --lt-surface: #292A2D;
+                --lt-rule: #3C4043;
+                --lt-hover: #33363E;
+                --lt-header-bg: #292A2D; /* app: html[theme~="dark"] .main-header uses --lt-surface */
+                --lt-header-text: #E8EAED;
+                --link-hover: #C6DCF9;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: var(--font-main);
+            color: var(--lt-text-primary);
+            background: var(--lt-bg);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Colour stripe — identical to body::before in arc42-common.css */
+        .stripe {
+            height: var(--stripe);
+            background: linear-gradient(to right,
+                var(--lt-accent) 0 55%,
+                var(--lt-error) 55% 70%,
+                var(--lt-warn) 70% 85%,
+                var(--lt-ok) 85% 100%);
+        }
+
+        .skip-link {
+            position: absolute;
+            left: -999px;
+            top: 0;
+            background: var(--lt-surface);
+            color: var(--lt-text-primary);
+            border: 2px solid var(--lt-accent);
+            padding: 10px 14px;
+            z-index: 100;
+            text-decoration: none;
+        }
+
+        .skip-link:focus-visible {
+            left: 12px;
+            top: 12px;
+        }
+
+        /* App header bar: same colour as .main-header in styles.css */
+        .app-header {
+            background: var(--lt-header-bg);
+            color: var(--lt-header-text);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .app-header {
+                border-bottom: 1px solid var(--lt-rule);
+            }
+        }
+
+        .app-header .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--lt-header-text);
+        }
+
+        .app-header .brand-icon {
+            width: 32px;
+            height: 32px;
+            display: block;
+            flex-shrink: 0;
+        }
+
+        .app-header .wordmark {
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            color: var(--lt-header-text);
+        }
+
+        .app-header .wordmark .x-invoice {
+            font-weight: 400;
+            opacity: 0.85;
+        }
+
+        .app-header .github-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--lt-header-text);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 6px 14px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+
+        .app-header .github-link:hover,
+        .app-header .github-link:focus-visible {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.7);
+            color: #FFFFFF;
+        }
+
+        .app-header .github-link svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        main.container {
+            width: min(100% - 48px, 1100px);
+            margin: 0 auto;
+            padding: 56px 0 24px;
+        }
+
+        header.intro {
+            margin-bottom: 40px;
+        }
+
+        .label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            line-height: 1.3;
+        }
+
+        .eyebrow {
+            margin: 0 0 12px;
+            color: var(--lt-accent);
+        }
+
+        h1 {
+            margin: 0 0 16px;
+            padding-bottom: 16px;
+            border-bottom: 3px solid var(--lt-text-primary);
+            font-size: clamp(2rem, 4.5vw, 2.75rem);
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            margin: 0;
+            max-width: 68ch;
+            font-size: 1.125rem;
+            color: var(--lt-text-secondary);
+        }
+
+        .choices {
+            margin-top: 32px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        .card {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 280px;
+            padding: 0 0 24px;
+            border: 2px solid var(--lt-rule);
+            background: var(--lt-surface);
+            transition: var(--transition);
+        }
+
+        .card:hover,
+        .card:focus-within {
+            border-color: var(--lt-text-primary);
+        }
+
+        .card:focus-within {
+            outline: 3px solid var(--lt-accent);
+            outline-offset: 3px;
+        }
+
+        /* The mark: a 64px square tile in one primary, one geometric glyph. */
+        .tile {
+            width: 64px;
+            height: 64px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .card-readme .tile { background: var(--lt-accent); color: #FFFFFF; }
+        .card-logs .tile { background: var(--lt-warn); color: #202124; }
+        .card-arc42 .tile { background: var(--lt-accent); color: var(--lt-bg); }
+        .card-guide .tile { background: var(--lt-ok); color: var(--lt-bg); }
+        .card-ops .tile { background: var(--lt-header-bg); color: #FFFFFF; }
+        .card-glossary-de .tile { background: var(--lt-error); color: #FFFFFF; }
+        .card-glossary-en .tile { background: var(--lt-header-bg); color: #FFFFFF; }
+        .card-email .tile { background: var(--lt-accent); color: #FFFFFF; }
+
+        .card-canvases {
+            padding-top: 24px;
+        }
+
+        .card-canvases .canvas-item {
+            margin: 12px 24px 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 0.95rem;
+        }
+
+        .card-canvases .canvas-item:last-child {
+            margin-bottom: 24px;
+        }
+
+        .canvas-mark {
+            font-size: 14px;
+            line-height: 1.4;
+            flex-shrink: 0;
+        }
+
+        .mark-square { color: var(--lt-error); }
+        .mark-triangle { color: var(--lt-warn); }
+
+        .meta-inline {
+            font-weight: 700;
+            color: var(--lt-accent);
+            text-decoration: underline;
+            text-decoration-thickness: 1.5px;
+            text-underline-offset: 3px;
+            transition: var(--transition);
+        }
+
+        .meta-inline:hover,
+        .meta-inline:focus-visible {
+            color: var(--link-hover);
+            text-decoration-thickness: 2px;
+        }
+
+        .canvas-desc {
+            display: block;
+            color: var(--lt-text-secondary);
+            font-size: 0.85rem;
+            margin-top: 2px;
+        }
+
+        .section-divider {
+            margin-top: 48px;
+            margin-bottom: 20px;
+        }
+
+        .section-divider .label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--lt-accent);
+        }
+
+        .section-divider h2 {
+            margin: 0;
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--lt-text-primary);
+        }
+
+        .card > .badge,
+        .card > h2,
+        .card > p,
+        .card > .meta {
+            margin-left: 24px;
+            margin-right: 24px;
+        }
+
+        .badge {
+            align-self: flex-start;
+            margin-top: 8px;
+            padding: 3px 8px;
+            border: 1px solid var(--lt-text-primary);
+            color: var(--lt-text-primary);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            margin-bottom: 0;
+            font-size: 1.45rem;
+            font-weight: 800;
+            line-height: 1.2;
+            letter-spacing: -0.02em;
+        }
+
+        .card p {
+            margin-top: 0;
+            margin-bottom: 0;
+            color: var(--lt-text-secondary);
+            font-size: 1rem;
+        }
+
+        .meta {
+            margin-top: auto;
+            padding-top: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            color: var(--lt-accent);
+            text-decoration: underline;
+            text-decoration-thickness: 1.5px;
+            text-underline-offset: 3px;
+            transition: var(--transition);
+        }
+
+        .meta:hover,
+        .meta:focus-visible {
+            color: var(--link-hover);
+            text-decoration-thickness: 2px;
+        }
+
+        a:focus-visible {
+            outline: 3px solid var(--lt-accent);
+            outline-offset: 3px;
+        }
+
+        footer {
+            margin-top: 56px;
+            padding-top: 20px;
+            border-top: 2px solid var(--lt-text-primary);
+            font-size: 0.825rem;
+            color: var(--lt-text-secondary);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 20px;
+            align-items: baseline;
+        }
+
+        footer a {
+            color: var(--lt-accent);
+            font-weight: 500;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        .disclaimer {
+            width: 100%;
+            margin: 6px 0 0;
+            font-size: 0.78rem;
+            color: var(--lt-text-secondary);
+        }
+
+        @media (max-width: 760px) {
+            main.container {
+                padding: 32px 0 24px;
+            }
+
+            .card {
+                min-height: 0;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html {
+                scroll-behavior: auto;
+            }
+
+            * {
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="stripe" aria-hidden="true"></div>
+    <a href="#main" class="skip-link">Skip to main content</a>
+    <div class="app-header">
+        <a href="index.html" class="brand">
+            <img src="images/little-trotter-head-icon.svg" alt="Little Trotter Pferdekopf-Logo" class="brand-icon">
+            <span class="wordmark">Little Trotter <span class="x-invoice">X-Invoice</span></span>
+        </a>
+        <a href="https://github.com/little-trotter" class="github-link" target="_blank" rel="noopener" aria-label="Little Trotter auf GitHub">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+            </svg>
+            <span>GitHub</span>
+        </a>
+    </div>
+    <main id="main" class="container">
+        <header class="intro">
+            <p class="eyebrow label">Little Trotter</p>
+            <h1>X-Invoice Architecture Documentation</h1>
+            <p class="subtitle">Comprehensive arc42 architecture documentation for the Little Trotter X-Rechnung invoice generation system. Explore the system context, building blocks, runtime behavior, quality requirements, design decisions, and technical risks.</p>
+        </header>
+        <div class="section-divider">
+            <span class="label">Praxis, Betrieb &amp; Meilensteine</span>
+            <h2>Deutsche Dokumentation &amp; Schnellstart</h2>
+        </div>
+        <section class="choices choices-de" aria-label="Deutsche Dokumentation und Schnellstart">
+            <article class="card card-readme" aria-labelledby="readme-title">
+                <div class="tile" aria-hidden="true">&#9733;</div>
+                <span class="badge label">Einstieg</span>
+                <h2 id="readme-title">README &amp; Schnellstart</h2>
+                <p>Projektübersicht, 30-Sekunden-Überblick, Architektur und lokaler Schnellstart mit Docker Compose.</p>
+                <a href="readme.html" class="meta">README lesen &rarr;</a>
+            </article>
+            <article class="card card-logs" aria-labelledby="logs-title">
+                <div class="tile" aria-hidden="true">&#9998;</div>
+                <span class="badge label">Chronik</span>
+                <h2 id="logs-title">Release-Log &amp; Chronik</h2>
+                <p>Entwicklungschronik, Meilensteine von Haflinger über Andalusier bis Schwarzwälder Fuchs und Register der ADRs.</p>
+                <a href="logs.html" class="meta">Release-Log öffnen &rarr;</a>
+            </article>
+            <article class="card card-guide" aria-labelledby="guide-title">
+                <div class="tile" aria-hidden="true">&#9670;</div>
+                <span class="badge label">Praxis</span>
+                <h2 id="guide-title">Praxishandbuch</h2>
+                <p>Fachliche Anleitung für Belegerfassung, Festschreiben und E-Mail-Versand von Rechnung und Angebot, USt-IdNr.-Prüfung, Belegverwaltung und Storno (Typ 384).</p>
+                <a href="user-guide.html" class="meta">Praxishandbuch öffnen &rarr;</a>
+            </article>
+            <article class="card card-ops" aria-labelledby="ops-title">
+                <div class="tile" aria-hidden="true">&#9672;</div>
+                <span class="badge label">Wirtschaftlichkeit</span>
+                <h2 id="ops-title">Betrieb &amp; Wirtschaftlichkeit</h2>
+                <p>Leitfaden für Geschäftsführung &amp; IT: 11-Jahres-TCO, BSI CON.3 Datensicherung, Cloud vs. On-Premise Vergleich und CO&#8322;e-Bilanz.</p>
+                <a href="betrieb-und-wirtschaftlichkeit.html" class="meta">Betriebsvergleich öffnen &rarr;</a>
+            </article>
+            <article class="card card-email" aria-labelledby="email-title">
+                <div class="tile" aria-hidden="true">&#9993;</div>
+                <span class="badge label">Compliance</span>
+                <h2 id="email-title">Compliance &amp; Revisionssicherheit</h2>
+                <p>Leitfaden für Büro, Geschäftsführung und IT: Wie versendete Rechnungen und Angebote automatisch als unveränderbare Kopie in Ihr E-Mail-Archiv gelangen &ndash; mit Ablaufgrafik, Praxisbeispiel, Prüfungsablauf und Statusübersicht.</p>
+                <a href="archivierung-und-uebergabe.html" class="meta">Leitfaden öffnen &rarr;</a>
+            </article>
+            <article class="card card-glossary-de" aria-labelledby="glossary-de-title">
+                <div class="tile" aria-hidden="true">&#9776;</div>
+                <span class="badge label">Glossar</span>
+                <h2 id="glossary-de-title">Fachglossar &amp; Recht</h2>
+                <p>Begriffe des deutschen Steuer- und Handelsrechts (UStG, GoBD, BEG IV), Rechnungsarten, Belege, Storno und Betriebskonzepte.</p>
+                <a href="glossar.html" class="meta">Fachglossar öffnen &rarr;</a>
+            </article>
+        </section>
+
+        <div class="section-divider">
+            <span class="label">Architecture &amp; System Design</span>
+            <h2>arc42 System Architecture (English)</h2>
+        </div>
+        <section class="choices choices-en" aria-label="System Architecture Documentation">
+            <article class="card card-arc42" aria-labelledby="arc42-title">
+                <div class="tile" aria-hidden="true">&#9679;</div>
+                <span class="badge label">Primary</span>
+                <h2 id="arc42-title">Arc42 Documentation</h2>
+                <p>Complete architecture chapters: context, building blocks, runtime view, deployment, quality requirements, design decisions, concepts, and risks.</p>
+                <a href="arc42-docs.html" class="meta">Open Arc42 Docs &rarr;</a>
+            </article>
+            <article class="card card-canvases" aria-labelledby="canvases-title">
+                <span class="badge label">Canvases</span>
+                <h2 id="canvases-title">One-Page Canvases</h2>
+                <p>Compact visual architectural overviews:</p>
+                <div class="canvas-item">
+                    <span class="canvas-mark mark-square" aria-hidden="true">&#9632;</span>
+                    <div>
+                        <a href="architecture-inception-canvas.html" class="meta-inline">Inception Canvas &rarr;</a>
+                        <span class="canvas-desc">System overview, goals &amp; constraints</span>
+                    </div>
+                </div>
+                <div class="canvas-item">
+                    <span class="canvas-mark mark-triangle" aria-hidden="true">&#9650;</span>
+                    <div>
+                        <a href="architecture-communication-canvas.html" class="meta-inline">Communication Canvas &rarr;</a>
+                        <span class="canvas-desc">Value, stakeholders, components &amp; risks</span>
+                    </div>
+                </div>
+            </article>
+            <article class="card card-glossary-en" aria-labelledby="glossary-en-title">
+                <div class="tile" aria-hidden="true">&#9635;</div>
+                <span class="badge label">Glossary</span>
+                <h2 id="glossary-en-title">Architecture Glossary</h2>
+                <p>Technical architecture terminology (Modulith, SCS, NATS envelope messaging, Ports, Outbox) and international e-invoicing standards (EN 16931, ZUGFeRD, Factur-X).</p>
+                <a href="architecture-glossary.html" class="meta">Open Architecture Glossary &rarr;</a>
+            </article>
+        </section>
+        <footer>
+            <span>&#169; 2026 <a href="https://github.com/little-trotter" target="_blank" rel="noopener">little-trotter</a> &mdash; Apache License 2.0</span>
+            <a href="https://github.com/little-trotter" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="vertical-align:text-bottom;">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                </svg>
+                GitHub Repository
+            </a>
+            <p class="disclaimer">
+                This documentation is AI-assisted and auto-generated from source, reflecting the implemented system architecture.
+                All examples, business names, addresses, and monetary figures are randomly generated synthetic test data (datagen).
+                Provided for educational and operational reference purposes.
+            </p>
+        </footer>
+    </main>
+</body>
+</html>

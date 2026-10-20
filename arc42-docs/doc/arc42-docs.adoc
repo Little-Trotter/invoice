@@ -1,0 +1,188 @@
+= Little Trotter X-Invoice — Architecture Documentation
+:author: Projektinitiator (https://github.com/eifel42[eifel42])
+:revnumber: 0.9.59-SNAPSHOT
+:revdate: {docdate}
+:description: arc42 Architecture Documentation for Little Trotter X-Invoice
+:keywords: arc42, Architecture, Invoicing, X-Rechnung, ZUGFeRD
+:doctype: book
+:toclevels: 3
+:sectanchors:
+:sectlinks:
+:sectnums:
+:sectnumlevels: 4
+:appendix-caption: Appendix
+:appendix-refsig: Appendix
+:toc: left
+:docinfodir: docinfo
+:stylesdir: css
+:stylesheet: arc42-docs.css
+:linkcss:
+:experimental:
+:docinfo: shared-head
+// PO rule (2026-09-02): no CDN loads. Force-unset here too (belt-and-braces
+// with config/Config.groovy's attributes map, the actual source of truth for
+// the generateHTML task) — plain-text admonition labels, no Font Awesome;
+// plain <pre><code> blocks, no highlight.js.
+:icons!:
+:source-highlighter!:
+:imagesdir: images
+:title-logo-image: image:little-trotter-horse.png[Little Trotter logo: stylized horse,300,align="center"]
+:lang: en
+:toc-title: Table of Contents
+:chapter-label: Chapter
+:section-refsig: Section
+:figure-caption: Figure
+:table-caption: Table
+:example-caption: Example
+:project-name: Little Trotter X-Invoice
+:project-version: 0.9.59-SNAPSHOT
+:copyright: Copyright (C) 2026 https://github.com/little-trotter/invoice
+
+[abstract]
+.Abstract
+This document describes the architecture of Little Trotter X-Invoice, an invoicing and receipt-management application that produces UStG-compliant, ZUGFeRD capable e-invoices. It follows the https://arc42.org[arc42] template and is built with https://doctoolchain.org[docToolchain]. This documentation supports software development and architecture. All source code and documentation are provided in English.
+
+[[ai-notice]]
+[NOTE]
+====
+.Notice on Transparency, AI Assistance, and Synthetic Test Data
+
+Transparency & AI Assistance::
+This architecture documentation and its accompanying artifacts were authored and structured with the assistance of advanced AI development agents.
+
+Synthetic Test Data (`datagen`)::
+All examples, organizations, personal names, invoice numbers, addresses, and monetary amounts depicted across this documentation and embedded diagrams are randomly generated synthetic test data (`datagen`). They do not represent real entities; any resemblance to actual businesses or individuals is purely coincidental.
+====
+
+[discrete]
+== Documentation Overview
+
+arc42 architecture documentation for Little Trotter X-Invoice. Chapters 1–12 below are the parts
+of this arc42 Architecture Documentation; the appendices follow them.
+
+[cols="1,3", options="header"]
+|===
+|Section |Content
+
+|<<_introduction_and_goals>>
+|1. Introduction and Goals
+
+|<<_architecture_constraints>>
+|2. Architecture Constraints
+
+|<<_system_scope_and_context>>
+|3. System Scope and Context
+
+|<<_solution_strategy>>
+|4. Solution Strategy
+
+|<<_building_block_view>>
+|5. Building Block View
+
+|<<_runtime_view>>
+|6. Runtime View
+
+|<<_deployment_view>>
+|7. Deployment View
+
+|<<_cross_cutting_concepts>>
+|8. Cross-cutting Concepts
+
+|<<_architecture_decisions>>
+|9. Architecture Decisions
+
+|<<_quality_requirements>>
+|10. Quality Requirements
+
+|<<_risks_and_technical_debt>>
+|11. Risks and Technical Debt
+
+|<<_glossary>>
+|12. Glossary
+
+|<<c4-reference>>
+|Appendix A: C4 Reference
+
+|<<architecture-canvases-reference>>
+|Appendix B: Architecture Canvases
+|===
+
+// Core architecture sections
+include::arc42/01-introduction.adoc[leveloffset=+1]
+
+include::arc42/02-constraints.adoc[leveloffset=+1]
+
+include::arc42/03-context.adoc[leveloffset=+1]
+
+include::arc42/04-solution.adoc[leveloffset=+1]
+
+include::arc42/05-building-blocks.adoc[leveloffset=+1]
+
+include::arc42/06-runtime.adoc[leveloffset=+1]
+
+include::arc42/07-deployment.adoc[leveloffset=+1]
+
+include::arc42/08-crosscutting.adoc[leveloffset=+1]
+
+include::arc42/09-decisions.adoc[leveloffset=+1]
+
+include::arc42/10-quality-requirements.adoc[leveloffset=+1]
+
+include::arc42/11-risks-and-technical-debts.adoc[leveloffset=+1]
+
+include::arc42/12-glossary.adoc[leveloffset=+1]
+
+== License and Attribution
+
+This documentation follows the repository's licensing (`LICENSE`, `NOTICE`, root `README.md`):
+
+* *Software* — Apache License, Version 2.0. Code excerpts in this documentation are covered by
+  the same license as the code they come from.
+* *Concept, design and this documentation* — the overall concept, design, layout and core idea,
+  and with them the architecture documentation and canvases that describe them, are provided
+  under the Creative Commons Attribution 4.0 International License (CC BY 4.0). When the concept
+  or layout is reused in other applications or products, including commercial use, a clearly
+  visible attribution to the original project must be maintained: "Core idea derived from the
+  LittleTrotter X-Rechnung project (https://github.com/little-trotter/invoice) under
+  CC BY 4.0."
+* *Third-party notices*, including the bundled fonts, are listed in the repository `NOTICE`
+  file.
+
+== About This Documentation
+
+Generated with https://doctoolchain.org[docToolchain] using the https://arc42.org[arc42] template.
+
+[cols="2,3", options="header"]
+|===
+|Item |Value
+
+|Build Tool |docToolchain
+|Template |https://arc42.org[arc42]
+|arc42 Overview |https://docs.arc42.org[arc42 Overview]
+|arc42 Inception Canvas |https://canvas.arc42.org/architecture-inception-canvas[Architecture Inception Canvas]
+|arc42 Communication Canvas |https://canvas.arc42.org/architecture-communication-canvas[Architecture Communication Canvas]
+|Inception Canvas |link:architecture-inception-canvas.html[Architecture Inception Canvas] — one-page architecture overview
+|Communication Canvas |link:architecture-communication-canvas.html[Architecture Communication Canvas] — one-page communication and decision view
+|Inception Canvas (draw.io) |link:architecture-inception-canvas.drawio[architecture-inception-canvas.drawio] — generated from the AsciiDoc canvas by the build; the AsciiDoc page is the source
+|Communication Canvas (draw.io) |link:architecture-communication-canvas.drawio[architecture-communication-canvas.drawio] — generated from the AsciiDoc canvas by the build; the AsciiDoc page is the source
+|User Guide |link:user-guide.html[Praxishandbuch] — comprehensive user guide with workflows, compliance rules, and UI screenshots
+|Format |AsciiDoc
+|Generated |{docdate}
+|Version |{project-version}
+|License |Software Apache-2.0; concept, design and documentation CC BY 4.0 (see above)
+|===
+
+// Appendices carry their own letters; section numbering stays off from here on.
+:!sectnums:
+
+[appendix]
+[[c4-reference]]
+= C4 Reference
+
+include::arc42/appendix-c4-notation.adoc[]
+
+[appendix]
+[[architecture-canvases-reference]]
+= Architecture Canvases
+
+include::arc42/appendix-architecture-canvases.adoc[]

@@ -1,0 +1,3 @@
+# H27-29 squashed the entire grown migration history (ddl V001-V014, seed V901-V915) into
+# V1__baseline_schema.sql and V2__baseline_seed.sql — both pass the sqlfluff gate cleanly, so
+# nothing needs to be exempted here anymore.

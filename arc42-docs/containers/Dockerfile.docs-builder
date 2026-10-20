@@ -1,0 +1,106 @@
+# Pin by SHA digest for supply-chain immutability.
+# To update: docker pull python:3.14-slim && docker inspect --format='{{index .RepoDigests 0}}' python:3.14-slim
+ARG BASE_IMAGE=python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
+
+# --- Stage 1: Graphviz from source -------------------------------------------------------
+# Debian trixie ships Graphviz 2.42.4 (2019); its dot layout is what every PlantUML diagram
+# here goes through. Upstream's current release fixes years of layout and edge-routing
+# issues, so it is built from the pinned release tarball with only the plugins PlantUML
+# needs (core layouts and the built-in SVG renderer, no cairo/pango/X11).
+FROM ${BASE_IMAGE} AS graphviz-build
+ARG GRAPHVIZ_VERSION=16.1.0
+ARG GRAPHVIZ_SHA256=beea483ab130f456c1c3905f4f2e40778a9c493c3d73ae8012367d552d71ca84
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libexpat1-dev zlib1g-dev pkg-config curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL --max-time 300 \
+    "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/${GRAPHVIZ_VERSION}/graphviz-${GRAPHVIZ_VERSION}.tar.gz" \
+    -o /tmp/graphviz.tar.gz \
+    && echo "${GRAPHVIZ_SHA256}  /tmp/graphviz.tar.gz" | sha256sum -c - \
+    && mkdir -p /tmp/graphviz && tar xzf /tmp/graphviz.tar.gz -C /tmp/graphviz --strip-components=1 \
+    && cd /tmp/graphviz \
+    && ./configure --disable-static --without-x --without-gts \
+       --disable-python --disable-perl --disable-tcl --disable-guile --disable-lua --disable-r \
+       --disable-ruby --disable-java --disable-go --disable-php --disable-sharp --disable-swig \
+       --with-gdk=no --with-gtk=no --with-pangocairo=no --with-poppler=no --with-rsvg=no \
+       --with-webp=no --with-gd=no --with-ghostscript=no --with-lasi=no --with-quartz=no \
+       --with-freetype2=no --with-fontconfig=no >/tmp/configure.log \
+    && make -j"$(nproc)" >/tmp/make.log \
+    && make install DESTDIR=/gv >/tmp/install.log
+
+# --- Stage 2: the docs builder ------------------------------------------------------------
+FROM ${BASE_IMAGE}
+
+# Install Java 25 (Debian trixie ships it; the whole system runs on Java 25) plus build tooling.
+# Python itself is unused by this build (no generator pipeline here) but the
+# base image already provides a small, well-maintained Debian userland.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-25-jre-headless \
+    curl \
+    unzip \
+    libexpat1 \
+    zlib1g \
+    fontconfig \
+    libfreetype6 \
+    libharfbuzz0b \
+    librsvg2-bin \
+    fonts-dejavu-core \
+    ca-certificates \
+    locales \
+    && rm -rf /var/lib/apt/lists/* \
+    && locale-gen en_US.UTF-8 \
+    && update-ca-certificates \
+    && rm -rf /etc/ssl/certs/NetLock_Arany_*
+
+# Graphviz from stage 1; `dot -c` writes the plugin config the fresh install needs.
+COPY --from=graphviz-build /gv/usr/local/ /usr/local/
+RUN ldconfig && dot -c && dot -V
+
+# Install plantuml (pinned version, SHA-256 verified) — renders the Structurizr exports.
+ARG PLANTUML_VERSION=1.2026.8
+ARG PLANTUML_SHA256=5e1ecfa8ecd32c90b03bbf3b1eb6f020943f98ab0fcf4032be31a0002ee2c462
+RUN curl -fsSL --max-time 120 \
+    "https://github.com/plantuml/plantuml/releases/download/v${PLANTUML_VERSION}/plantuml-${PLANTUML_VERSION}.jar" \
+    -o /usr/local/bin/plantuml.jar && \
+    echo "${PLANTUML_SHA256}  /usr/local/bin/plantuml.jar" | sha256sum -c - && \
+    chmod +x /usr/local/bin/plantuml.jar
+
+# Install Structurizr CLI (pinned release) — exports the C4 model in doc/c4/workspace.dsl
+# to PlantUML, which the pinned PlantUML jar then renders.
+ARG STRUCTURIZR_VERSION=2025.11.09
+RUN mkdir -p /opt/structurizr && \
+    echo "Installing Structurizr CLI version: ${STRUCTURIZR_VERSION}" && \
+    curl -fsSL --max-time 120 "https://github.com/structurizr/cli/releases/download/v${STRUCTURIZR_VERSION}/structurizr-cli.zip" -o /tmp/structurizr-cli.zip && \
+    unzip /tmp/structurizr-cli.zip -d /opt/structurizr && \
+    rm /tmp/structurizr-cli.zip && \
+    find /opt/structurizr -name "*.sh" -exec chmod +x {} \;
+
+# Install docToolchain (pinned version). 3.5.0 is out but not usable here: its bundled
+# Jira inline macro is registered as a Groovy closure, which the AsciidoctorJ Gradle plugin
+# it ships rejects on Gradle >= 8.4 ("Closures are not supported on Gradle 8.4+"), and
+# Gradle < 8.4 cannot run on the Java 25 this image uses. Revisit when docToolchain moves
+# that extension out of closure form.
+RUN mkdir -p /opt/doctoolchain && \
+    DOCTOOLCHAIN_VERSION=3.4.1 && \
+    echo "Installing docToolchain version: ${DOCTOOLCHAIN_VERSION}" && \
+    curl -fsSL --max-time 120 "https://github.com/docToolchain/docToolchain/releases/download/v${DOCTOOLCHAIN_VERSION}/docToolchain-${DOCTOOLCHAIN_VERSION}.zip" -o /tmp/doctoolchain.zip && \
+    unzip /tmp/doctoolchain.zip -d /opt/doctoolchain && \
+    rm /tmp/doctoolchain.zip && \
+    chmod +x /opt/doctoolchain/docToolchain-${DOCTOOLCHAIN_VERSION}/bin/doctoolchain
+
+# Upgrade the bundled Gradle wrapper from 8.1.1 to the last Gradle 8 release so it runs on
+# Java 25 (8.1.1 predates it). docToolchain still uses features Gradle 9 removed,
+# so 8.x is the ceiling until docToolchain itself moves.
+ARG GRADLE_VERSION=8.14.5
+RUN sed -i \
+    "s|gradle-8\.1\.1-bin\.zip|gradle-${GRADLE_VERSION}-bin.zip|g; s|distributions/gradle-8\.1\.1|distributions/gradle-${GRADLE_VERSION}|g" \
+    /opt/doctoolchain/docToolchain-3.4.1/gradle/wrapper/gradle-wrapper.properties
+
+# Add to PATH
+ENV PATH="/opt/structurizr:/opt/doctoolchain/docToolchain-3.4.1/bin:${PATH}"
+ENV DTC_VERSION=3.4.1
+ENV DTC_HOME="/opt/doctoolchain/docToolchain-3.4.1"
+ENV LANG=C.UTF-8
+
+# Create working directory
+WORKDIR /workspace

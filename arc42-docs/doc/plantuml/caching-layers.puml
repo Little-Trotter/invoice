@@ -1,0 +1,81 @@
+@startuml caching-layers
+skinparam roundCorner 0
+
+' PO 2026-09-12: curved (default splines) kept — side-by-side render with straight/polyline
+' showed no crossings or covered labels either way, so curves win for consistency with
+' event-driven-messaging.puml; the receipt upload's three writes to RustFS/PostgreSQL/Valkey
+' still fan out cleanly (labels need room: ranksep/nodesep).
+skinparam nodesep 70
+skinparam ranksep 110
+skinparam shadowing false
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultTextAlignment center
+skinparam wrapWidth 200
+
+skinparam component {
+  FontSize 12
+  BackgroundColor #3C88EB
+  BorderColor #2D66B0
+  FontColor #202124
+}
+skinparam database {
+  FontSize 12
+  BackgroundColor #1662C5
+  BorderColor #1456AE
+  FontColor #ffffff
+}
+skinparam note {
+  FontSize 11
+  BackgroundColor #FEF5E0
+  BorderColor #E65100
+  FontColor #202124
+}
+skinparam arrow {
+  FontSize 11
+  Color #5F6368
+  FontColor #202124
+}
+
+together {
+  component "NATS envelope consumers\n(kotlin-invoice, kotlin-xpdf)" as Consumers
+  component "Invoice views\n(PDF, job status, overview)" as InvoiceViews
+  component "Receipt upload\n(ReceiptUploadService)" as ReceiptUpload
+  component "Audit-relevant dispatch\n(mail send, invoice send)" as AuditDispatch
+}
+
+database "Valkey\n(cache, text payloads)" as Valkey
+database "PostgreSQL\n(receipt row; sha256_checksum\nunique constraint)" as Postgres
+database "RustFS\n(receipt-pool/<checksum>.pdf)" as RustFS
+
+' Column pinning: each store sits under the client that uses it most, so the upload's three
+' writes fan out straight down instead of crossing each other.
+Consumers -[hidden]right- InvoiceViews
+InvoiceViews -[hidden]right- ReceiptUpload
+ReceiptUpload -[hidden]right- AuditDispatch
+InvoiceViews -[hidden]down- Valkey
+ReceiptUpload -[hidden]down- Postgres
+AuditDispatch -[hidden]down- RustFS
+Valkey -[hidden]right- Postgres
+Postgres -[hidden]right- RustFS
+
+Consumers -down-> Valkey : text payloads\n(KoSIT report, trip-workbook ref)
+InvoiceViews -down-> Valkey : cached views\n(with TTL)
+ReceiptUpload -down-> Valkey : checksum fast path\n(no TTL)
+ReceiptUpload -down-> Postgres : authoritative check,\nthen saves the receipt row
+ReceiptUpload -down-> RustFS : stores the document\n(new receipts only)
+
+note left of Valkey
+  A cache miss costs one extra query,
+  never a duplicate: the unique
+  constraint in PostgreSQL is the
+  real guarantee.
+end note
+
+note right of AuditDispatch
+  Never reads this cache — see
+  "Audit-relevant dispatch may not
+  depend on a cache".
+end note
+
+@enduml

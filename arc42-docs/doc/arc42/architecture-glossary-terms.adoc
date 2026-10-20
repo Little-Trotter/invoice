@@ -1,0 +1,112 @@
+[#ai-notice-architecture-glossary]
+[NOTE]
+====
+.Notice on AI-Assisted Documentation and Synthetic Test Data
+
+Transparency and AI Assistance::
+This architecture glossary and its technical definitions were compiled, structured, and maintained with the assistance of generative AI systems. All concepts and interfaces reflect the actual implemented system state. All company names, personal data, addresses, and monetary figures used in examples represent randomly generated synthetic test data (`datagen`).
+====
+
+== Domain & E-Invoicing Standards
+
+[cols="1,3", options="header"]
+|===
+|Term |Definition, Architectural Intent & Context
+
+|EN 16931
+|European standard for electronic invoice data modeling: Defines the core semantic business terms (BT-Codes) independent of serialization formats, implemented via CII (Cross Industry Invoice) or UBL (Universal Business Language).
+
+|ZUGFeRD
+|German hybrid e-invoicing specification (FeRD): Integrates human-readable PDF/A-3b presentation with embedded, machine-readable EN 16931 CII XML.
+
+|X-Rechnung
+|German national standard for structured XML e-invoices in public sector procurement (B2G), executing EN 16931 business rules via Schematron.
+
+|Factur-X
+|Franco-German hybrid e-invoicing format (PDF/A-3b with embedded EN 16931 XML), technically identical to ZUGFeRD 2.x. Official mandatory spelling: Factur-X.
+
+|BT Number
+|Unique business term identifier in the EN 16931 semantic model (e.g. BT-1 Invoice number, BT-10 Buyer reference, BT-25 Preceding invoice reference).
+
+|KoSIT Validator
+|The authoritative Schematron-based reference validator from the German Coordination Office for IT Standards, verifying XML invoices against EN 16931 and national business rules.
+
+|veraPDF
+|Open-source PDF/A conformance validator (ISO 19005-3) executed during document generation to ensure strict PDF/A-3b container compliance.
+
+|Invoice Types (UNTDID 1001)
+|Standard UNTDID 1001 document codes: `380` for standard commercial invoices, `384` for formal invoice reversals, `389` for self-billed invoices, and `381` for commercial credit notes.
+
+|Invoice Lifecycle States
+|State progression: `DRAFT` (mutable, unnumbered) &rarr; `ISSUED` (finalized, sequentially numbered, immutable) &rarr; `PAID` (settled) or `CANCELLED` (neutralized via reversal).
+
+|Document Size Budget
+|Strict total payload budget for e-invoice files (e.g. 20 MiB limit including up to 19 attached receipts normalized to 440 KiB, counted as XML and as pages, plus 512 KiB document reserve).
+
+|Money Value Object
+|Dedicated domain value object encapsulating monetary scale, currency, and rounding semantics, avoiding IEEE-754 precision issues and raw floating-point arithmetic.
+
+|Finalization Gate
+|Architectural validation barrier blocking transition to `ISSUED` if Schematron validation or compliance criteria are unmet.
+|===
+
+== Architecture & Technical Terminology
+
+[cols="1,3", options="header"]
+|===
+|Term |Definition, Architectural Intent & Context
+
+|Aggregate Root
+|The primary transactional gatekeeper of a DDD aggregate (Eric Evans): all external mutations, invariant enforcement, and repository access must exclusively pass through this root entity.
+
+|Command
+|An explicit, immutable request object representing the intent to change system state (Command-Query-Separation), completely decoupled from persistence entities or presentation models.
+
+|CommandEntryPoint
+|The architectural boundary marker for write operations: represented by inbound use-case ports to enforce a strict boundary between state-mutating commands and read-only queries.
+
+|CommandResult
+|The immutable response value returned by a command execution, conveying execution status and outcome identifiers without exposing internal domain entities or mutable state.
+
+|Composite Interface (Prohibited)
+|An architectural anti-pattern that aggregates disparate interfaces solely via inheritance, creating broad coupled dependencies and violating the Interface Segregation Principle. Automatically verified and enforced via architectural unit tests.
+
+|Domain Event
+|A past-tense, immutable record of a significant state transition within the domain (Eric Evans), published transactionally to trigger side effects across bounded contexts.
+
+|Claim Check (Envelope Messaging)
+|A decoupled messaging pattern (Hohpe & Woolf: Enterprise Integration Patterns) where large payloads are stored in an external data store, while lightweight messages containing reference pointers and metadata are transmitted across the message bus.
+
+|Fat Interface
+|An anti-pattern violating the Interface Segregation Principle (Robert C. Martin): interfaces bloated with unrelated methods, forcing clients to depend on operations they never call.
+
+|Input Port (Role Interface)
+|A client-focused role interface in the application inbound layer (Alistair Cockburn: Ports & Adapters; Martin Fowler: Role Interface), defining the exact contract required by incoming adapters (UI, REST, events) to reach the core domain.
+
+|Modulith
+|A modular monolith architecture: a single deployable artifact whose internal subsystem and package boundaries are strictly defined and statically verified against architectural drift.
+
+|Outbox Pattern (Transactional Outbox)
+|A resilient messaging pattern (Chris Richardson) that guarantees at-least-once event delivery by atomically persisting outgoing messages into a dedicated database table within the business transaction.
+
+|Role Interface
+|An interface designed specifically around the tailored needs of a consumer (Martin Fowler) rather than the exhaustive surface of a service implementation.
+
+|Sealed Result
+|A strongly typed algebraic data type (e.g., a sealed class or sum type hierarchy) representing all discrete domain and business outcomes of an operation, enforcing compile-time exhaustive evaluation.
+
+|Self-Contained System (SCS)
+|An autonomous, independently deployable subsystem with its own data storage, business logic, and UI/API surface, interacting with other systems only through minimal asynchronous contracts.
+
+|Sweeper (Reconciliation Worker)
+|A resilient background worker that periodically inspects persistent state to detect, recover, and retry stalled asynchronous jobs without relying on volatile in-memory state.
+
+|Lean Operations Rollout
+|A staged operational lifecycle model: establishing an operational baseline with core automation and standardized infrastructure, scaling into a unified management and observability plane upon satisfying strict reliability gates.
+
+|Dispatch History (Versandverlauf)
+|Append-only audit journal within the mail subsystem (`kotlin-email`) tracking outgoing dispatch lifecycles (`QUEUED`, `SENT`, `FAILED`), transport hashes, and template lineage.
+
+|Signed Archive Package (`tar.gz`)
+|A deterministic, byte-reproducible archive container (`original/`, `signed/`, `manifest.json`) sealed with detached Ed25519 signatures, providing cryptographic immutability for statutory records.
+|===

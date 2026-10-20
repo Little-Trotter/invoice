@@ -1,0 +1,30 @@
+@startuml sequence-generate-e-invoice
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+participant "little-trotter-job-worker" as Worker
+database "PostgreSQL\n<size:10>[Database]</size>" as DB
+queue "NATS JetStream\n<size:10>[Stream: document-jobs]</size>" as JobQueue
+participant "kotlin-xpdf" as Renderer
+database "RustFS\n<size:10>[Object Store]</size>" as S3 <<storage>>
+queue "NATS JetStream\n<size:10>[Stream: document-job-results]</size>" as ResultQueue
+
+OfficeManager -> WebApp: click "Print"
+WebApp -> DB: persist job (PENDING)
+WebApp --> OfficeManager: job accepted
+WebApp -> JobQueue: publish job
+JobQueue -> Renderer: render PDF/XML
+Renderer -> S3: store documents
+Renderer -> ResultQueue: publish result
+ResultQueue -> WebApp: deliver result
+WebApp -> DB: mark job completed
+WebApp --> OfficeManager: push status
+
+== Asynchronous Recovery Pass ==
+Worker -> DB: scan PENDING and stale DELEGATED jobs
+Worker -> JobQueue: check message existence & re-publish
+
+$SequenceStorageLegend()
+@enduml

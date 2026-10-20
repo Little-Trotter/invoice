@@ -1,0 +1,121 @@
+= Little Trotter X-Invoice — Architecture Communication Canvas
+:author: Projektinitiator (https://github.com/eifel42[eifel42])
+:revnumber: 0.9.59-SNAPSHOT
+:revdate: {docdate}
+:description: One-page architecture communication overview based on the Architecture Communication Canvas by arc42
+:doctype: article
+:docrole: acc-page
+:toc: left
+:toclevels: 2
+:sectanchors:
+:sectlinks:
+:sectnums:
+:docinfodir: docinfo
+:stylesdir: css
+:stylesheet: arc42-canvas.css
+:linkcss:
+:docinfo: shared-head
+// SOURCE OF TRUTH for doc/architecture-communication-canvas.drawio: that file is generated from the [.canvas-*]
+// sections below by scripts/generate-canvas-drawio.py. Keep every [.canvas-<slug>] role line;
+// the generator fails on a missing or extra section.
+// PO rule (2026-09-02): no CDN loads — see arc42-docs.adoc for the full note.
+:icons!:
+:source-highlighter!:
+:imagesdir: images
+:lang: en
+:toc-title: Canvas Sections
+:project-name: Little Trotter X-Invoice
+:project-version: 0.9.59-SNAPSHOT
+
+[.canvas-value]
+== Value Proposition
+
+* *Compliant E-Invoicing*: Turnkey EN 16931, XRechnung, and ZUGFeRD generation with PDF/A-3b output, optionally sent by e-mail.
+* *Sovereign Local-First*: Self-hosted on small-budget hardware (mini PC or Linux server) with zero cloud dependency.
+* *Integrated Storage*: S3-compatible document store (RustFS) for durable receipts.
+* *Domain-Aligned UX*: User-friendly German interface, change-tracking invoices, organized catalogs, and sender/recipient management.
+* *Reference Prototype*: Fully functional prototype reference architecture under Apache-2.0 / CC BY 4.0.
+
+[.canvas-functions]
+== Core Functions
+
+* *Master Data Management*: Aggregates for issuers, recipients, items, and tax/B2B configurations.
+* *Invoice Lifecycle*: State engine (draft, issued, cancelled) with immutable snapshots on issue.
+* *Asynchronous Pipeline*: Decoupled PDF/A-3b rendering and ZUGFeRD XML embedding in `kotlin-xpdf`.
+* *Multi-Stage Validation*: Strict structural XML schema, Schematron, and KoSIT validator enforcement.
+* *Receipts & Auditing*: Deduplicated receipt intake, S3 archiving, and basic statistics.
+* *Mail Dispatch (optional)*: Templates, SMTP submission, append-only send journal, signed archive package, and SMTP journal-copy handover of every sent mail to the operator's mail archive (status in the journal) in `kotlin-email`; compose, journal and template views in the invoicing UI.
+
+[.canvas-stakeholders]
+== Key Stakeholders
+
+* *Office Manager / Owner*: Prepares and issues invoices, manages master data, and tracks receipts.
+* *Invoice Recipient*: Receives legal hybrid PDF/A-3b invoices and structured business transaction XML.
+* *Tax Advisor / Auditor*: Inspects GoBD-compliant e-invoice archives, receipt records, and financial reports.
+* *DevOps / Operator*: Provisions server, runs automated age backups, and manages deployments via `lt` CLI.
+* *Developers and AI Agents*: Maintain and evolve architecture under spec-first, gate-checked automation.
+
+[.canvas-quality]
+== Quality Requirements
+
+* *Norm Conformance*: Validation against KoSIT and veraPDF.
+* *Quality Gates*: Mandatory 90% line and branch JaCoCo test gates across all backend and UI modules.
+* *Comprehensive Coverage*: Karibu headless view testing, monkey testing, and Playwright end-to-end suites.
+* *Resource Thrift*: Small-footprint services optimized for low-power hardware (~128 MiB NATS, lean JVM).
+* *Accessibility & Usability*: ARIA keyboard navigation, dark mode support, and resilient state handling.
+
+[.canvas-decisions]
+== Core Decisions
+
+* *ADR-001 (Deterministic Money Math)*: Dedicated `Money` value type with 4-decimal accumulation and ArchUnit-gated `BigDecimal` prohibition.
+* *ADR-002 (EN 16931 Business Terms)*: B2bTerm Kotlin enum over seeded database catalog; compile-time safety for all e-invoicing terms.
+* *ADR-007 (S3 API Object Storage)*: RustFS (S3-compatible) for receipts and documents; open for cloud migration to any managed Postgres + S3 API.
+* *ADR-015 (Mail as Self-Contained System)*: Mail dispatch with own image, schema, bucket, and UI; coupled only via the frozen `kotlin-mail-contract` over NATS/REST.
+* *ADR-020 (Small-Budget Event Backbone)*: NATS JetStream job envelopes over a heavyweight Kafka cluster; durable event flow on mini-PC hardware.
+
+[.canvas-technologies]
+== Technologies
+
+* *Application Layer*: Kotlin 2.x, Java 25, Quarkus 3.x, Vaadin 25.
+* *Data & Storage*: PostgreSQL 18 (JPA / Flyway), Valkey (caching), RustFS (S3-compatible object store).
+* *Messaging Backbone*: NATS JetStream (asynchronous generation envelopes and maintenance events).
+* *PDF & Validation*: Typst (sole PDF/A-3b layout engine), Mustang Project (ZUGFeRD/CII), embedded KoSIT validator, veraPDF (standalone conformance container).
+* *Mail*: SMTP submission, journal copy to the operator's archive address (envelope recipient, ADR-037), Ed25519-signed archive packages, Mailpit in tests.
+* *Deployment & Ops*: Docker Compose, Caddy (TLS), systemd native services, and Go-based `lt` CLI suite.
+
+[.canvas-context]
+== Business Context
+
+* *Target Audience & Goal*: Practical, zero-subscription e-invoicing for solo entrepreneurs, craft businesses, and freelancers; accessible open-source foundation ("Linux for e-invoicing").
+* *Legal Compliance Core*: Generates legally mandated EN 16931 e-invoices (ZUGFeRD, XRechnung) and DIN 5008 PDF/A-3b without cloud SaaS lock-in or recurring license fees.
+* *Honest Scope Limits*: Dedicated strictly to invoice and receipt lifecycle; excludes Peppol AS4 networks, payment processing, and double-entry accounting.
+* *Operating Model*: Local-first single-operator system; Caddy reverse proxy terminates HTTPS, core data commits to PostgreSQL, document artifacts persist to S3/RustFS.
+* *System Interfaces*: Asynchronous PDF/XML worker pipeline via NATS JetStream; optional mail dispatch SCS (`kotlin-email`, `email-app` under `/mail`, SMTP) and out-of-band ops via `lt` CLI.
+
+[.canvas-components]
+== Components / Modules
+
+* *kotlin-invoice*: Core web application, Vaadin Flow UI, use cases behind per-use-case input ports, domain model, REST endpoints, JPA persistence, and PDFBox-based receipt normalization at upload.
+* *kotlin-shared / kotlin-ui-components*: Cross-cutting `Money`, DTOs, size-budget policy, B2B terms; shared Vaadin widgets (free-text editor).
+* *kotlin-xpdf*: Rendering/validation service — Typst, Mustang/CII, CII Schematron, KoSIT, asynchronous veraPDF integration.
+* *kotlin-email (+ kotlin-mail-contract)*: Optional mail SCS — `email-core`, `email-service`, headless deployable `email-app` (REST only; mail views live in the invoicing app); frozen published contract.
+* *kotlin-e2e-tests / email-e2e-tests*: Cross-module E2E suites on real Testcontainers (Postgres, NATS, RustFS, Mailpit).
+* *little-trotter-admin-tools (sibling repo)*: Operator tooling — Phase 1 shell automation and reference configs (MVP until Q4/2027); Phase 2 Go CLI suite (`lt`, `lhorse`) after phase-gate hardening; Playwright suite, monitoring, backups.
+
+[.canvas-risks]
+== Core Risks and Missing Information
+
+* *Regulatory Volatility*: Ongoing changes to European e-invoicing standards, profiles, and validation rules.
+* *Rendering Complexities*: PDF/A-3b color profiling, font licensing, and dynamic page-break layout math.
+* *Resource Headroom*: Mini PC memory constraints requiring active resource limits and lean profiles.
+* *Single-Maintainer Bus Factor*: Mitigated by ArchUnit rules, conventional commits, and arc42 documentation.
+* *Mail Integration*: Separate SCS (`kotlin-email`) needs a frozen contract, durable NATS queues, and SMTP deliverability on self-hosted hardware.
+
+'''
+
+[small]#arc42 template: https://canvas.arc42.org/architecture-communication-canvas[Architecture Communication Canvas]. +
+Canvas as draw.io (generated from this page): link:architecture-communication-canvas.drawio[architecture-communication-canvas.drawio]. +
+Related canvas: link:architecture-inception-canvas.html[Architecture Inception Canvas] | link:architecture-inception-canvas.drawio[draw.io]. +
+Full documentation: link:arc42-docs.html[arc42 Architecture Documentation]. +
+Notice: AI-assisted documentation. All examples, organizations, and fixtures represent randomly generated synthetic test data (`datagen`). +
+License: software Apache-2.0; concept, design and this canvas CC BY 4.0 with attribution to link:LICENSE[Little Trotter] (see link:LICENSE[LICENSE] / link:NOTICE[NOTICE]).#

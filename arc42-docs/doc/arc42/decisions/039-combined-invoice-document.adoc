@@ -1,0 +1,90 @@
+[[adr-039]]
+= ADR-039: Combined Invoice Document
+
+== Status
+Accepted. Supersedes <<adr-032,ADR-032>> where that decision removed the receipt pages from the PDF.
+
+PO approval (visible output): 2026-10-12 receipt pages behind the invoice pages, header band
+"Anlage n/m – <Dateiname>" and "Pos. <Nr>" on each receipt page, draft mark on receipt pages,
+BT-123 carries the receipt description, an unreadable receipt fails the export; 2026-10-12 display
+size of receipt pages (original size, at most the A4 print area).
+
+== Context
+<<adr-032,ADR-032>> carried every receipt only as Base64 in the e-invoice XML (BG-24) and removed the
+receipt pages from the visible PDF. A reader of the PDF alone, which is the document that is
+printed, filed and mailed, then saw an invoice that refers to supporting documents it does not
+show, and the receipt was not recognisable as an attachment of the invoice at all. Separately,
+`MustangTransactionBuilder` skipped a receipt it could not load with a log line, so a document
+could be produced that silently lacked a receipt it was assigned.
+
+== Decision
+An invoice document is the invoice pages followed by the pages of every assigned receipt.
+
+* *Pages*: each distinct receipt is appended behind the invoice pages, in one fixed order
+  (`orderedDistinctReceipts` in `kotlin-shared`): invoice-level receipts before item-level ones,
+  each in list order, a receipt attached more than once appears once (identity: object key, file
+  name if there is none). The visible pages and the XML attachments take their list from this one
+  function. Applies to drafts, issued invoices and credit notes alike.
+* *Header band*: every receipt page carries "Anlage n/m – <file name>" and, for receipts attached to
+  positions, "Pos. <number>", drawn as a text layer with an embedded font on top of the image
+  (extractable, veraPDF-clean), not rasterised into it.
+* *Raster only*: receipt pages are rendered to JPEG (`ReceiptAnnexBuilder`, `xpdf.receipt-annex.dpi`,
+  150 dpi, quality 0.75, the resolution upload-time reduction already uses). A foreign PDF is never
+  merged, so its fonts and colour spaces cannot break PDF/A-3 conformance and its defects stay
+  isolated.
+* *Display size*: a receipt page is shown in its original size, top-centred below the header band
+  on an A4 page of matching orientation; it is never enlarged, so a till receipt prints at its real
+  width. Only a page larger than the A4 print area is shrunk to fit; such sizes come from faulty
+  page sizes (a photo converted at 72 dpi becomes a 1.4 m page), since receipts are A4 or smaller.
+  The 150 dpi refer to this display size, which also bounds the bitmap of any page to the A4 raster
+  (about 1240 × 1754 px) without a notice to the user. Upload reduction (`PdfBoxReceiptPdfReducer`)
+  computes effective resolution against the same display size (`ReceiptDisplaySize`,
+  `kotlin-shared`), so such a photo is reduced instead of rasterised into a larger file.
+* *XML unchanged*: every receipt exactly once as BG-24 (BT-122 file name, BT-125 Base64); BT-123
+  `Name` is the receipt description, the file name if there is none (`ReceiptDto.description`, an
+  additive field of the job contract).
+* *One embedded file*: the PDF/A-3 document still embeds only the XML.
+* *Failure instead of skipping*: a receipt that cannot be read or rendered makes the export fail
+  with a user-facing message (`ReceiptUnavailableException`), for pages and for XML alike.
+* *Stamp*: the draft, storno and brand marks are stamped on every page of the finished
+  document, receipt pages included, so a draft cannot be separated from its receipt pages.
+* *Budget*: `CombinedDocumentSizeEstimator` sizes the document as reserve plus, per receipt, its Base64
+  text and its rasterised pages (about the receipt size again, measured factor 0.98 for scan-like
+  receipts). The upload warning and the export backstop `InvoiceDocumentTooLargeException`
+  stay.
+
+=== Alternatives Considered
+Merge the original receipt pages instead of rasterising::
+Rejected: veraPDF flags merged foreign pages as not PDF/A-3B conformant (non-embedded fonts).
+
+Keep ADR-032 (XML only)::
+Rejected: the PDF is the document people read; without the pages it does not show its own
+supporting documents.
+
+Embed the receipt additionally as a PDF/A-3 file::
+Rejected: a third copy with no reader that needs it.
+
+== Consequences
+* The PDF now shows every receipt, in the same order as the XML lists them.
+* Document size: receipts now count twice (Base64 in the XML, pages in the PDF). Measured with 19
+  scan-like receipts: at 768 KiB each 32.8 MiB, above the 20 MiB limit of <<adr-014,ADR-014>>.
+  Product decision 2026-10-12: the target size per receipt drops to 440 KiB and the 20 MiB limit
+  stays; the reserve for the invoice body drops from 1 MiB to 512 KiB. Measured at 440 KiB: receipts
+  7.8 MiB, pages in the PDF 7.7 MiB, Base64 in the XML 10.4 MiB, together 18.1 MiB; the budget
+  estimate for the same set is 19.5 MiB. At 440 KiB the estimate with a 1 MiB reserve would be
+  20.05 MiB and refuse the 19th receipt.
+* A receipt that is no longer readable now blocks the export instead of being left out.
+* Readability hint on upload: a dialog warns when a picked scan looks too coarse or blurred to read in
+  print; it never blocks the upload. PO-Freigabe (Datum): 2026-10-12
+* Proposed raster default 120 dpi / JPEG quality 0.75 instead of 150 dpi (smallest configuration that
+  passes the OCR and SSIM gate on the synthetic receipts; A4 scan 86 KiB instead of 120 KiB). This
+  changes the visible receipt pages. It is pending PO approval and is NOT yet applied to print:
+  the annex still renders at 150 dpi (`xpdf.receipt-annex.dpi`). PO 2026-10-12: stays at 150 dpi; 120 dpi is reconsidered after the full stress run.
+
+'''
+_Architecture Decision Record — source:
+`kotlin-shared/src/main/kotlin/de/littletrotter/shared/receipt/` (`OrderedReceipts.kt`,
+`InvoiceDocumentSizeEstimator.kt`),
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/ReceiptAnnexBuilder.kt`,
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/BasePdfStage.kt`,
+`kotlin-xpdf/src/main/kotlin/de/littletrotter/xpdf/impl/mustang/MustangTransactionBuilder.kt`._

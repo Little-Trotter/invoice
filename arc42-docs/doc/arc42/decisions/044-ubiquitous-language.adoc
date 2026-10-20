@@ -1,0 +1,50 @@
+[[adr-044]]
+= ADR-044: Ubiquitous Language: One Code Term per Business Concept
+
+== Status
+Accepted; PO decision: 2026-10-14
+
+== Context
+The same business concept carried several names in code and documentation: the customer as `Recipient`,
+`Customer*` and `Buyer*`; the sender as `SenderProfile` and `Seller*`; the quote as `Quote`, "offer" in
+arc42 and KDoc, and `Quotation` in a module name; the cancellation as `InvoiceCancellationService` and
+`CancellationRejection` next to `InvoiceCancelled` and `CreditNoteIssued`. Two concepts also existed twice in
+`kotlin-invoice` and `kotlin-shared` (number formatting, VAT category parsing). German literals sat in
+quote domain code.
+
+== Decision
+[cols="1,2,2", options="header"]
+|===
+|Business term (German UI) |Code |Rejected
+
+|Kunde
+|`Recipient` is the aggregate. `CustomerNumber` stays as the business key (customer number).
+|`Buyer` as a name for the aggregate
+
+|Verkäufer / Absender
+|`SenderProfile` is the aggregate. `Seller*` is used only for EN 16931 roles (`SellerVatRegistration`) and in replicas and contracts.
+|-
+
+|Angebot
+|`Quote` in code, contract and schema. "offer" appears only in German UI text as "Angebot"; arc42 uses "quote".
+|`Quotation` except in the module name `kotlin-quotation-xml` (renaming costs more than it gains) and the UBL document name
+
+|Storno
+|`cancel`/`Cancelled` for the process, `CreditNote` for the generated document. `Storno*` only in German UI texts.
+|`InvoiceCancellationService` (now `InvoiceCancellationService`), `CancellationRejection` (now `CancellationRejection`)
+|===
+
+* `Buyer*` and `Seller*` stay where they name an EN 16931 role (for example BT-10 buyer reference,
+  `BuyerDataRules`, `FindingTarget.Buyer`) or a persisted column; they never name the customer aggregate.
+* Contracts, NATS subjects, replicas and the schema keep their names (`Customer*`, `Seller*`).
+* One implementation per concept: number counter keys and prefix resolution are members of `NumberRange`,
+  composing and period keys live in `de.littletrotter.shared.numbering.NumberFormatter`; VAT category
+  parsing is `VatCategory.fromCodeOrNull` in `kotlin-shared`.
+* Quote logbook wording is held in `QuoteLogEvent` (German text, stored as written), not in the aggregate.
+* The German glossary (`domain-glossary-terms-de.adoc`) lists the German term next to the code term.
+
+== Consequences
+* New code uses the table; a second name for an existing concept needs a new ADR.
+* Renames are mechanical and without compatibility aliases; persisted values and generated documents are unchanged.
+* The remaining `Offer*` code identifiers (`FeatureOffers`, `QuoteOfferReader`, `OfferDocumentTooLargeException`) and `Storno*` code identifiers are renamed to `Quote*` and `Cancellation*` (PO decision 2026-10-15). Exceptions: the persisted invoice reference columns `offer_reference` and `offer_reference_date` (BT-17 tender reference), the wire name `storno` of `InvoiceDto` (persisted job payload), message keys and CSS classes.
+* Related: <<adr-036,ADR-036>> (quote life cycle), <<adr-043,ADR-043>> (operator tools language).

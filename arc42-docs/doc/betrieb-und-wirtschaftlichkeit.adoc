@@ -1,0 +1,1161 @@
+= Betriebsmodelle und Wirtschaftlichkeit: Cloud vs. On-Premise
+:author: Projektleitung (https://github.com/eifel42[eifel42])
+:revnumber: 0.9.59-SNAPSHOT
+:revdate: {docdate}
+:description: Leitfaden in einfacher Sprache: Eigener Server, Servermiete oder Managed Cloud Services — Kosten über 10 Jahre, Aufwand, Sicherheit und CO₂e im neutralen Vergleich
+:doctype: book
+:toclevels: 3
+:sectanchors:
+:sectlinks:
+:sectnums:
+:sectnumlevels: 4
+:toc: left
+:docinfodir: docinfo
+:stylesdir: css
+:stylesheet: arc42-docs.css
+:linkcss:
+:experimental:
+:docinfo: shared-head
+:icons!:
+:source-highlighter!:
+:imagesdir: images
+:title-logo-image: image:little-trotter-horse.png[Little Trotter Logo: stilisiertes Pferd,300,align="center"]
+:lang: de
+:toc-title: Inhaltsverzeichnis
+:chapter-label: Kapitel
+:section-refsig: Abschnitt
+:chapter-refsig: Kapitel
+:xrefstyle: full
+:figure-caption: Abbildung
+:table-caption: Tabelle
+:example-caption: Beispiel
+:note-caption: Hinweis
+:tip-caption: Tipp
+:warning-caption: Warnung
+:caution-caption: Achtung
+:important-caption: Wichtig
+:project-name: Little Trotter X-Invoice
+:copyright: Copyright (C) 2026 https://github.com/little-trotter/invoice
+
+[abstract]
+.Zusammenfassung
+Dieser Leitfaden vergleicht für Little Trotter X-Invoice den Betrieb auf einem eigenen Server mit dem Betrieb bei einem Cloud-Anbieter. Er stellt Kosten, Aufwand und Risiken verständlich gegenüber und spricht keine Empfehlung für ein Modell aus.
+
+[NOTE]
+====
+.Hinweise zu Transparenz, Testdaten und Modellannahmen
+
+Transparenz und KI-Assistenz::
+Diese Ausarbeitung wurde mit Unterstützung von generativen KI-Systemen erstellt, strukturiert und von der Projektleitung fachlich geprüft.
+
+Synthetische Testdaten und Richtwerte::
+Sämtliche Zahlenbeispiele, Annahmen und Kostenvergleiche stellen modellhafte Näherungen und Orientierungswerte dar (Stand Oktober 2026). Sie ersetzen keine kaufmännische Angebotseinholung bei konkreten IT-Systemhäusern oder Cloud-Providern.
+
+Rechtliche und steuerliche Einordnung::
+Der Leitfaden dient ausschließlich der neutralen Gegenüberstellung von Betriebsmodellen und stellt weder eine Kaufempfehlung noch eine Steuer- oder Rechtsberatung dar.
+
+Betriebssicherheit und Archivierung::
+Little Trotter ist eine Software zur E-Rechnungserstellung und ersetzt kein Dokumenten-Management-System (DMS). Die gesetzeskonforme Archivierung und Aufbewahrung von Belegen obliegt eigenverantwortlich dem betreibenden Unternehmen.
+====
+
+== Auf einen Blick
+
+[.lead]
+Ein eigener Server kostet anfangs mehr, ist bei vergleichbarer Leistung (8 Kerne, 16 GB RAM) über zehn Jahre aber deutlich günstiger als jede Cloud-Variante, auch als reine Servermiete, bei der der Anbieter Hardware-Wartung, Komponententausch, Host-Failover und die Ausfallsicherheit der Speichermedien übernimmt. Personalkosten sind nicht eingerechnet, da sie je nach eigener oder externer Betreuung stark schwanken; den Aufwand in Personentagen zeigt <<betrieb>>.
+
+[.kpi-tiles]
+* [.kpi-value]#ca.{nbsp}2.530–{zwsp}3.540{nbsp}€# Eigener Server (Mini-PC + NAS + Sicherung außer Haus), 10 Jahre
+* [.kpi-value]#ca.{nbsp}5.380–{zwsp}12.100{nbsp}€# Reine Servermiete, vergleichbare Leistung (selten allein genutzt), 10 Jahre
+* [.kpi-value]#ca.{nbsp}8.340–{zwsp}18.550{nbsp}€# Servermiete + gemanagte DB & Storage-Services, 10 Jahre
+* [.kpi-value]#ca.{nbsp}16.810–{zwsp}35.900{nbsp}€# Managed Cloud, 10 Jahre
+
+Grundlage: 1.500 Rechnungen pro Jahr, Belege mit der reduzierten Durchschnittsgröße von 2,5 MB je Rechnung, ohne Personalkosten (Begründung im <<anhang,Anhang>>). Laut Statistischem Bundesamt nutzen 2025 54 % der Unternehmen ab 10 Beschäftigten kostenpflichtige Cloud-Dienste, kleine Unternehmen (10–49 Beschäftigte) zu 51 % <<q1,[Q1]>>; Rückschlüsse auf die Kosten im Einzelfall erlaubt das nicht. Preise der Cloud-Anbieter können sich ändern (siehe <<realitaetscheck,Preisentwicklung>>).
+
+[.decision,cols="2,2,3",options="header"]
+.Modell je Ausgangslage
+|===
+|Ihre Lage |Eher passend |Warum
+
+|Ein Standort, geringes Rechnungsvolumen, gelegentliche Betreuung
+|Eigener Server
+|Niedrige Gesamtkosten, Daten im Haus
+
+|Mehrere Standorte, eigene IT-Kenntnis
+|Servermiete mit DB- & Storage-Services
+|Feste Monatskosten, Medien-Ausfallsicherheit, Snapshots und Hardware-Wartung beim Anbieter, volle Anwendungskontrolle
+
+|Wenig eigene Plattformpflege gewünscht
+|Managed Cloud
+|Datenbank, Updates und Hardware beim Cloud-Anbieter; Zugänge, Kosten und Rechte bleiben bei Ihnen
+
+|Stark schwankende Last, schnelles Wachstum
+|Managed Cloud oder Servermiete
+|Kapazität kurzfristig anpassbar
+
+|Hohe Anforderungen an die Datenhoheit
+|Eigener Server oder EU-Servermiete
+|Eigene Wahl des Datenstandorts
+|===
+
+== Drei Betriebsmodelle
+
+[.lead]
+Die Wahl ähnelt der zwischen Eigenheim und Mietwohnung: Keine Variante ist grundsätzlich besser, entscheidend sind Nutzungsdauer, Eigenleistung und Budgetplanung. Die Modelle unterscheiden sich vor allem darin, wem die Hardware gehört und wer den Betrieb verantwortet.
+
+.Merkmale der drei Betriebsmodelle
+[cols="1,2,2,2",options="header"]
+|===
+|Merkmal |On-Premise |Servermiete |Managed Cloud
+
+|Bild
+|Eigenheim: hohe Anfangskosten, Instandhaltung und Absicherung bei Ihnen
+|Unmöblierte Mietwohnung: Gebäude und Technik stellt die Vermietung, die Einrichtung übernehmen Sie
+|Möbliertes Apartment mit Rundum-Service: komplett ausgestattet, Abrechnung nach Nutzung
+
+|Hardware gehört
+|Ihnen
+|dem Cloud-Anbieter
+|dem Cloud-Anbieter
+
+|Hardware-Wartung & Ausfallschutz
+|Sie (Ersatzbeschaffung, NAS-Spiegelung)
+|Cloud-Anbieter (Wartung, Komponententausch, Host-Failover, Medien-Resilienz)
+|Cloud-Anbieter (vollständig verwaltet und redundant)
+
+|Betriebssystem, Updates, Datenbank
+|Sie
+|Sie
+|Cloud-Anbieter (je nach Dienst)
+
+|Rechenzentrum, Strom
+|Sie (im Büro)
+|Cloud-Anbieter
+|Cloud-Anbieter
+
+|Kostenform
+|Hohe Einmalkosten, danach gering
+|Feste Monatsmiete
+|Laufende Gebühr nach Verbrauch
+
+|Verantwortung
+|Vollständig bei Ihnen
+|Software bei Ihnen
+|Plattform beim Cloud-Anbieter
+|===
+
+* *Eigener Server:* Mini-PC, optional mit Netzwerkspeicher (NAS), im Betrieb; nur im Firmennetz erreichbar. Nach 5–6 Jahren wird der Rechner neu gekauft. Die Architektur unterstützt sowohl unterbrechungsfreien 24/7-Dauerbetrieb als auch eine automatisierte Nachtabschaltung (siehe <<_betriebszeit_tradeoff,Betriebszeit-Modelle>>).
+* *Reine Servermiete:* nur die Recheninstanz mit vergleichbarer Leistung (8 Kerne, 16 GB RAM), ca. 40–90 € pro Monat bei europäischen Anbietern. Sie wird selten allein gewählt, weil Datenbankpflege, Sicherung und Ausfallrisiko bei Ihnen bleiben. Üblich ist der Verbund mit gemanagter Datenbank und Storage-Services des Anbieters, ca. 62–138 € pro Monat (Schätzung, siehe <<anhang,Anhang>>). Große internationale Anbieter (Hyperscaler) verlangen für eine vergleichbare Instanz in Frankfurt je nach Anbieter ca. 100–130 € pro Monat mit dreijähriger Laufzeitbindung; ohne Bindung ca. 225–305 € rund um die Uhr oder ca. 80–105 € bei Betrieb nur zu Bürozeiten.
+* *Managed Cloud:* Jeder Dienst wird einzeln abgerechnet; die Gesamtkosten sind dadurch schwerer vorherzusagen.
+* *Verbreitete Mischformen:* Gemietete Server kombiniert mit gemanagter Datenbank und Storage-Services (Snapshots, S3-kompatibler Objektspeicher) oder ein eigener Server mit Kaltarchiv beim Cloud-Anbieter (Hybrid). Sie verbinden feste Kosten für Rechenleistung mit der Ausfallsicherheit und einfachen Snapshot-Wiederherstellung gemanagter Dienste.
+
+.Begriffe
+[NOTE]
+====
+* *On-Premise:* Der Server steht bei Ihnen im Betrieb.
+* *Cloud:* Der Server steht beim Cloud-Anbieter. Sie nutzen ihn über das Internet.
+* *IaaS:* Sie mieten Technik, etwa einen Server. Betriebssystem und Programme verwalten Sie selbst.
+* *PaaS / SaaS:* Der Cloud-Anbieter liefert zusätzlich Plattform oder fertige Programme, etwa eine betriebene Datenbank.
+* *Bare Metal:* Sie mieten einen ganzen physischen Rechner.
+* *CapEx / OpEx:* Einmalige Anschaffung gegenüber laufenden Kosten.
+* *TCO:* Alle Kosten zusammen über einen festen Zeitraum.
+* *Egress:* Gebühr, wenn Daten das Rechenzentrum verlassen.
+* *Lock-in:* Ein Wechsel des Cloud-Anbieters ist teuer oder schwierig.
+* *SLA:* Vertraglich zugesagte Verfügbarkeit und Reaktionszeit.
+* *FinOps:* Cloud-Kosten laufend beobachten und steuern.
+* *LTS:* Software-Version mit mehrjährigen Sicherheitsupdates.
+* *Snapshot:* Momentaufnahme eines Datenträgers für die Wiederherstellung.
+
+Weitere Begriffe erläutert das xref:glossar.adoc[Fachglossar].
+====
+
+== Kosten: Jahr 1 und 10 Jahre
+
+[.lead]
+Der eigene Server hat hohe Anfangskosten, aber die niedrigsten Gesamtkosten. Die Cloud verursacht je nach Modell anfangs ähnliche oder höhere Kosten, die dauerhaft anfallen.
+
+NOTE: Näherungen für 1.500 Rechnungen pro Jahr, Belege mit der reduzierten Durchschnittsgröße von 2,5 MB je Rechnung, 2,5 % Preissteigerung pro Jahr, 10 Jahre. Lizenzkosten fallen nicht an (reiner Open-Source-Stack). *Nicht enthalten:* Personalaufwand für Betrieb und für erzwungene Migrationen bei Versionsende von Cloud-Diensten (in Personentagen: <<betrieb>>), Ausfallkosten, Finanzierung, Steuern. Rechenweg: <<anhang,Anhang>>.
+
+[.kpi,cols="3,>2,>2,2",options="header"]
+.Technikkosten ohne Personal, ca.
+|===
+|Modell |Jahr 1 (inkl. Anschaffung) |10 Jahre kumuliert |Kostenform
+
+|*Mini-PC (ohne Sicherung außer Haus, unvollständig)*
+|650–860 €
+|1.850–2.460 €
+|Anschaffung, Strom
+
+|*Mini-PC + NAS + Kaltarchiv (Sicherung außer Haus)*
+|980–1.310 €
+|2.710–3.820 €
+|Anschaffung, Strom, Archivgebühr
+
+|*Hybrid: Mini-PC + Kaltarchiv*
+|665–890 €
+|2.050–2.850 €
+|Anschaffung, Archivgebühr
+
+|*Reine Servermiete (nur Instanz)*
+|480–1.080 €
+|5.380–12.100 €
+|Monatsmiete (selten allein genutzt)
+
+|*Servermiete beim Hyperscaler (vergleichbare Instanz, 3 Jahre Laufzeitbindung, ohne Zusatzdienste)*
+|1.200–1.560 €
+|13.440–17.480 €
+|Monatspreis mit Laufzeitbindung
+
+|*Servermiete + Storage-Services*
+|600–1.360 €
+|6.720–15.190 €
+|Miete, Snapshots/Storage
+
+|*Servermiete + gemanagte DB & Storage*
+|740–1.660 €
+|8.340–18.550 €
+|Miete, DB-Dienst, Snapshots (übliche Kombination)
+
+|*Managed Cloud (mehrere Dienste)*
+|1.500–3.200 €
+|16.810–35.900 €
+|Gebühr je Dienst
+|===
+
+Einordnung der Werte:
+
+* *Eigener Server:* Der größte Teil fällt im ersten Jahr an (CapEx). Nach 5–6 Jahren wird der Mini-PC neu gekauft (angesetzt: 20–30 % teurer), die NAS-Festplatten werden getauscht. Strom und Datensicherung tragen Sie selbst. Das Referenzsystem kalkuliert mit einem leistungsfähigen 8-Kern-System (ca. 18 W im 24/7-Linux-Mischbetrieb); bei sparsamen Einstiegs-Mini-PCs (8–12 W) fallen die Stromkosten nochmals geringer aus. Ohne Sicherung außer Haus ist der eigene Server nicht vollständig abgesichert; die Zeile „Mini-PC“ dient nur dem Vergleich.
+* *Cloud:* Die Kosten im ersten Jahr sind je nach Modell ähnlich oder höher, fallen aber jedes Jahr erneut an (OpEx). Am Ende bleibt kein Gerät. Dafür übernimmt der Cloud-Anbieter die Wartung und den Austausch defekter Hardware, bietet automatisches Host-Failover und stellt ausfallsichere Medien (wie redundanten Netzwerk-Block-Storage) bereit.
+* *Reine Servermiete vs. Managed Services:* Reine Servermiete (nur Compute-Instanz) erscheint auf den ersten Blick günstig, wird in der Praxis aber selten allein gewählt: Ohne gemanagte Dienste verbleiben Datenbankadministration, Datensicherung und Ausfallrisiko komplett bei Ihnen. Deshalb wird sie meist mit Datenbank- und Storage-Services des Anbieters kombiniert.
+* *Break-even* (ohne Inflation, Mini-PC + NAS + Kaltarchiv gegenüber der Miete bei vergleichbarer Leistung): gegenüber Managed Cloud nach ca. 3–10 Monaten, gegenüber Hyperscaler-Instanz mit Laufzeitbindung nach ca. 7–13 Monaten, gegenüber Servermiete + gemanagter DB & Storage nach ca. 7–23 Monaten, gegenüber Servermiete + Storage nach ca. 8–30 Monaten, gegenüber reiner Servermiete nach ca. 11–39 Monaten. Herleitung im <<anhang,Anhang>>.
+
+*Personalkosten sind nicht enthalten,* weil sich Tagessätze je Betrieb stark unterscheiden (eigene Mitarbeitende, Zeit der Geschäftsleitung, externes IT-Systemhaus) und ein Mischwert Genauigkeit vortäuschen würde. Sie lassen sich selbst ermitteln: _Personentage pro Jahr × eigener Tagessatz_, mit den Personentagen aus <<betrieb>>. Ohne Personalkosten erscheinen die Cloud-Modelle tendenziell günstiger, als sie mit Personal wären.
+
+=== Kosten nach Volumen
+
+Wachsend bzw. rückläufig steht für +10 % bzw. −10 % Rechnungen pro Jahr, jeweils Belege mit der reduzierten Durchschnittsgröße von 2,5 MB je Rechnung. Die Werte sind grobe Näherungen (Herleitung im <<anhang,Anhang>>).
+
+.Kosten nach Volumen, Jahr 1
+[.kpi,cols="2,>1,>1,>1",options="header"]
+|===
+|Jahr 1, ca. |Gleichbleibend |Wachsend (+10 %) |Rückläufig (−10 %)
+
+|Mini-PC + NAS + Kaltarchiv
+|980–1.310 €
+|980–1.310 €
+|980–1.310 €
+
+|Reine Servermiete (nur Instanz)
+|480–1.080 €
+|480–1.080 €
+|480–1.080 €
+
+|Servermiete + Storage-Services
+|600–1.360 €
+|610–1.390 €
+|590–1.330 €
+
+|Servermiete + gemanagte DB & Storage
+|740–1.660 €
+|750–1.690 €
+|730–1.630 €
+
+|Managed Cloud
+|1.500–3.200 €
+|1.520–3.250 €
+|1.480–3.160 €
+|===
+
+.Kosten nach Volumen, 10 Jahre kumuliert
+[.kpi,cols="2,>1,>1,>1",options="header"]
+|===
+|10 Jahre, ca. |Gleichbleibend |Wachsend |Rückläufig
+
+|Mini-PC + NAS + Kaltarchiv
+|2.710–3.820 €
+|2.860–3.970 €
+|2.610–3.720 €
+
+|Reine Servermiete (nur Instanz)
+|5.380–12.100 €
+|5.380–12.100 €
+|5.380–12.100 €
+
+|Servermiete + Storage-Services
+|6.720–15.190 €
+|7.520–17.020 €
+|6.250–14.110 €
+
+|Servermiete + gemanagte DB & Storage
+|8.340–18.550 €
+|9.130–20.380 €
+|7.860–17.470 €
+
+|Managed Cloud
+|16.810–35.900 €
+|18.390–39.070 €
+|15.860–34.010 €
+|===
+
+Im ersten Jahr wirkt sich das Belegvolumen kaum auf die Gesamtkosten aus: Beim eigenen Server dominieren die einmaligen Anschaffungskosten (CapEx), bei den Cloud-Modellen die festen Monats- bzw. Plattformgebühren. Erst über mehrere Jahre schlägt das kumulierte Daten- und Snapshotvolumen in den Cloud-Modellen spürbar durch.
+
+Beim eigenen Server ändern sich die Kosten kaum: Auch wachsend bleibt der Bestand bei ca. 43 GB (ca. 85–130 GB inkl. Sicherung), die üblichen Festplatten reichen. In der Cloud verursacht jede weitere Rechnung dauerhaft Speicher- und Sicherungsgebühren; sinkt das Volumen, sinken auch die Kosten.
+
+[[realitaetscheck]]
+== Preisentwicklung
+
+[.lead]
+Die Modellrechnung unterstellt 2,5 % Preissteigerung pro Jahr. In der Praxis erfolgten Preisänderungen häufig sprunghaft.
+
+Ausgewählte Beispiele:
+
+* *Hetzner, 2026:* zum 1. April höhere Preise auch für die Bestandskundschaft <<q6,[Q6]>>; danach erneute Erhöhung für neu bestellte Cloud- und dedizierte Server, bei einzelnen Modellen bis ca. 200 %, begründet mit gestiegenen Hardwarekosten <<q10,[Q10]>>.
+* *Microsoft Azure, 2023:* Preise in Euro rund 11 % höher (Angleichung an die US-Dollar-Preise), ab 1. April 2023 <<q8,[Q8]>>.
+* *Google Cloud, 2022:* ab 1. Oktober 2022 neue Replikationsgebühren bei Cloud Storage, Lesezugriffe aus Multi-Region-Buckets nicht mehr kostenlos, Standard-Snapshots von 0,026 auf 0,05 (regional) bzw. 0,065 USD je GB und Monat (multiregional) <<q9,[Q9]>> <<q7,[Q7]>>.
+* *AWS, Februar 2024:* Einführung einer separaten Gebühr für alle öffentlichen IPv4-Adressen (0,005 USD je Stunde bzw. ca. 3,60 USD/Monat pro IP), auch für laufende EC2-Instanzen, die zuvor kostenfrei waren <<q13,[Q13]>>.
+* *Verwaltete Plattformdienste (Kubernetes, Datenbanken):* Bei Managed Services führten Cloud-Anbieter in den letzten Jahren zusätzliche Basisfixkosten ein (z. B. Cluster-Management-Gebühren für Control-Planes bei AWS EKS, Google GKE oder Azure AKS). Zudem werden ältere Datenbank- und Kubernetes-Versionen nach Ablauf regulärer Supportfristen mit drastischen "Extended Support"-Aufschlägen belegt (oft Verdoppelung der Stundenpreise, z. B. bei AWS RDS und AWS EKS), um Betriebe zum Upgrade zu bewegen.
+
+Bei 5 % statt 2,5 % pro Jahr liegen die 10-Jahres-Summen der Cloud-Modelle um ca. 12 % höher. Gestiegene Hardwarekosten treffen auch den eigenen Server: Die Modellrechnung setzt den Ersatz in Jahr 6 deshalb 20–30 % teurer an <<q10,[Q10]>>. Preise können auch sinken, etwa für Speicher; die Beispiele zeigen das Risiko sprunghafter Änderungen, nicht eine feste Richtung.
+
+[[betrieb]]
+== Betrieb und Wartung
+
+[.lead]
+Dieser Abschnitt beschreibt den Personalaufwand, der nicht in den Kostensummen enthalten ist.
+
+=== Eigener Server (On-Premise)
+
+* *Erstes Halbjahr:* monatliche Kontrolle von Systemzustand, Sicherung und Updates.
+* *Ab Monat 7:* Zwei geplante Wartungsfenster pro Jahr für manuelle Updates und Kontrollen (Neustart, Speicherplatz, Wiederherstellungstest, Hardware-Zustand).
+* *Größere Umstellungen:* nur beim Ablauf einer LTS-Version (typisch alle 3–5 Jahre) oder beim Hardware-Ersatz nach ca. 5 Jahren.
+* *Sicherheit:* Der Rechner steht im Firmennetz und ist nicht direkt aus dem Internet erreichbar. Erforderlich bleiben Updates und eine Sicherung außer Haus <<q4,[Q4]>>.
+
+=== Cloud-Betrieb
+
+* *Managed Cloud mindestens wöchentlich, Servermiete monatlich (Festpreis):* Kostenkontrolle (FinOps: Spitzen, ungenutzte Ressourcen, vergessene Snapshots) und technische Prüfung (Status, Zertifikate, Sicherungen, Versionsabläufe).
+* *Geteilte Verantwortung:* Der Cloud-Anbieter schützt Rechenzentrum und Grundtechnik. Sie schützen Zugänge, Einstellungen und Daten. Dazu gehören Prüfung der Zugriffsrechte (IAM), Endgeräte, nicht genehmigte Dienste (Shadow IT) und Schnittstellen (API).
+* *Takt des Cloud-Anbieters und Zwangsmigrationen:* Wartungsfenster und Versionszyklen bestimmt der Anbieter. Bei verwalteten Plattformdiensten (wie Managed Kubernetes oder gemanagten PostgreSQL-Datenbanken) führen enge Supportfristen (meist nur 12–14 Monate je Version) zu providergetriebenen Zwangsmigrationen ("Forced Upgrades"). Werden veraltete Versionen nicht rechtzeitig migriert, drohen automatische Updates mit Ausfallrisiko oder drastische Extended-Support-Aufschläge.
+* *Servermiete:* Der Cloud-Anbieter übernimmt die Hardware-Wartung, den Austausch defekter Komponenten (RAM, SSDs, Boards), automatisiertes Host-Failover und die Ausfallsicherheit der Speichermedien (Netzwerk-Storage). Betriebssystem, Updates und Anwendungs-Setup verbleiben bei Ihnen. Eine reine Servermiete wird selten allein gewählt: Die eigenständige Pflege und Absicherung der Datenbank ist aufwendig und fehlerträchtig. Üblich ist deshalb die Kombination mit Datenbank- und Storage-Services des Anbieters (automatisierte Snapshots, Ausfallsicherheit).
+
+[[aufwand]]
+=== Aufwandsvergleich
+
+Aufwand in Personentagen (PT, 1 PT = 8 Stunden). Die Werte basieren auf praktischen Erfahrungswerten aus dem Realbetrieb.
+
+.Personalaufwand pro Jahr
+[cols="3,>2,>2,>2",options="header"]
+|===
+|Personentage pro Jahr, ca. |Eigener Server |Servermiete |Managed Cloud
+
+|Kontrollen und Updates
+|1–1,5 (nach Einlaufphase)
+|2–3
+|1–2
+
+|Kostenkontrolle (FinOps)
+|entfällt
+|0,25–0,5 (Festpreis)
+|1,5–3
+
+|IT-Sicherheit
+|ca. 0,5
+|2–4
+|2–3
+
+|Größere Umstellungen, auf ein Jahr umgelegt¹
+|0,5–1
+|0,5–1
+|0,5–2,5
+
+|*Summe ca.*
+|*2–3*
+|*5–8,5*
+|*5–10*
+
+|Einmalig zum Start: Betriebskonzept & Erstinstallation
+|ca. 3–5 PT; mit Referenzhardware und Betriebsskripten des Projekts ca. 0,5–1,5 PT³
+|ca. 14 PT, abhängig vom Cloud-Anbieter
+|ca. 14 PT, abhängig vom Cloud-Anbieter
+
+|Zusätzlich im ersten Halbjahr (Einlaufphase)²
+|0,75–1,5 einmalig
+|ab 2,5–3 einmalig
+|ab 2,5–3 einmalig
+|===
+
+¹ Größere Umstellungen fallen nur alle paar Jahre an: Wechsel auf eine neue LTS-Version, Hardware-Ersatz nach ca. 5 Jahren, bei Cloud-Anbietern auch vorgegebene Versions- oder Tarifwechsel. Der Aufwand wird auf die Jahre verteilt, damit die Jahressumme vergleichbar bleibt. Beispiel: 3–5 PT alle 5 Jahre ergeben ca. 0,5–1 PT pro Jahr.
+
+² Eigener Server: Die niedrigen Werte (2–3 PT/Jahr, 0,75–1,5 PT Einlaufphase, 0,5–1,5 PT Einrichtung) basieren auf den realen Erfahrungswerten der Projektleitung. Sie gelten bei Verwendung der Referenzhardware oder standardisierter Betriebsskripte. Servermiete und Managed Cloud starten bei 2,5–3 PT; der Wert hängt vom Cloud-Anbieter ab.
+
+³ Einrichtung des eigenen Servers: Dazu gehören Fernzugang (VPN), Firewall, Notstromversorgung (USV) und eine Sicherung außer Haus. Die Spanne hängt davon ab, ob die Referenzhardware und die Betriebsskripte des Projekts verwendet werden oder eigene Hardware individuell eingerichtet wird.
+
+*Betriebskonzept und Erstinstallation in der Cloud:* Vor dem Start braucht es ein Konzept für Zugänge und Rechte (IAM), Netzwerk und Verschlüsselung, Datensicherung und Wiederherstellung, Kostenalarme sowie die Zuordnung der Anwendungsdienste zu den Diensten des Cloud-Anbieters. Erste Schätzung: ca. 14 Personentage, stark abhängig vom Cloud-Anbieter. Beim eigenen Server sind es ca. 3–5 Personentage. Wer die vom Projekt erprobte Referenzhardware und die fertigen Betriebsskripte übernimmt, kommt mit ca. 0,5–1,5 Personentagen aus.
+
+*Ausblick lokaler Betrieb (bis Q4/2027):* Die Verwaltungswerkzeuge `lt` und `lhorse` sollen den lokalen Betrieb schrittweise vereinfachen, indem Routineaufgaben wie Updates, Datensicherung und Funktionsprüfung standardisiert und automatisiert werden. Das senkt den Wartungsaufwand und verbessert die Betriebsqualität; bei Servermiete wirken die Werkzeuge gleichermaßen, da sie denselben Software-Stack nutzt. Voraussetzung ist, dass die Werkzeuge von der Community weiterentwickelt und gepflegt werden. Die Werte in der Tabelle setzen diese Entlastung noch nicht voraus.
+
+=== Auswirkung auf Gesamtkosten
+
+Die laufenden Personalkosten lassen sich über eine einfache Grundformel kalkulieren:
+
+[.text-center]
+*_Personalkosten pro Jahr = Personentage (PT) pro Jahr × Tagessatz_*
+
+Für eine transparente kaufmännische Gesamtbetrachtung sind dabei vier praxisnahe Kernhinweise maßgeblich:
+
+. **Personalkosten (Individuelle Kalkulation)** +
+Personalkosten sind in den Vergleichstabellen bewusst nicht beziffert: Tagessätze variieren je nach Region, Ausbildungsstand, Spezialisierung und Betreuungsstruktur (interne Betreuung vs. externes Systemhaus) erheblich. Betriebe ermitteln ihren standortspezifischen Betrag direkt durch Multiplikation des eigenen Tagessatzes mit den in obiger Tabelle ausgewiesenen Personentagen (PT).
+
+. **Vollständiger Wegfall von Softwarelizenzen (Reiner Open-Source-Stack)** +
+Little Trotter setzt durchgängig auf lizenzkostenfreie Open-Source-Komponenten (Linux-Betriebssystem, PostgreSQL-Datenbank, RustFS-Objektspeicher, Valkey-Cache).
+* *Keine Lizenz- oder Abo-Gebühren:* Weder beim lokalen PC-Betrieb noch in gemieteten Cloud-Umgebungen fallen Kosten für Windows-Server-Lizenzen, Client-Zugriffslizenzen (CALs), Core-Aufschläge für relationale Datenbanksysteme oder wiederkehrende Software-Abogebühren an.
+* *Reine Infrastruktur- und Servicefinanzierung:* Sämtliche Investitionen und Monatsbudgets fließen ausschließlich in die physische Hardware bzw. die gemietete Infrastruktur sowie die personelle Betreuung.
+
+. **Hardware-Administration und Managed Services versus FinOps-Aufwand** +
+Ein wesentlicher Vorzug gemieteter Umgebungen liegt in der Auslagerung technischer Basispflichten:
+* *Hardware-Administration voll eingepreist:* Sowohl bei der reinen Servermiete als auch in der Managed Cloud ist die gesamte Administration der physischen Hardware (Austausch defekter Festplatten, SSDs und RAM-Riegel, Kühlung, redundante Stromversorgung und Host-Failover) **vollständig in den monatlichen Mietpreisen enthalten**.
+* *Gemanagte Plattformdienste:* In der Managed Cloud übernimmt der Anbieter darüber hinaus die Pflege der Services selbst (automatisiertes Patching, gemanagte Datenbank-Wartung, automatisierte Backups und Point-in-Time-Snapshots).
+* *Risiken bei Managed Services (Gebühren & Zwangsmigrationen):* Bei verwalteten Plattformdiensten (wie gemanagten Kubernetes-Clustern oder Cloud-Datenbanken) besteht das Risiko unvorhergesehen steigender Grund- und Zusatzgebühren (etwa neu eingeführte Cluster-Management-Pauschalen oder Mindestinstanzgrößen). Zudem diktiert der Cloud-Anbieter die Versionszyklen: Erreichen Kubernetes- oder Datenbank-Versionen ihr Supportende (oft bereits nach 12–14 Monaten), erzwingt der Provider **Zwangsmigrationen** (Forced Upgrades) auf neuere Major-Versionen – verbunden mit ungeplantem Aufwand für Regressionstests oder drastischen "Extended Support"-Aufschlägen.
+* *Realer Aufwand für FinOps und Service-Anpassungen:* Praxiserfahrungen zeigen daher, dass die Cloud den Personalaufwand nicht eliminiert: Durch kontinuierliches **FinOps** (wöchentliche Kostenkontrolle, Aufspüren ungenutzter Instanzen oder verwaister Snapshots zur Vermeidung von Abrechnungsspitzen) sowie die laufende Anpassung von Schnittstellen, Zertifikaten und IAM-Zugriffsrechten entsteht in der Praxis ein administrativer Zeitaufwand, der den der lokalen PC-Variante übersteigen kann. Managed Services senken dagegen den Aufwand für Updates und Datenbankpflege.
+
+. **Stärken der Cloud: Infrastrukturelle Ausfallsicherheit und elastische Skalierbarkeit** +
+Die Cloud besitzt spezifische architektonische Vorzüge, die lokal kaum nachzubilden sind:
+* *Bauliche Ausfallsicherheit:* Professionelle Rechenzentren verfügen über mehrfache redundante Internetanbindungen (Carrier-Redundanz), Notstromaggregate und Brandmeldeanlagen, die im lokalen Büroumfeld nicht wirtschaftlich realisierbar sind.
+* *Elastische Skalierbarkeit bei variablen Lastspitzen:* Verlangt das Geschäftsmodell eines Unternehmens dynamische Skalierung – etwa bedingt durch extreme Saisonspitzen (Vorweihnachtsgeschäft, Black-Friday-Aktionen oder tourismusbedingte Buchungspeaks) –, lassen sich Rechenressourcen in der Cloud bedarfsgerecht innerhalb von Minuten hoch- und nach der Lastspitze wieder herunterfahren.
+
+[NOTE]
+====
+.Kaufmännische Abwägung: Kein pauschales Richtig oder Falsch
+In der Gesamtbewertung existiert kein universelles Richtig oder Falsch, sondern eine bewusste Prioritätensetzung:
+
+* **Eigener Server (Mini-PC):** Bietet maximale Datenautonomie im Haus, transparente Einmalkosten und planbare, minimale Monatsabflüsse. Dies ist eine ideale, kosteneffiziente Lösung für Betriebe mit kontinuierlichem, gleichmäßigem Belegaufkommen und grundlegendem internem technischem Verständnis.
+* **Servermiete / Managed Cloud:** Bietet bequeme Standortunabhängigkeit ohne physischen Hardwarekontakt, professionelle Rechenzentrums-Ausfallsicherheit und sofortige Elastizität bei saisonalen Spitzen – erkauft dies jedoch durch kontinuierliche Monatskosten und die Notwendigkeit laufender Kosten- und Rechtekontrolle (FinOps).
+
+*Geltung der Modellrechnung:* Diese Modellrechnung dient zur Verdeutlichung der Vor- und Nachteile der verschiedenen Betriebsverfahren. Sie ersetzt keine exakte Planung und Auswahl anhand der jeweils gültigen Konditionen der entsprechenden Cloud-Provider und IT-Systemhäuser.
+====
+
+*Gerätetausch und Migration:* Der Tausch eines Mini-PCs dauert Minuten; der Aufwand liegt in Neuinstallation und Datenrücksicherung und fällt bei einem Wechsel des Cloud-Anbieters genauso an (siehe <<migration,„Gerätetausch und Migrationsaufwand“>>).
+
+=== Erfahrungswerte und schrittweise Einführung
+
+Die im Modell für den Vor-Ort-Betrieb (On-Premise) ausgewiesenen geringen Personalaufwände (2–3 PT pro Jahr bzw. 0,75–1,5 PT in der Einführungsphase) beruhen auf den praktischen Erfahrungswerten der Projektleitung. Ziel dieses praxisnahen Vorgehens ist es, administrativen Aufwand im Alltag von vornherein gering zu halten:
+
+* *Erfahrung der Projektleitung und der Entwicklungs-Community:*
+** Bereits in der Einführung sowie im laufenden Betrieb senken praxiserprobte Abläufe und vorgefertigte Betriebsskripte den Betreuungsaufwand spürbar.
+** Anwendende und betreibende Unternehmen profitieren direkt von den praktischen Erkenntnissen der Projektleitung und dem laufenden Austausch innerhalb der Community, wodurch typische Anfangsfehler vermieden werden.
+* *Vorteil bekannter, bewährter Standard-Hardware (Mini-PC):*
+** Der Einsatz gut evaluierter Standardkomponenten bietet verlässliche Planbarkeit: Energiebedarf, Wärmeentwicklung und Treiberschnittstellen sind im Vorfeld bekannt. Als Referenz dient ein leistungsfähiges 8-Kern-Kompaktsystem (ca. 18 W im 24/7-Linux-Serverbetrieb), das auch rechenintensive Validierungs- und Belegprozesse mühelos bewältigt. Für Betriebe mit geringerem Durchsatz steht mit sparsamen 4- bis 6-Kern-Mini-PCs (8–12 W ab ca. 200–350 €) eine noch kostengünstigere Einstiegsoption bereit.
+** Es wird keine kostspielige Spezialhardware benötigt; Installations- und Konfigurationsaufwände reduzieren sich auf das Wesentliche. Ein Hardwaretausch ist bei Bedarf steckbar und ohne Spezialwerkzeuge eigenständig durchführbar.
+* *Wartungsrhythmus im laufenden Betrieb:*
+** Im Regelbetrieb genügen typischerweise **zwei größere Wartungsfenster pro Jahr**, die sich planbar außerhalb der Bürozeiten durchführen lassen (beispielsweise für grundlegende System- und Plattformupgrades).
+** Kleinere Aktualisierungen und Fehlerbehebungen erfolgen zeitnah und bedarfsorientiert, sobald sicherheitskritische Neuerungen der Softwarekomponenten vorliegen.
+* *Zweistufige Einführung:*
+** *Phase 1 (Operativer Einstieg):* Schlanke, gut verständliche Skripte für Datensicherung, Container-Verwaltung und Funktionsüberprüfungen gewährleisten einen stabilen Start mit minimaler Komplexität.
+** *Phase 2 (Verwaltungswerkzeuge):* `lt` und `lhorse` ergänzen die Skripte, siehe Ausblick im <<aufwand,Aufwandsvergleich>>.
+* *Einordnung der Cloud-Skalierbarkeit (Saisonlast vs. kontinuierlicher Betrieb):*
+** Die dynamische Skalierbarkeit von Cloud-Umgebungen – also das bedarfsgerechte Hoch- und Herunterfahren zusätzlicher Serverinstanzen bei Lastspitzen – ist ein geschätzter Vorteil für Geschäftsmodelle mit ausgeprägter Saisonlast (etwa im E-Commerce zum Jahresende oder im Buchungswesen).
+** Bei der Zielgruppe von Little Trotter (Handwerksbetriebe, freiberuflich Tätige und Dienstleistungsunternehmen) spielt dieser Aspekt in der Praxis kaum eine Rolle: Das Rechnungsvolumen ist über das Jahr weitgehend stabil oder folgt gut planbaren Projektzyklen. Eine solide lokale Hardware deckt sowohl das tägliche Grundvolumen als auch gelegentliche Monatsabschlüsse ohne jede Notwendigkeit für dynamische Cloud-Ressourcen vollständig ab.
+
+[[_sicherheit_datenschutz_abhängigkeit]]
+== Sicherheit, Datenschutz und Abhängigkeit
+
+[.lead]
+Beide Betriebswege verbinden systemspezifische Stärken mit Eigenverantwortung. Das tatsächliche Gewicht der Faktoren hängt von der Infrastruktur und den personellen Kompetenzen im Betrieb ab.
+
+.Sicherheit, Datenschutz und Abhängigkeit im Vergleich
+[cols="1,2,2",options="header"]
+|===
+|Thema |Eigener Server |Cloud
+
+|Datenschutz (DSGVO)
+|Belege und Sicherungen bleiben physisch im Haus; kein Auftragsverarbeitungsvertrag (AVV) für den Kernbetrieb erforderlich. Für eine Sicherung außer Haus bei einem Cloud-Anbieter oder für Fernwartung durch ein IT-Systemhaus ist ein AVV nötig.
+|Auftragsverarbeitungsvertrag zwingend erforderlich. Bei Cloud-Anbietern mit Sitz außerhalb der EU sind Zugriffsrisiken (z. B. CLOUD Act) sorgfältig zu prüfen, auch bei ausschließlicher Nutzung von EU-Regionen.
+
+|Lock-in & Migrationsaufwand
+|Sehr gering. Vollständige Datenhoheit, Software und Sicherungsdaten verbleiben im Betrieb. Bei Hardwaretausch oder Ersatzgerät beschränkt sich der Aufwand auf die Neuinstallation und das Rückspielen der Backups.
+|*Servermiete:* Dank standardisierter OCI-Container (Docker Compose) ist der Software-Lock-in gering und die Lösung 1:1 mit On-Premise austauschbar. Jedoch: Bei jedem Provider- oder Servicewechsel fällt derselbe Neuinstallations- und Migrationsaufwand wie On-Premise an. +
+*Managed Cloud:* Erheblicher Lock-in durch proprietäre Plattformdienste (spezifische IAM-, Speicher- und Datenbankdienste); ein Wechsel erfordert Neuarchitektur, Exportaufwände und Umkonfiguration. Zudem besteht das Risiko steigender Servicegebühren sowie providergetriebener Zwangsmigrationen bei auslaufenden Versionen (z. B. EOL-Zyklen bei Kubernetes oder gemanagten Datenbanken).
+
+|Ausfallsicherheit & Hardwaretausch
+|Einzelne Geräte können ausfallen. Bei Verwendung marktüblicher modularer Mini-PCs im Kompaktformat ist der physische Hardwaretausch übersichtlich und für technisch versierte Personen eigenständig machbar. NAS-Spiegelung, ein vorkonfiguriertes Ersatzgerät und regelmäßige Wiederherstellungstests senken das Ausfallrisiko. Brand und Diebstahl erfordern eine verschlüsselte Sicherungskopie außer Haus <<q4,[Q4]>>.
+|Das Hosting-Unternehmen übernimmt Hardware-Wartung, Austausch defekter Serverkomponenten und Host-Failover. Speichermedien (Netzwerk-Storage) sind repliziert. Gemanagte Datenbank- und Storage-Services sichern Daten zusätzlich über automatisierte Snapshots ab. Bei Providerstörungen, Kündigung oder Tarifanpassungen entsteht dennoch ein voller Migrations- und Installationsaufwand. Redundante Rechenzentren und Georedundanz verursachen deutliche Mehrkosten.
+
+|Know-how & Administration
+|Geringer mechanischer Bedarf (Mini-PC-Tausch ist Plug & Play). Notwendig ist administratives Verständnis für Betriebssystempflege, Sicherungsprüfung und Wiederherstellung. Standardisierte Betriebsskripte senken den laufenden Betreuungsaufwand.
+|*Servermiete:* Identischer Software- und Administrations-Stack wie On-Premise (Betriebsskripte und Verwaltungswerkzeuge 1:1 anwendbar); zusätzlich zwingend nötig: Netzwerk- und Firewall-Härtung sowie Absicherung gegen Angriffe aus dem Internet. +
+*Managed Cloud:* Spezialwissen für IAM-Rechteverwaltung, API-Sicherheit, Kostenalarme (FinOps) und Vertragsprüfung erforderlich.
+
+|Angriffsfläche
+|Gering im lokalen Firmennetz; aus dem Internet ist nur das VPN-Gateway für mobilen Zugriff erreichbar. Risiken im Büro: Schadsoftware im Firmennetz (Verschlüsselungstrojaner), Diebstahl, Stromausfall (USV erforderlich).
+|Deutlich größer, da Instanzen oder Gateways öffentlich exponiert sind. Fehlkonfigurationen von Ports, Zugriffsrechten (IAM) oder API-Schlüsseln liegen in der Verantwortung des betreibenden Unternehmens und erfordern kontinuierliches Monitoring.
+
+|Wachstum & Skalierung
+|Hardwarebeschaffung und Neuaufsetzen: Tage bis Wochen (Schätzung). Für das typische Belegvolumen kleiner und mittlerer Betriebe reicht solide Standardhardware über Jahre hinweg ohne Skalierungsengpässe aus.
+|Ressourcen-Upgrade in Minuten bis Stunden (Schätzung). Vorteilhaft primär bei stark volatilen, unvorhersehbaren Lastspitzen (z. B. Saison-E-Commerce).
+|===
+
+[[migration]]
+=== Gerätetausch und Migrationsaufwand
+
+Ein häufiges Missverständnis im Betriebsvergleich betrifft die Gleichsetzung von Hardwareausfall und Betriebsaufwand:
+
+1. **Physischer Gerätetausch:** Bei der Nutzung von modularen Mini-PCs im Kompaktformat als Referenzhardware ist der Austausch defekter Hardware kein hochkomplexer Eingriff. Technisch versierte Personen oder IT-Verantwortliche können das Gerät innerhalb weniger Minuten austauschen und verkabeln.
+2. **Der eigentliche Aufwand liegt in der Migration und Neuinstallation:** Der maßgebliche administrative Zeitaufwand entsteht durch das Aufsetzen des Betriebssystems, die Konfiguration der Container-Umgebung und das Einspielen der Datensicherung (PostgreSQL-Dump, Belegspeicher).
+3. **Identischer Aufwand beim Providerwechsel in der Cloud:** Dieser Migrations- und Installationsaufwand wird durch einen Wechsel in die Cloud nicht beseitigt. Kündigt ein Cloud-Anbieter Tarife ab, ändert seine Schnittstellen, erhöht die Preise drastisch oder wechselt das Unternehmen den Hosting-Anbieter, fällt genau derselbe Aufwand für die Neuinstallation, die Konfigurationsanpassung und die Datenmigration an wie beim Austausch eines lokalen Servers.
+4. **Gemeinsamer DevOps-Werkzeugkasten:** Da sowohl der On-Premise-Betrieb als auch die Servermiete dieselbe standardisierte Container-Architektur nutzen, profitieren beide Modelle von denselben Betriebsskripten und Verwaltungswerkzeugen.
+
+== Vor- und Nachteile
+
+[.lead]
+Jedes Modell verbindet eine bestimmte Kostenstruktur mit einem bestimmten Maß an Eigenverantwortung.
+
+[.proscons,cols="1,2,2",options="header"]
+.Stärken und Schwächen je Modell
+|===
+|Modell |Stärken |Schwächen
+
+|Eigener Server
+|Niedrige Gesamtkosten, Datenhoheit, schneller Zugriff im Büronetz, wenig Wartung nach Einlaufphase, wahlweise 24/7- oder energiesparender Nachtbetrieb
+|Hohe Anfangskosten, Neukauf nach 5–6 Jahren, Ausfallrisiko, eigene Sicherung, erforderliches Know-how; bei Nachtabschaltung zeitliche Restriktion für Backup-Fenster und mobilen Zugriff
+
+|Servermiete (mit DB- & Storage-Services)
+|Keine Hardware-Investition, feste Monatskosten für Server, Anbieter übernimmt Hardware-Wartung, Komponententausch und Host-Failover; hohe Medien-Ausfallsicherheit und automatisierte Snapshots durch gemanagte Zusatzdienste
+|Laufende Kosten, kein Restwert; reine Servermiete ohne Zusatzdienste birgt hohen Eigenaufwand für DB-Administration und Datensicherung (daher selten isoliert gewählt); Preisanpassungen des Anbieters möglich
+
+|Managed Cloud
+|Keine Anfangsinvestition, Hardwaretausch und Dienstverwaltung (Datenbank, Speicher, Updates) durch den Cloud-Anbieter, flexibel, Ausfallsicherheit, wenig Technikwissen erforderlich
+|Höchste laufende Kosten, schwer planbare Abrechnung, Gebühren wie Egress, Lock-in, Aufwand für Kosten- und Rechteverwaltung
+|===
+
+[[_speicher_belege_co2e]]
+== Speicher, Belege und CO₂e
+
+[.lead]
+Ein Beleg wird mehrfach kopiert und über Jahre gespeichert; das bestimmt Speicherbedarf und Kosten.
+
+=== Weg eines Belegs
+
+Als *Hop* gilt ein Übertragungsschritt zwischen zwei Systemen <<q5,[Q5]>>.
+
+.Stationen eines Belegs
+[cols="1,4,3",options="header"]
+|===
+|Hop |Von → nach |Station
+
+|1
+|Versendende Anwendung → Mailserver
+|Mail, per TLS
+
+|2
+|Mailserver Versand → Mailserver Empfang
+|Internet
+
+|3
+|Mailserver Empfang → Postfach
+|Zustellung (IMAP)
+
+|4
+|Eingangssystem → Rechnungsarchiv
+|Archivübernahme
+|===
+
+Mindestens vier dauerhafte Fassungen entstehen (Speicher und Sicherung im versendenden Betrieb, Archiv und Sicherung im empfangenden Betrieb). Mit Generationenprinzip (Tages-, Monats-, Jahresstände) und Spiegelung rechnet das Modell mit 4–6 Fassungen insgesamt, davon 2–3 im versendenden Betrieb. Kosten trägt jede Seite nur für ihre eigenen Fassungen. Ein Beleg bindet so über Jahre ein Vielfaches seiner Größe.
+
+=== Datensicherung und gesetzliche Belegaufbewahrung (8 Jahre)
+
+Little Trotter ist kein Dokumenten-Management-System und kein Archiv. Die gesetzliche Aufbewahrungsfrist für Rechnungen und kaufmännische Belege beträgt acht Jahre.
+
+*Wie die Frist im Betrieb praktisch funktioniert:* +
+Die Aufbewahrungsfrist beginnt nicht auf den Tag genau, sondern läuft erst mit dem Schluss des Kalenderjahres an, in dem die Rechnung ausgestellt wurde. Sie endet nach vollen acht Kalenderjahren.
+Ein konkretes Beispiel: Eine Rechnung aus dem März 2026 muss bis zum 31. Dezember 2034 aufbewahrt werden. Am 1. Januar 2035 – dem gesetzlichen Stichtag – ist die Frist für den gesamten Jahrgang 2026 abgelaufen. Ältere Jahrgänge werden dann planmäßig aus dem Primärspeicher entfernt.
+
+*Auswirkung auf den Speicher:* +
+Im laufenden Betrieb liegen deshalb höchstens neun Rechnungsjahrgänge im Primärsystem: acht abgeschlossene, deren Frist noch läuft, und das laufende Jahr. Während die Gesamtkostenrechnung aus kaufmännischer Sicht über zehn Jahre kalkuliert wird, erreicht der reale Speicherbedarf für Belege nach acht bis neun Jahren ein stabiles Plateau (Gleichgewichtszustand aus neu hinzukommenden und gelöschten Altjahrgängen).
+
+Für die Datensicherung verweist das BSI im IT-Grundschutz-Baustein CON.3 auf ein Datensicherungskonzept, regelmäßige Sicherungen, geprüfte Wiederherstellbarkeit und die räumlich getrennte Aufbewahrung der Sicherungen <<q4,[Q4]>>.
+
+[[rechenbeispiel]]
+=== Belegszenarien
+
+In der Praxis variieren Rechnungsanhänge erheblich. Um sowohl für den betrieblichen Alltag (z.{nbsp}B. Handwerksbetrieb, freie Berufe) als auch für anspruchsvolle IT-Planungen (Worst-Case-Stresstest für Datensicherung und Mail-Gateways) verlässliche Orientierung zu bieten, werden drei praxisnahe Belegszenarien unterschieden.
+
+.Typische Belegszenarien im Vergleich
+[cols="2,2,2,2,3",options="header"]
+|===
+|Szenario |Belegumfang (Art der Belege) |Größe unreduziert |Größe im System (nach 0,8{nbsp}MB-Budget) |Praxiswirkung & Mailversand
+
+|*1. Typischer Alltag* +
+(Handwerk, Dienstleistung, Beratung)
+|2–4 Belege +
+(1x Stundennachweis, 1–2x Material- oder Tankquittung)
+|ca. 6–12 MB +
+(Schnitt ca. 8 MB)
+|*ca. 1,8–3,5 MB* +
+(Schnitt ca. 2,5 MB)
+|Problemloser Mailversand; passiert alle Gateways (10–25 MB Limit) und ZRE/OZG-RE ohne Engpass.
+
+|*2. Umfangreiches Projekt* +
+(Bau, Montage, Großauftrag)
+|5–8 Belege +
+(Laufzettel, Wiegescheine, Hotelbelege, Fahrten)
+|ca. 15–25 MB +
+(Schnitt ca. 20 MB)
+|*ca. 4,5–7,0 MB* +
+(Schnitt ca. 5,5 MB)
+|Sicher innerhalb üblicher Provider-Limits; unreduziert drohen bei manchen Empfangssystemen bereits Mail-Bounces.
+
+|*3. Worst-Case-Stresstest* +
+(Maximalauslastung)
+|Bis zu 19 Belege +
+(hochauflösende Farbscans / Handyfotos)
+|ca. 49 MB
+|*ca. 6,0–15,5 MB* +
+(max. 20 MB Systemgrenze)
+|Unreduziert per E-Mail unzustellbar (`552 Message size exceeds maximum`); durch 0,8{nbsp}MB-Normalisierung zustellbar.
+|===
+
+NOTE: *Systemische Obergrenze:* Little Trotter begrenzt E-Rechnungen inklusive XML und aller Belege strikt auf *maximal 20 MB* (xref:arc42-docs.adoc#adr-014[ADR-014]). Größere Gesamtdokumente werden vor der Festschreibung gemeldet und nicht erzeugt.
+
+==== Einsparung durch Belegreduktion
+
+Je Rechnung spart die Reduktion ca. 5,5 MB (typischer Alltag) bzw. ca. 43 MB (Worst Case). Hochgerechnet gilt: *Einsparung × Anzahl Rechnungen × Fassungen*. Der versendende Betrieb hält 2–3 Fassungen (Speicher und Sicherungen), zusammen mit der Empfangsseite sind es 4–6. Beispiel typischer Alltag mit 1.500 Rechnungen: ca. 8 GB pro Jahr, im versendenden Betrieb mit Sicherungen ca. 16–25 GB. Die Kosten- und CO₂e-Rechnung in <<co2kosten,„Kosten und CO₂e über 10 Jahre“>> rechnet wie das übrige Dokument mit den reduzierten Größen; ohne Reduktion wären die Werte etwa um den Kompressionsfaktor (ca. 3 bzw. 8) höher.
+
+=== Speicherbedarf im System (8 Jahrgänge)
+
+Die Tabelle zeigt acht abgeschlossene Jahrgänge. Bewertet wird mit dem typischen Alltag (Ø 2,5 MB je Rechnung); der Worst Case (6 MB) dient nur der Dimensionierung von Platten und Sicherung. Mit dem laufenden Jahr liegt der Höchststand um bis zu einen Jahrgang (ca. 12 %) höher.
+
+* *Datenbank (PostgreSQL):* ca. 15–20 KB je Rechnung, dazu Kundenstammdaten (wenige MB).
+* *Objektspeicher (RustFS):* fertige PDF-Dateien mit eingebettetem XML. Sie bestimmen das Datenvolumen maßgeblich.
+
+.Speicherbedarf im System nach Volumen (8 Jahre rollierender Bestand)
+[cols="2,>1,>1,>1",options="header"]
+|===
+|8 Jahre rollierend |Gleichbleibend (12.000 Rg.) |Wachsend (+10 %, ca. 17.150 Rg.) |Rückläufig (−10 %, ca. 8.540 Rg.)
+
+|*Datenbank (PostgreSQL)*
+|ca. 0,2–0,3 GB
+|ca. 0,3–0,4 GB
+|ca. 0,15–0,2 GB
+
+4+|*Typischer Alltag (ca. 2,5 MB je Rechnung im System)*
+|Rechnungs- und Belegdateien
+|ca. 30 GB
+|ca. 43 GB
+|ca. 21 GB
+
+|*Systembedarf gesamt (Primär)*
+|*ca. 30 GB*
+|*ca. 43 GB*
+|*ca. 21 GB*
+
+|Inkl. Sicherung (2–3 Fassungen im versendenden Betrieb)
+|ca. 60–90 GB
+|ca. 85–130 GB
+|ca. 40–65 GB
+
+4+|*Worst-Case-Stresstest (ca. 6,0 MB je Rechnung im System)*
+|Rechnungs- und Belegdateien
+|ca. 72 GB
+|ca. 103 GB
+|ca. 51 GB
+
+|*Systembedarf gesamt (Primär)*
+|*ca. 72 GB*
+|*ca. 103 GB*
+|*ca. 51 GB*
+
+|Inkl. Sicherung (2–3 Fassungen im versendenden Betrieb)
+|ca. 145–215 GB
+|ca. 205–310 GB
+|ca. 100–155 GB
+|===
+
+NOTE: Die Datenbank macht weniger als 1 % aus; bei Platzmangel sind allein die Originalbelege maßgeblich. Rechnungsjahrgänge, deren gesetzliche Aufbewahrungsfrist abgelaufen ist, werden planmäßig zum Stichtag entfernt.
+
+Speicher wird beim eigenen Server einmalig bezahlt, in der Cloud monatlich; der Unterschied wächst mit der Zahl der Sicherungsstände.
+
+[[co2kosten]]
+=== Kosten und CO₂e über 10 Jahre
+
+[.lead]
+Mit reduzierten Belegen bleibt Speicher in jeder Betriebsform ein Nebenposten: in der Cloud ca. 1 % der 10-Jahres-Kosten, beim eigenen Server ohne Mehrkosten. Für die Bewertung der Betriebsformen zählen die festen Kosten für Server, Datenbank und Betrieb.
+
+NOTE: Weder die Kosten noch die CO₂e-Angaben sind exakte Messwerte oder Festpreise. Sie dienen als verständliche Richtwerte, um die typischen Größenordnungen und Vor- und Nachteile der Modelle im Alltag transparent zu vergleichen.
+
+Basis: 1.500 Rechnungen pro Jahr, Belege mit der reduzierten Durchschnittsgröße von 2,5 MB je Rechnung, 2–3 Sicherungsfassungen im versendenden Betrieb, Löschung nach Ablauf der 8-Jahres-Frist. Über 10 Jahre sind das im versendenden Betrieb ca. 0,37–0,55 TB-Jahre. Ohne Reduktion wären Speicher, Kosten und CO₂e etwa um den Kompressionsfaktor höher (siehe Hinweis <<kompressionsfaktor,Kompressionsfaktor>>). Rechenweg im <<anhang,Anhang>>.
+
+.Speicherkosten der Rechnungs- und Belegdateien im versendenden Betrieb, 10 Jahre
+[cols="3,>2,>2",options="header"]
+|===
+|Betriebsform |Speicherkosten bei Ø 2,5 MB je Rechnung, Ø (Spanne) |Anteil an Ø-Gesamtkosten 10 Jahre
+
+|Eigener Server (Mini-PC + NAS + Kaltarchiv)
+|ca. 0 € (im Plattenbestand enthalten)
+|ca. 0 % von ca. 3.000 €
+
+|Servermiete mit Storage-Services (auch mit gemanagter DB)
+|ca. 100 € (45–165 €)
+|ca. 1 % von ca. 12.600 €
+
+|Managed Cloud
+|ca. 330 € (130–530 €)
+|ca. 1 % von ca. 26.400 €
+|===
+
+Der Durchschnitt (Ø) ist die Mitte der Spanne und dient dem Vergleich der Betriebsformen; die Gesamtkosten stammen aus dem <<anhang,Rechenweg 10 Jahre je Modell>>. In der Cloud entscheidet der Speicher nicht über die Wahl der Betriebsform. Nur zur Dimensionierung, nicht als Bewertungsgrundlage: Mit Worst-Case-Belegen (6 MB je Rechnung nach Reduktion) lägen die Speicherkosten bei ca. 250 € (Servermiete) bzw. ca. 800 € (Managed Cloud), höchstens ca. 3 %; beim eigenen Server reichen auch dann die üblichen Festplatten (ca. 145–215 GB inkl. Sicherung).
+
+[[kompressionsfaktor]]
+[IMPORTANT]
+.Kompressionsfaktor
+====
+Alle Bewertungen rechnen mit der reduzierten Durchschnittsgröße von 2,5 MB je Rechnung. Kompressionsfaktor = Größe unreduziert ÷ Größe im System: im Durchschnitt ca. 8 MB ÷ 2,5 MB ≈ 3, bei großen Farbscans (Worst Case) ca. 49 MB ÷ 6 MB ≈ 8. Ohne Reduktion wären Speicherbestand, Speicherkosten und CO₂e entsprechend ca. 3- bzw. ca. 8-mal so hoch; in der Managed Cloud im Durchschnitt also ca. 1.050 € statt ca. 330 € (ca. 4 % statt 1 % der 10-Jahres-Kosten).
+====
+
+Strom und CO₂e des Betriebs hängen nicht von der Beleggröße ab, nur der Belegspeicher. Dieser ist wie alle Bewertungen für Belege mit der reduzierten Durchschnittsgröße von 2,5 MB je Rechnung gerechnet.
+
+.Geschätzter Stromverbrauch und CO₂e über 10 Jahre (versendender Betrieb)
+[cols="3,>2,>2,>2,>2",options="header"]
+|===
+|Betriebsform |Leistung im Mittel |Strom, 10 Jahre |CO₂e, Strom erneuerbar (Obergrenze) |CO₂e, Strommix
+
+|Eigener Server (Referenzsystem Mini-PC ca. 18 W, mit NAS ca. 25 W)
+|ca. 18–25 W
+|ca. 1.580–2.190 kWh
+|höchstens ca. 0,07–0,14 t
+|ca. 0,54–0,77 t
+
+|Servermiete / Managed Cloud (Rechenleistung 8 vCPU, 16 GB RAM)
+|ca. 45–90 W
+|ca. 3.950–7.900 kWh
+|höchstens ca. 0,17–0,50 t
+|ca. 1,4–2,8 t
+
+|zusätzlich Belegspeicher in der Cloud (Lebenszyklus, Ø 2,5 MB je Rechnung)
+|–
+|–
+2+|ca. 0,06–0,15 t
+|===
+
+Die gemietete Instanz braucht nach dieser Schätzung etwa 2- bis 4-mal so viel Strom wie der eigene Server. Der Grund: Ihr Anteil am Rechenzentrums-Server läuft dauerhaft mit, Kühlung und Stromverteilung kommen hinzu. Das lokale Referenzsystem läuft dagegen die meiste Zeit mit geringer Last (bei sparsamer Einstiegshardware mit 8–12 W ist der Abstand noch ausgeprägter). Mit erneuerbarem Strom liegen beide Betriebsformen bei unter 0,5 t in 10 Jahren. Im Strommix wird der Unterschied in absoluten Zahlen größer.
+
+Die Werte des Betriebs gelten unabhängig von der Beleggröße; der Belegspeicher ist mit Ø 2,5 MB je Rechnung gerechnet.
+
+.Einordnung der CO₂e-Werte über 10 Jahre
+[cols="3,>2,>2,>2",options="header"]
+|===
+|Wert |CO₂e |Pkw-Fahrt (Benzin) |Buchenwald, 10 Jahre Bindung
+
+|Eigener Server, Strom erneuerbar
+|höchstens ca. 0,07–0,14 t
+|ca. 400–850 km
+|ca. 6–13 m²
+
+|Eigener Server, Strommix
+|ca. 0,54–0,77 t
+|ca. 3.300–4.700 km
+|ca. 49–70 m²
+
+|Cloud-Rechenleistung, Strom erneuerbar
+|höchstens ca. 0,17–0,50 t
+|ca. 1.000–3.000 km
+|ca. 15–45 m²
+
+|Cloud-Rechenleistung, Strommix
+|ca. 1,4–2,8 t
+|ca. 8.200–16.900 km
+|ca. 124–254 m²
+
+|Belegspeicher in der Cloud (Ø 2,5 MB je Rechnung)
+|ca. 0,06–0,15 t
+|ca. 370–940 km
+|ca. 6–14 m²
+|===
+
+Die Vergleiche veranschaulichen Größenordnungen; sie sind keine Kompensationsrechnung. Pkw: ca. 165 g je Personenkilometer <<q3,[Q3]>>. Buchenwald: ca. 11 t CO₂ je Hektar und Jahr Bruttozuwachs vor Holzernte <<q11,[Q11]>>; seit 2017 ist der deutsche Wald insgesamt keine Kohlenstoffsenke mehr <<q12,[Q12]>>. Werte je Einzelbaum sind nicht belastbar belegt, weil sie stark von Alter und Standort abhängen.
+
+[IMPORTANT]
+.Vergleichbarkeit
+====
+Betrieb und Cloud-Rechenleistung enthalten nur Strom, keine Herstellung der Hardware; der Belegspeicher enthält den Lebenszyklus <<q2,[Q2]>>. Die Cloud-Rechenleistung ist eine Näherung aus Messdaten zweier Behörden-Rechenzentren (Rechenweg im <<anhang,Anhang>>); gemanagte Datenbank und Storage-Dienste fehlen. Die Cloud ist nicht automatisch klimagünstiger <<q15,[Q15]>>.
+====
+
+* *Strom erneuerbar:* Für Rechenzentren in Deutschland gilt das ab 2027 gesetzlich, bilanziell zu 100 % <<q16,[Q16]>>. Für den eigenen Server ist ein Ökostrom-Tarif angenommen, tagsüber ergänzt durch eigene Photovoltaik. Auf beiden Seiten gilt derselbe Obergrenzen-Faktor.
+* *Eigener Server:* Angenommen ist ein Ökostrom-Tarif, tagsüber ergänzt durch eigene Photovoltaik. Bilanziell verursacht Ökostrom nahezu kein CO₂; als Obergrenze ist der Lebenszyklus einer Photovoltaikanlage angesetzt (43–63 g CO₂e je kWh) <<q17,[Q17]>>. Wie bei Rechenzentren gilt: „Bilanziell“ heißt über Herkunftsnachweise, der physische Strommix im Netz ändert sich nicht unmittelbar. Zum Vergleich mit Netzstrom ist der Strommix 2024/2025 angesetzt (344–353 g CO₂ je kWh) <<q14,[Q14]>>.
+* *Empfangsseite:* Die Fassungen im empfangenden Betrieb verursachen etwa noch einmal dieselbe Menge CO₂e. Die Reduktion der Belege senkt also auch Emissionen außerhalb des eigenen Betriebs.
+* *Datenübertragung:* nicht enthalten; der Effekt ist im Vergleich zum Speicher klein.
+
+[[_betriebszeit_tradeoff]]
+=== Betriebszeit-Modelle: Nachtabschaltung (Green IT) vs. 24/7-Dauerbetrieb
+
+[.lead]
+Der On-Premise-Betrieb auf sparsamer Referenzhardware eröffnet die Wahl zwischen durchgehendem 24/7-Dauerbetrieb und einer zeitgesteuerten Nachtabschaltung (bzw. Wochenend-Ruhemodus). Beide Betriebsmodelle verbinden wirtschaftliche und ökologische Vorteile mit spezifischen betrieblichen Kompromissen. Als Referenzsystem dient ein leistungsfähiger 8-Kern-Mini-PC mit ca. 18 W im 24/7-Linux-Mischbetrieb; für kleinere Betriebe stellt ein Einstiegs-Mini-PC mit 8–12 W eine noch sparsamere Option dar.
+
+.Vergleich: 24/7-Dauerbetrieb vs. Nachtabschaltung
+[cols="2,3,3",options="header"]
+|===
+|Kriterium |24/7-Dauerbetrieb |Nachtabschaltung (z. B. 22:00–06:00 Uhr)
+
+|*Stromverbrauch & Energiekosten*
+a|*Jahresverbrauch im 24/7-Dauerbetrieb:*
+
+[discrete]
+==== Referenz-Mini-PC (Single-Node, ca. 18 W)
+* **ca. 155–160 kWh/Jahr** (ca. 48–55 €/Jahr)
+* Basis: 100 % Laufzeit (ca. 8.760 h/Jahr)
+* _Günstige Einstiegs-Option (8–12 W): ca. 70–105 kWh/Jahr (ca. 25–35 €/Jahr)_
+
+[discrete]
+==== Referenz-Mini-PC + NAS (mit Netzwerkspeicher, ca. 25–28 W)
+* **ca. 220–245 kWh/Jahr** (ca. 65–85 €/Jahr)
+* Basis: 100 % Laufzeit (ca. 8.760 h/Jahr)
+
+a|*Verbrauch & Ersparnis bei Nachtabschaltung:*
+
+[discrete]
+==== Referenz-Mini-PC (Single-Node)
+* **Verbleibend:** ca. 70–85 kWh/Jahr (ca. 22–30 €/Jahr)
+* **Ersparnis:** **ca. 75–85 kWh/Jahr** bzw. **ca. 25–30 €/Jahr** (−45 bis −55 %)
+* Laufzeit: ca. 4.000–4.800 h/Jahr
+* _Günstige Option (8–12 W): Verbleibend ca. 35–50 kWh/Jahr, Ersparnis ca. 12–18 €/Jahr_
+
+[discrete]
+==== Referenz-Mini-PC + NAS (mit Netzwerkspeicher)
+* **Verbleibend:** ca. 100–135 kWh/Jahr (ca. 30–45 €/Jahr)
+* **Ersparnis:** **ca. 110–135 kWh/Jahr** bzw. **ca. 35–45 €/Jahr** (−45 bis −55 %)
+* Laufzeit: ca. 4.000–4.800 h/Jahr
+
+|*Ökologische Bilanz (CO₂e, 1 Jahr)*
+a|*Jahresausstoß im 24/7-Dauerbetrieb:*
+
+[discrete]
+==== Strommix-Tarif (344–353 g/kWh <<q14,[Q14]>>)
+* **ca. 54–86 kg CO₂e/Jahr** (ohne/mit NAS; günstige Option: ca. 25–37 kg)
+* Äquivalente (Referenzsystem):
+** ca. 330–530 Pkw-Personenkilometer <<q3,[Q3]>>
+** ca. 49–78 m² Buchenwald-Jahresbindung <<q11,[Q11]>>
+
+[discrete]
+==== Ökostrom-Tarif (bilanziell)
+* **bilanziell ~0 kg CO₂e** (Herkunftsnachweise)
+
+[discrete]
+==== Eigene Photovoltaik / Solar (43–63 g/kWh <<q17,[Q17]>>)
+* **höchstens ca. 7–15 kg CO₂e/Jahr** (Lebenszyklus)
+* Äquivalente:
+** ca. 40–95 Pkw-Personenkilometer
+** ca. 6–14 m² Buchenwald-Jahresbindung
+
+a|*Ausstoß & Einsparung bei Nachtabschaltung:*
+
+[discrete]
+==== Strommix-Tarif
+* **Verbleibend:** ca. 24–47 kg CO₂e/Jahr
+** ca. 150–290 Pkw-km \| ca. 22–43 m² Buchenwald
+* **Vermieden:** **ca. 25–47 kg CO₂e/Jahr** (−45 bis −55 %)
+** ca. 150–290 vermiedene Pkw-km
+** ca. 23–43 m² Buchenwald-Jahresbindung
+
+[discrete]
+==== Ökostrom-Tarif (bilanziell)
+* **Verbleibend:** bilanziell ~0 kg CO₂e
+* **Netzentlastung:** **ca. 75–135 kWh/Jahr** weniger physischer Netzbezug
+
+[discrete]
+==== Eigene Photovoltaik / Solar
+* **Verbleibend:** ca. 3–7 kg CO₂e/Jahr (Tagbetrieb)
+* **Vermieden:** **ca. 3–8 kg CO₂e/Jahr** (netzbezogene Nachtstunden)
+** ca. 18–50 vermiedene Pkw-km
+** ca. 3–7 m² Buchenwald-Jahresbindung
+
+|*Verfügbarkeit & Geschäftsprozesse*
+|Uneingeschränkt: Mobiler Zugriff von unterwegs, Homeoffice in den Abendstunden sowie asynchrone Belegverarbeitung und Mailzustellung rund um die Uhr verfügbar.
+|Eingeschränkt auf Betriebszeiten: Nachts kein Zugriff auf Web-UI oder API. Eingehende E-Mails müssen im externen Mailpostfach des Providers zwischengespeichert und morgens abgeholt werden.
+
+|*Wartungsfenster & Datensicherung*
+|Optimal: Ausführliche Datenbanksicherungen, Offsite-Synchronisation, Integritätsprüfungen (Prüfsummen-Audits) und OS-Sicherheitsupdates (`unattended-upgrades`) laufen nachts ohne Nutzerbeeinträchtigung.
+|Konfliktpotenzial: Backups und Replikationen müssen vor dem Shutdown abgeschlossen sein (z. B. Backup 21:00 Uhr, Shutdown 22:15 Uhr) und durch Sperrmechanismen (Backup-Lock) vor Unterbrechung geschützt werden; versäumte Jobs erfordern morgendliche Aufholmechanismen (Catch-up).
+
+|*Hardware-Belastung & Thermik*
+|Gleichmäßiger thermischer Dauerbetrieb (Steady State). Geringere Belastung von Lötstellen, Netzteilen und Lagern mechanischer NAS-Festplatten durch Vermeidung von Kaltstarts.
+|Wiederholtes thermisches Ausdehnen/Zusammenziehen (Thermal Cycling) durch 365 Kaltstarts/Jahr; erfordert zuverlässige automatische Einschaltmechanismen (BIOS-RTC-Alarm, Wake-on-LAN) zur Vermeidung manueller Startaufwände.
+|===
+
+*Betriebswirtschaftliche Einordnung:*  
+Die reine monetäre Ersparnis durch Nachtabschaltung bei energieeffizienten Mini-PCs (ca. 25–45 € pro Jahr) ist im Verhältnis zu Personalkosten und Anschaffungsinvestitionen gering. Der Haupttreiber für eine Nachtabschaltung liegt daher vor allem in der ökologischen Motivation (Green IT, CO₂e-Reduktion) und dem Sicherheitsgewinn (abgeschaltete Systeme sind nachts nicht netzwerkseitig angreifbar). Für Betriebe mit standardisierten Bürozeiten und vorverlegtem Backup-Fenster ist die Nachtabschaltung architektonisch voll unterstützt (Power-Off-Readiness); bei flexiblen Arbeitszeiten, mobilen Freigaben oder nächtlicher Belegannahme überwiegen die Prozessvorteile des 24/7-Betriebs.
+
+[[anhang]]
+== Anhang: Modellrechnung
+
+[.lead]
+Der Anhang dokumentiert den Rechenweg. Er dient der Nachvollziehbarkeit, nicht der Genauigkeit; es bleibt eine Orientierungsrechnung.
+
+=== Zweck
+
+Die Rechnung vergleicht Technikkosten dreier Betriebsmodelle für einen kleinen Betrieb mit 1.500 Rechnungen pro Jahr. Sie soll Größenordnungen und Kostenformen zeigen. Sie ist kein Angebot und keine Prognose.
+
+=== Formel
+
+Die Jahreskosten steigen mit 2,5 % pro Jahr. Die Summe über 10 Jahre ist eine geometrische Reihe:
+
+++++
+<div class="formula">
+<div class="formula__row"><var>F</var> = <span class="frac"><span><var>q</var><sup>10</sup> − 1</span><span><var>q</var> − 1</span></span> = <span class="frac"><span>1,025<sup>10</sup> − 1</span><span>0,025</span></span> = <span class="frac"><span>1,28008 − 1</span><span>0,025</span></span> ≈ 11,2034</div>
+<div class="formula__row"><var>S</var><sub>10</sub> = <var>K</var><sub>1</sub> · <var>F</var></div>
+</div>
+++++
+
+[.formula-legend]
+* _q_ = 1 + Preissteigerung pro Jahr (hier 1,025)
+* _K_~1~ = laufende Kosten im ersten Jahr
+* _S_~10~ = Summe über 10 Jahre
+
+Sensitivität bei 5 % pro Jahr:
+
+++++
+<div class="formula">
+<div class="formula__row"><var>F</var><sub>5 %</sub> = <span class="frac"><span>1,05<sup>10</sup> − 1</span><span>0,05</span></span> = <span class="frac"><span>1,62889 − 1</span><span>0,05</span></span> ≈ 12,5779</div>
+</div>
+++++
+
+Für den eigenen Server gilt:
+
+++++
+<div class="formula">
+<div class="formula__row"><var>S</var><sub>10</sub> = <var>A</var> + <var>E</var><sub>1</sub> · <var>F</var> + <var>R</var></div>
+</div>
+++++
+
+[.formula-legend]
+* _A_ = Anschaffung
+* _E_~1~ = Strom im ersten Jahr
+* _R_ = Ersatz, einmal ca. in Jahr 6, nicht indexiert
+
+Annahmen: Der Mini-PC wird nach 5–6 Jahren ersetzt, 20–30 % teurer als bei der Anschaffung; beim NAS werden beide Festplatten getauscht (150–250 €). Ersatz und Anschaffung sind nicht indexiert.
+
+Alle Beträge gelten für Belege mit der reduzierten Durchschnittsgröße von 2,5 MB je Rechnung.
+
+.Rechenweg 10 Jahre je Modell (_F_ = 11,2034)
+[cols="3,>2,>2,>2,>2,>2",options="header"]
+|===
+|Modell |Anschaffung _A_ |Laufend Jahr 1 (_K_~1~ bzw. _E_~1~) |Laufend × _F_ |Ersatz _R_ (Jahr 6) |Summe _S_~10~, ca.
+
+|Mini-PC (ohne Sicherung außer Haus)
+|600–800 €
+|47–55 € Strom
+|527–616 €
+|720–1.040 €
+|*1.850–2.460 €*
+
+|Mini-PC + Kaltarchiv
+|600–800 €
+|65–90 € Strom, Archiv
+|728–1.008 €
+|720–1.040 €
+|*2.050–2.850 €*
+
+|Mini-PC + NAS + Kaltarchiv
+|900–1.190 €
+|84–120 € Strom, Archiv
+|941–1.344 €
+|870–1.290 €
+|*2.710–3.820 €*
+
+|Reine Servermiete
+|–
+|480–1.080 €
+|5.378–12.099 €
+|–
+|*5.380–12.100 €*
+
+|Servermiete beim Hyperscaler
+|–
+|1.200–1.560 €
+|13.444–17.477 €
+|–
+|*13.440–17.480 €*
+
+|Servermiete + Storage-Services
+|–
+|600–1.356 €
+|6.722–15.192 €
+|–
+|*6.720–15.190 €*
+
+|Servermiete + gemanagte DB & Storage
+|–
+|744–1.656 €
+|8.335–18.553 €
+|–
+|*8.340–18.550 €*
+
+|Managed Cloud
+|–
+|1.500–3.204 €
+|16.805–35.896 €
+|–
+|*16.810–35.900 €*
+|===
+
+=== Eingangswerte und Herkunft
+
+.Eingangswerte und Herkunft
+[cols="3,2,3",options="header"]
+|===
+|Wert |Größe |Herkunft
+
+|Mini-PC (Gerät)
+|ca. 600–800 € (Referenz) +
+_günstige Option: ca. 200–350 €_
+|Schätzung nach üblichen Marktpreisen, keine Einzelquelle. Referenzsystem: Leistungsfähiges Kompaktsystem mit 8 Kernen und 16–32 GB Arbeitsspeicher (RAM) (Leistungsklasse z. B. AMD Ryzen HS / Geekom A8 Max oder vergleichbare 8-Kern-Mini-PCs), das auch rechenintensive Validierungs- und Belegprozesse sowie Virtualisierung mühelos bewältigt. 10 GB genügen im laufenden Betrieb für die zuverlässige Verarbeitung und amtliche Validierung belegintensiver Rechnungen; 16–32 GB stellen als handelsüblicher Standard einen reibungslosen Ablauf ohne Engpässe sicher. +
+*Günstige Einstiegs-Option:* Für kleinere Betriebe mit gleichmäßigem Belegaufkommen genügen bereits sparsame 4- bis 6-Kern-Mini-PCs (z. B. Intel N100/N200 oder sparsame Mobile-APUs mit 16 GB RAM ab ca. 200–350 €).
+
+|NAS inkl. Festplatten
+|ca. 300–390 € zusätzlich (Summe 900–1.190 €)
+|Schätzung, wie oben
+
+|Ersatz Hardware (Jahr 6)
+|Mini-PC 720–1.040 €, Mini-PC + NAS 870–1.290 €
+|Schätzung: Mini-PC nach 5–6 Jahren neu, 20–30 % teurer als bei der Anschaffung (gestiegene Hardwarekosten <<q10,[Q10]>>). NAS läuft weiter, Tausch beider Festplatten ca. 150–250 €
+
+|Stromverbrauch
+|Referenz-Mini-PC ca. 18 W, mit NAS ca. 25–28 W +
+_günstige Option: ca. 8–12 W_
+|Schätzung, Basisrechnung im 24/7-Dauerbetrieb (8.760 h/Jahr). Das Referenzsystem (8 Kerne, 16–32 GB RAM, 2,5-GbE-Netzwerk) nimmt im gemischten Linux-Serverbetrieb (Headless, Hintergrunddienste, Teillast) durchschnittlich ca. 18 W an der Steckdose auf (mit NAS ca. 25–28 W). Bei konfigurierter Nachtabschaltung (ca. 10–12 h/Tag aus) sinkt der Strombedarf um ca. 45–55 % auf ca. 22–30 € bzw. 35–45 € pro Jahr (siehe <<_betriebszeit_tradeoff,Trade-off>>). Bei der günstigen Einstiegs-Option (8–12 W) liegt der Jahresverbrauch bei nur ca. 70–105 kWh (ca. 25–35 €/Jahr im 24/7-Betrieb).
+
+|Strompreis
+|ca. 0,30–0,35 €/kWh
+|Schätzung, Haushalts-/Kleingewerbepreis, auch für Ökostrom-Tarife üblich. Ergibt beim Referenz-Mini-PC ca. 48–55 € (mit NAS ca. 65–85 €) pro Jahr. Eigener Photovoltaik-Strom senkt die Kosten, wird aber nicht eingerechnet (vorsichtige Annahme). Bei sparsamer Einstiegshardware ca. 25–35 € pro Jahr
+
+|Reine Servermiete (Compute only)
+|ca. 40–90 €/Monat
+|Vergleichbare Leistung (8 vCPU bzw. Kerne, 16 GB RAM) bei europäischen Anbietern, Stand Oktober 2026: unteres Ende mit 12 Monaten Laufzeitbindung, oberes Ende stundengenau abgerechnete Cloud-Instanzen; Preisanpassungen siehe <<q6,[Q6]>> <<q10,[Q10]>>. Automatisches Host-Failover und replizierter Speicher sind nicht bei jedem Angebot enthalten. Wird in der Praxis selten allein gewählt, da Datenbank, Snapshots und Absicherung unvollständig bleiben
+
+|Servermiete beim Hyperscaler
+|ca. 100–130 €/Monat (3 Jahre Laufzeitbindung)
+|Vergleich dreier großer internationaler Anbieter, Region Frankfurt, Linux, 8 vCPU mit 16–32 GB RAM, Stand Oktober 2026 (Preislisten der Anbieter; 1 € = 1,1206 USD, EZB-Referenzkurs 09.10.2026). Mit dreijähriger Laufzeitbindung ca. 113–143 USD = ca. 100–130 € pro Monat. Ohne Bindung ca. 0,35–0,47 USD je Stunde: rund um die Uhr ca. 225–305 €, nur zu Bürozeiten (10 Stunden an ca. 22 Arbeitstagen) ca. 70–90 € zuzüglich ca. 10–15 € für Plattenspeicher und feste IPv4-Adresse, die durchgehend berechnet werden <<q13,[Q13]>>. Eine Laufzeitbindung wird auch berechnet, wenn die Instanz abgeschaltet ist; beides lässt sich nicht kombinieren. Betrieb nur zu Bürozeiten setzt voraus, dass Mailversand und Hintergrundjobs außerhalb dieser Zeit ruhen dürfen. Ohne Zusatzdienste
+
+|Servermiete + Storage-Services
+|ca. 40–90 € Server + 8–18 € automatische Sicherung/Snapshots + 2–5 € Objektspeicher = 50–113 €/Monat
+|Schätzung nach öffentlichen Preisübersichten von Cloud-Anbietern; automatische Sicherung üblicherweise ca. 20 % des Serverpreises, Datenabfluss im Inklusivvolumen. Bietet Medien-Ausfallsicherheit und automatisierte Disk-Snapshots
+
+|Servermiete + gemanagte DB & Storage-Services
+|ca. 50–113 € Server/Storage + 12–25 € gemanagte DB = 62–138 €/Monat
+|Schätzung, empfohlene Praxis-Kombination: Entlastung bei DB-Wartung, automatisierte Point-in-Time-Snapshots und hohe Medien-Ausfallsicherheit
+
+|Managed Cloud
+|ca. 125–267 €/Monat
+|Schätzung, Summe getrennt abgerechneter Dienste (Rechenleistung, Datenbank, Speicher, Snapshots, Datenabfluss): bisherige 100–200 € zuzüglich 25–67 € für vergleichbare Rechenleistung. Mit Hyperscaler-Preisen für die Rechenleistung entsprechend höher
+
+|Speicherpreis Cloud (Objektspeicher inkl. Snapshots)
+|Servermiete ca. 0,01–0,025 €/GB je Monat, Managed Cloud ca. 0,03–0,08 €/GB je Monat
+|Schätzung nach öffentlichen Preisübersichten; bei Managed Cloud inkl. Replikation und verwalteter Sicherung
+
+|Größere Festplatten (eigener Server, nur ohne Reduktion)
+|ca. 50–150 € Aufpreis
+|Schätzung: beim ohnehin fälligen Plattentausch höhere Kapazität für ca. 1,2–1,7 TB zusätzlichen Bestand inkl. Sicherung, falls Worst-Case-Belege unreduziert gespeichert würden. Mit Reduktion reichen die üblichen Platten
+
+|Volumenabhängiger Anteil der Cloud-Kosten
+|Servermiete 10–23 €/Monat (Sicherung, Snapshots, Objektspeicher), Managed Cloud ca. 20–40 €/Monat
+|Schätzung für Belege mit der reduzierten Durchschnittsgröße von 2,5 MB je Rechnung (Bestand ca. 30 GB, ca. 60–90 GB inkl. Sicherung). Bei dieser Menge bestimmen Grundgebühren, Snapshots und Datenabfluss den Betrag, nicht die Belegmenge. Grundlage für die Volumenszenarien. Server, gemanagte DB und Plattformgebühren gelten als fest
+
+|Kaltarchiv
+|ca. 18–35 € im Jahr 1
+|Schätzung, vereinfachter konstanter Ansatz
+
+|Datensicherung
+|4–6 Fassungen
+|Annahme (Generationenprinzip, Spiegelung). Räumlich getrennte Aufbewahrung fordert <<q4,[Q4]>>
+
+|Betrachtungszeitraum
+|10 Jahre
+|Annahme der Modellrechnung; die gesetzliche Aufbewahrung beträgt 8 Jahre ab Ende des Ausstellungsjahres
+
+|Belegvolumen
+|1.500 Rechnungen pro Jahr
+|Festlegung des Szenarios
+|===
+
+=== Speicher je Rechnung
+
+* *Typischer Alltag (Handwerk & Dienstleistung, 2–4 Belege):* Unreduziert ca. 8 MB (1x Stundennachweis, 1–2 Materialquittungen), nach automatischer Reduktion (0,8 MB Belegbudget) im System ca. 2,5 MB (Einsparung ca. 5,5 MB je Rechnung). Bei 1.500 Rechnungen/Jahr: vermiedenes Datenvolumen ca. 8,25 GB/Jahr (mit 4–6 Sicherungsfassungen ca. 33–50 GB vermiedener Speicher je Jahrgang). Im rollierenden 8-Jahres-Bestand (12.000 Rechnungen) belegen Rechnungs- und Belegdateien im System lediglich ca. 30 GB Primärspeicher (ca. 120–180 GB inkl. Sicherungen).
+* *Worst-Case-Stresstest (bis zu 19 Belege):* Unreduziert ca. 49 MB, reduziert ca. 6 MB, Einsparung ca. 43 MB (Schätzung aus internen Testbelegen mit Maximalbelegung und hochauflösenden Farbscans). Dient als Obergrenze zur Dimensionierung von Backup-Systemen und IT-Notfallkonzepten. Bei 1.500 Rechnungen/Jahr: Jahrgang = 1.500 × 43 MB = ca. 64,5 GB Einsparung (mit 4–6 Fassungen ca. 260–390 GB). Die 6 MB setzen eine starke Reduktion voraus; schöpft eine Rechnung das Belegbudget voll aus (bis 15,5 MB), sinkt die Einsparung auf ca. 33,5 MB je Rechnung (ca. −22 %).
+* *Datenbank ca. 15–20 KB je Rechnung:* Schätzung für PostgreSQL-Transaktionsdaten.
+* *Speicher-Jahre der Belege im System (versendender Betrieb):* Jahrgang reduziert typisch 1.500 × 2,5 MB = 3,75 GB, Worst Case 1.500 × 6 MB = 9 GB, × 2–3 Fassungen im versendenden Betrieb. Bestand im Mittel: Jahr _n_ = 1–9 ca. (_n_ − 0,5) Jahrgänge, Jahr 10 ca. 8,5 Jahrgänge (der erste Jahrgang wird zu Beginn von Jahr 10 gelöscht), zusammen ca. 49 Jahrgangs-Jahre. Ergibt typisch ca. 0,37–0,55 TB-Jahre, Worst Case ca. 0,9–1,3 TB-Jahre. Im empfangenden Betrieb entsteht etwa dieselbe Menge. Unreduziert (typisch 8 MB, Worst Case 49 MB) wären es ca. 3- bzw. 8-mal so viele.
+* *Speicherkosten Cloud:* TB-Jahre × 12 Monate × Speicherpreis (siehe Eingangswerte), ohne Preissteigerung. Durchschnitt (Ø) = Mitte der Spanne; Anteil = Ø-Speicherkosten ÷ Ø-Gesamtkosten 10 Jahre (Servermiete mit Storage-Services und mit gemanagter DB zusammen 6.720–18.550 €, Ø ca. 12.600 €; Managed Cloud 16.810–35.900 €, Ø ca. 26.400 €; Mini-PC + NAS + Kaltarchiv 2.710–3.820 €, Ø ca. 3.260 €).
+* *CO₂e Speicher Cloud:* TB-Jahre × 166–280 kg CO₂e je TB und Jahr <<q2,[Q2]>>: typisch ca. 0,06–0,15 t, Worst Case ca. 0,15–0,37 t (versendender Betrieb); mit Empfangsseite etwa doppelt so viel. Buchenwald-Vergleich für den Worst Case im versendenden Betrieb: 11 t je Hektar und Jahr = 1,1 kg je m² und Jahr; 0,15–0,37 t ÷ (1,1 kg × 10 Jahre) = ca. 13–34 m² <<q11,[Q11]>>. Der Wert ist Bruttozuwachs vor Holzernte; seit 2017 ist der deutsche Wald insgesamt keine Kohlenstoffsenke mehr, vor allem wegen Dürreschäden <<q12,[Q12]>>. Der Vergleich veranschaulicht die Größenordnung, er ist keine Kompensationsrechnung.
+* *CO₂e Betrieb eigener Server:* Referenz-Mini-PC 18 W (mit NAS ca. 25 W) × 8.760 h × 10 Jahre = ca. 1.580–2.190 kWh. Ökostrom und eigene Photovoltaik: × 43–63 g CO₂e/kWh (Lebenszyklus Photovoltaik als Obergrenze) <<q17,[Q17]>> = höchstens ca. 0,07–0,14 t. Zum Vergleich Strommix: × 344–353 g CO₂/kWh <<q14,[Q14]>> = ca. 0,54–0,77 t (bei sparsamer Einstiegs-Option mit 8–12 W: ca. 0,24–0,37 t).
+* *CO₂e Betrieb Cloud-Rechenleistung:* 62 Server × 310 W ÷ 2.044 Kerne = ca. 9,4 W je physischem Kern (Behörden-Rechenzentren 2019/2020, Tabelle 48 in <<q2,[Q2]>>). 8 vCPU = 4–8 physische Kerne (mit bzw. ohne Hyperthreading) × 9,4 W × PUE 1,2 = ca. 45–90 W. × 8.760 h × 10 Jahre = ca. 3.950–7.900 kWh. Strom erneuerbar: × 43–63 g CO₂e/kWh = höchstens ca. 0,17–0,50 t. Strommix: × 344–353 g CO₂/kWh = ca. 1,4–2,8 t. Mit dem höheren PUE von 1,6 aus derselben Quelle ergeben sich ca. 60–120 W.
+
+=== Volumenszenarien
+
+++++
+<div class="formula">
+<div class="formula__row"><var>N</var><sub>wachsend</sub> = 1.500 · <span class="frac"><span>1,1<sup>10</sup> − 1</span><span>0,1</span></span> ≈ 23.900 Rechnungen</div>
+<div class="formula__row"><var>N</var><sub>rückläufig</sub> = 1.500 · <span class="frac"><span>1 − 0,9<sup>10</sup></span><span>0,1</span></span> ≈ 9.800 Rechnungen</div>
+</div>
+++++
+
+Die Kosten wurden näherungsweise skaliert: Fixe Anteile (Server, Hardware, gemanagte DB, Plattformgebühren) bleiben, volumenabhängige Anteile (Speicher, Snapshots, Replikation; siehe Eingangswerte) folgen dem Verhältnis der Rechnungsmengen (×1,59 bzw. ×0,65). Im ersten Jahr bildet das Basisvolumen von 1.500 Rechnungen (bzw. ±10 %) den Ausgangspunkt; die volumenabhängigen Abweichungen machen im ersten Jahr nur wenige Euro aus. Die Werte sind deshalb grobe Näherungen.
+
+=== Break-even
+
+++++
+<div class="formula">
+<div class="formula__row"><var>t</var><sub>BE</sub> = <span class="frac"><span><var>A</var></span><span><var>m</var><sub>Miete</sub> − <var>m</var><sub>Strom</sub></span></span></div>
+</div>
+++++
+
+[.formula-legend]
+* _t_~BE~ = Monate bis zum Break-even
+* _A_ = Anschaffung
+* _m_~Miete~, _m_~Strom~ = monatliche Miete bzw. Stromkosten
+
+Beispiel Mini-PC + NAS + Kaltarchiv: Anschaffung 900–1.190 €, Strom und Archiv ca. 7–10 €/Monat. Break-even = Anschaffung ÷ (Miete − eigene Monatskosten). Gegenüber Managed Cloud (125–267 €/Monat): ca. 3–10 Monate. Gegenüber Hyperscaler-Instanz mit Laufzeitbindung (100–130 €/Monat): ca. 7–13 Monate. Gegenüber Servermiete + gemanagter DB & Storage-Services (62–138 €/Monat): ca. 7–23 Monate. Gegenüber Servermiete + Storage (50–113 €/Monat): ca. 8–30 Monate. Gegenüber reiner Servermiete (40–90 €/Monat): ca. 11–39 Monate (fachlich unvollständig, da ohne Datenbankservices und Snapshots). Ohne Inflation, ohne Ersatz, ohne Personal.
+
+=== Personentage
+
+Die Personentage in <<betrieb>> basieren auf den praktischen Erfahrungswerten der Projektleitung aus dem Realbetrieb (Einlaufphase ca. 6 Monate: eigener Server 0,75–1,5 PT mit Referenzhardware und Betriebsskripten, Cloud-Modelle ab 2,5–3 PT, zwei geplante Wartungsfenster pro Jahr bei eigenem Server, wöchentliche Kontrollen in der Cloud).
+
+Die Verwaltungswerkzeuge `lt` und `lhorse` werden erst nach einer Reife- und Härtungsphase unter Realbedingungen allgemein veröffentlicht, voraussichtlich Q4/2027 bis Q1/2028. Andere Betriebe können die ausgewiesenen geringen Aufwände vorab realisieren, indem sie die evaluierte Referenzhardware oder die standardisierten Betriebsskripte des Projekts einsetzen. Das Betriebskonzept und die Erstinstallation in der Cloud (ca. 14 Personentage) ist eine erste Schätzung des Projekts für die erstmalige Bereitstellung (Greenfield oder Provider-Setup). Es gilt für Servermiete und Managed Cloud gleichermaßen und hängt vom Cloud-Anbieter ab, etwa von Dienstumfang, Rechtemodell und Sicherungsangebot. Wer dieses Konzept extern vergibt, rechnet: Personentage × Tagessatz.
+
+=== Nicht enthalten
+
+* *Personalkosten:* Tagessätze unterscheiden sich je Betrieb stark. Berechnung: Personentage pro Jahr × eigener Tagessatz.
+* Steuern und Umsatzsteuer-Behandlung (alle Beträge als Näherungswerte ohne Steuerbetrachtung)
+* Abschreibung und Finanzierung
+* Migration und Umzug, auch erzwungene Migrationen bei Versionsende von Cloud-Diensten (Aufwand: <<betrieb>>)
+* Kosten durch Ausfälle oder Datenverlust
+* Zusatzdienste wie Monitoring oder Support-Verträge
+
+Software-Lizenzen fallen nicht an: Alle Komponenten sind Open Source.
+
+=== Grenzen
+
+* *Zweck und Geltung:* Diese Modellrechnung dient zur Verdeutlichung der Vor- und Nachteile der verschiedenen Betriebsverfahren. Sie ersetzt keine exakte Planung und Auswahl anhand der jeweils gültigen Konditionen der entsprechenden Cloud-Provider und IT-Systemhäuser.
+* Alle Preise sind Näherungen Stand Oktober 2026. Preise der Cloud-Anbieter ändern sich (siehe <<realitaetscheck,Preisentwicklung>>).
+* Die Modelle sind vereinfacht. Reale Angebote unterscheiden sich in Leistung, SLA und Standort.
+* Personalaufwand fehlt in den Summen. In der Modellbetrachtung wiegt er bei Cloud-Betrieb tendenziell schwerer (5–10 gegenüber 2–3 PT pro Jahr), weil Internet-Absicherung, Rechteverwaltung und Kostenkontrolle hinzukommen. Die Werte für den eigenen Server beruhen auf den Erfahrungen der Projektleitung und sind nicht unabhängig geprüft. Managed Services entlasten bei Plattform- und Patch-Arbeit. Der eigene Server trägt Hardwareausfall und Sicherung selbst. Das ist eine Tendenz, keine Messung.
+* Volumenszenarien (±10 % pro Jahr) sind Näherungen.
+* Das Dokument ersetzt keine Steuer-, Rechts- oder Fachberatung.
+
+[[quellen]]
+== Quellen
+
+[.lead]
+Alle Quellen sind frei zugänglich (ohne Bezahlung oder Login); verlinkt werden nur Behörden, Hochschulen, Forschungseinrichtungen und renommierte Fachmedien. Abrufdatum: 02.10.2026. Verweise im Text als [Q1] usw.
+
+* [[q1]]*Q1* Statistisches Bundesamt (Destatis): _Jedes zweite Unternehmen nutzt kostenpflichtige Cloud-Services_ (Pressemitteilung Nr. 416, 24.11.2025). https://www.destatis.de/DE/Presse/Pressemitteilungen/2025/11/PD25_416_52911.html[destatis.de^]
+* [[q2]]*Q2* Umweltbundesamt: _Green Cloud Computing: Lebenszyklusbasierte Datenerhebung zu Umweltwirkungen des Cloud Computing._ TEXTE 94/2021. https://www.umweltbundesamt.de/publikationen/green-cloud-computing[umweltbundesamt.de^]
+* [[q3]]*Q3* Umweltbundesamt: _Vergleich der durchschnittlichen Emissionen einzelner Verkehrsmittel im Personenverkehr_ (2024). https://www.umweltbundesamt.de/themen/verkehr/emissionsdaten[umweltbundesamt.de^]
+* [[q4]]*Q4* Bundesamt für Sicherheit in der Informationstechnik (BSI): _IT-Grundschutz-Kompendium, Baustein CON.3 Datensicherungskonzept,_ Edition 2023. https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/03_CON_Konzepte_und_Vorgehensweisen/CON_3_Datensicherungskonzept_Edition_2023.pdf[bsi.bund.de (PDF)^]
+* [[q5]]*Q5* IETF (D. Crocker): _Internet Mail Architecture._ RFC 5598. https://www.rfc-editor.org/rfc/rfc5598[rfc-editor.org^]
+* [[q6]]*Q6* heise online: _Hetzner increases prices from April 1_ (23.02.2026). https://www.heise.de/en/news/Hetzner-increases-prices-from-April-1-11185981.html[heise.de^]
+* [[q7]]*Q7* heise online: _Für manche günstiger, für manche teurer: Neue Preise für die Google Cloud_ (15.03.2022). https://www.heise.de/news/Fuer-manche-guenstiger-fuer-manche-teurer-Neue-Preise-fuer-die-Google-Cloud-6550031.html[heise.de^]
+* [[q8]]*Q8* heise online: _EU-Cloud-Wettbewerber: Microsofts Preissteigerungen reichen an Erpressung._ https://www.heise.de/news/EU-Cloud-Wettbewerber-Microsofts-Preissteigerungen-reichen-an-Erpressung-8848157.html[heise.de^]
+* [[q9]]*Q9* The Register: _Google introduces new Cloud infrastructure pricing_ (14.03.2022). https://www.theregister.com/2022/03/14/google_introduces_new_cloud_infrastructure/[theregister.com^]
+* [[q10]]*Q10* heise online: _Up to 200 percent: Cloud hoster Hetzner adjusts prices again._ https://www.heise.de/en/news/Up-to-200-percent-Cloud-hoster-Hetzner-adjusts-prices-again-11333037.html[heise.de^]
+* [[q11]]*Q11* Bundesinformationszentrum Landwirtschaft (BZL, Bundesanstalt für Landwirtschaft und Ernährung): _Wie viel CO₂ binden Wälder?_ Datenbasis: Kohlenstoffinventur 2017 des Thünen-Instituts. https://www.landwirtschaft.de/umwelt/klimawandel/rolle-der-landwirtschaft/wie-viel-co2-binden-waelder[landwirtschaft.de^]
+* [[q12]]*Q12* Bundesministerium für Landwirtschaft, Ernährung und Heimat / Thünen-Institut: _Vierte Bundeswaldinventur 2022 — Klimaschützer Wald._ https://www.bundeswaldinventur.de/vierte-bundeswaldinventur-2022/klimaschuetzer-wald[bundeswaldinventur.de^]
+* [[q13]]*Q13* Amazon Web Services: _New – AWS Public IPv4 Address Charge + Public IP Insights_ (Jeff Barr, 28.07.2023, wirksam 01.02.2024). https://aws.amazon.com/blogs/aws/new-aws-public-ipv4-address-charge-public-ip-insights/[aws.amazon.com^]
+* [[q14]]*Q14* Umweltbundesamt: _CO₂-Emissionen pro Kilowattstunde Strom 2025 nur leicht gesunken._ Abruf 11.10.2026. https://www.umweltbundesamt.de/themen/co2-emissionen-pro-kilowattstunde-strom-2025-nur[umweltbundesamt.de^]
+* [[q15]]*Q15* Umweltbundesamt: _Digitale Dienste / Cloud Computing._ Abruf 11.10.2026. https://www.umweltbundesamt.de/themen/digitalisierung/gruene-informationstechnik-green-it/digitale-dienste-cloud-computing[umweltbundesamt.de^]
+* [[q16]]*Q16* Bundesamt für Justiz: _Energieeffizienzgesetz (EnEfG), Anforderungen an Rechenzentren._ Abruf 11.10.2026. https://www.gesetze-im-internet.de/enefg/__11.html[gesetze-im-internet.de^]
+* [[q17]]*Q17* Umweltbundesamt: _Photovoltaik._ Abruf 11.10.2026. https://www.umweltbundesamt.de/themen/klima-energie/erneuerbare-energien/photovoltaik[umweltbundesamt.de^]

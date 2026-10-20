@@ -1,0 +1,25 @@
+@startuml sequence-upload-receipt
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+database "Valkey\n<size:10>[Cache]</size>" as Cache <<cache>>
+database "PostgreSQL\n<size:10>[Database]</size>" as DB
+database "RustFS\n<size:10>[Object Store]</size>" as S3 <<storage>>
+
+OfficeManager -> WebApp: upload receipt
+WebApp -> Cache: check checksum
+Cache --> WebApp: known / unknown
+WebApp -> DB: verify checksum
+alt new receipt
+  WebApp -> S3: store document
+  WebApp -> DB: save receipt
+  WebApp -> Cache: mark checksum known
+  WebApp --> OfficeManager: new receipt stored
+else duplicate found
+  WebApp --> OfficeManager: existing receipt reused
+end
+
+$SequenceStorageLegend()
+@enduml

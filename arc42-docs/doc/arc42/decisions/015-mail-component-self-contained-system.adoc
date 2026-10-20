@@ -1,0 +1,178 @@
+[[adr-015]]
+= ADR-015: The Mail Component Is a Self-Contained System
+
+== Status
+Accepted, implemented
+
+== Context
+Invoices are generated and stored by the invoicing application; sending them by e-mail is a
+capability an instance can enable or leave off entirely, carrying none of it when unused — no
+container, table, stream, secret or menu entry. The capability is substantial: mail templates with
+a placeholder catalog, an append-only send journal, SMTP submission, and a signed archive package
+per sent mail, since an outgoing invoice mail is evidence for the tax office. None of that is
+invoicing domain knowledge, and it has its own lifecycle: a template change, an SMTP provider
+migration or an archive-format fix has no reason to redeploy the invoicing application, or vice
+versa.
+
+== Decision
+The mail component is a *self-contained system* next to the invoicing application: it owns its
+own data, is its own deployment unit with its own release cycle, and stays useful — and
+independently deployable — without the other. Integration happens only at the edges, over a
+small, explicit contract and asynchronous events, never through shared internals or a shared
+database.
+
+=== Bounded context and deployment
+The component is a separate bounded context, in an Invoice Issuer/Invoice Recipient relationship
+with the invoicing context, developed as its own Maven module (`kotlin-email`) and deployed as its
+own image, with its own object-storage bucket and access key, its own two NATS streams, its own
+Valkey database index and its own archive signing key. It reuses the instance's shared
+infrastructure services but shares no data with the invoicing stack, and is enabled per instance by
+one switch, off by default. It owns what it sends; the invoicing application keeps only a projection
+("this document was sent"), fed by a result event that stays true even if the component is later
+decommissioned.
+
+=== Amendment 2026-09-25: one repository, two self-contained systems
+The component's source moved from its own repository (`little-trotter-email`) into this repository
+as the Maven module `kotlin-email`; runtime and release independence are unchanged.
+Self-containment is a property of runtime, data and release, not of the repository. The component
+therefore lives in this repository as the module `kotlin-email` while every runtime boundary of this
+decision stays in force: its own image, schema, Flyway directory and roles, bucket and key pair,
+NATS streams, Valkey index, archive signing key and the single `LT_MAIL_ENABLED` switch, off by
+default.
+
+Reasons: one rule set (a single `detekt.yml`, `AGENTS.md`, ArchUnit patterns and build lock) keeps
+both systems at the same quality bar without copying and drift checks; the published-language
+contract in `kotlin-mail-contract` changes atomically with both of its adapters, with both sides'
+contract tests in one build; one repository means one project memory and one access grant for
+agents.
+
+The boundary is enforced by the build, not by repository separation:
+
+* `kotlin-email` depends on `kotlin-mail-contract` and `kotlin-shared` only, never on
+  `kotlin-invoice` or `kotlin-xpdf` (Maven), and neither side imports the other's
+  packages (ArchUnit `MailModuleBoundaryTest` with a negative specimen, and its counterpart in
+  `ArchitectureRulesTest`).
+* The contract package `de.littletrotter.shared.mail` is the only shared contract and lives in its
+  own module `kotlin-mail-contract` — the dedicated contract artifact anticipated by
+  <<adr-016,ADR-016>>. Changes stay additive, versioned by schema version, and never shared domain
+  logic. Each side translates the contract in
+  its own adapter (`acl` package); neither domain nor application code of either side sees it.
+* The component is built, tested and published as its own image (`email` in the image pipeline);
+  a component release never requires redeploying the invoicing application, and vice versa.
+  Own release tags `email-v*`, analogous to the `shared-v*` releases of `kotlin-shared`, are
+  planned.
+
+=== Amendment 2026-10-02: UI in the invoice app, component headless
+The mail views (compose, journal, templates) moved from the component into the invoicing
+application; `kotlin-email` serves only its REST API `/mail/api/*` and the NATS adapters.
+
+Reasons: the component's own Vaadin UI was a second web application with its own session, theme,
+translations and test stack, embedded into the invoicing UI as a frame; every change to
+navigation, permissions or wording had to be made twice, and the frame forced the `forward_auth`
+edge and a shared edge secret. One UI in the invoicing application uses its existing OIDC login,
+`AppPermission` model, i18n bundles and Karibu tests, while the component keeps owning data,
+rules and the send path.
+
+Decision details:
+
+* The invoicing application hosts the routes `mail/compose/:draftId`, `mail/journal` and
+  `mail/templates`, gated by the permissions `MAIL_COMPOSE_AND_SEND`, `MAIL_JOURNAL_VIEW` and
+  `MAIL_TEMPLATE_EDIT` in `RouteAccess`. The views depend only on narrow input ports in
+  `application.mail.port.inbound`; HTTP adapters in `infrastructure.mail` implement the outbound
+  ports and translate contract types in `acl`.
+* The component authenticates callers by a bearer token and the forwarded `X-Lt-User` and
+  `X-Lt-Groups` identity headers, and checks the groups again server-side
+  (`MailEdgeIdentityMechanism`, `MailRoleProvider`). It stays unreachable from outside: the edge
+  answers 404 for `/mail/*`. There is no `forward_auth` and no edge secret; the
+  `GET /internal/auth/verify` hop is no longer part of the mail path.
+* The compose draft is consumed only when the send is queued, so an abandoned or failed attempt
+  leaves the draft reusable.
+* `email-ui`, Vaadin and the browser-driven integration tests are removed from `kotlin-email`;
+  `email-e2e-tests` drives the REST API only.
+
+The runtime boundaries of this decision (own image, schema, bucket, streams, switch) are
+unchanged.
+
+[[adr-016]]
+=== Published-language contract
+The two systems share a *published language* and nothing else: data classes, enums, constants and
+one placeholder codec — no domain logic, no entities, no service interface of either side. Each
+side maps the contract into its own local model at its own adapter, so neither side's internal
+model leaks across the boundary. The three document-family enums (invoicing's billed format, the
+contract's crossing value, the component's template family) stay separate on purpose: unifying
+them would couple the two release cycles, since a value one side does not know is an
+anti-corruption-layer decision, not a compile error.
+
+Because the two sides deploy independently, every request and event carries a schema version, and
+unknown fields are ignored on read; enum values travel by name, never by ordinal. The contract
+package `de.littletrotter.shared.mail` lives in its own Maven module, `kotlin-mail-contract`,
+so the contract changes only together with both of its adapters and stays free of any other
+shared code.
+
+[[adr-019]]
+=== Schema and delegated identity
+The component's tables live in a schema of their own inside the invoicing application's existing
+PostgreSQL database — not a database of its own, and not a schema shared with the invoicing tables
+via `search_path`. It keeps its own Flyway migration directory, its own history table, and its own
+migrator and application roles granted on that schema and nothing else; its migrations manage that
+schema exclusively. One database to back up, restore and monitor keeps the mail journal restorable
+to the same point in time as the invoices it documents.
+
+The component has no identity provider, user store or login of its own, and is not reachable from
+outside the machine. The invoicing application is its authentication gate: the reverse proxy
+answers 404 for `/mail/*`, and the invoicing application is the only caller: it authenticates the user
+with its own OIDC session and calls the component's REST API with a bearer token and the
+forwarded `X-Lt-User`/`X-Lt-Groups` headers (see the 2026-10-02 amendment). Its one load-bearing
+assumption is that the component is reachable only from the invoicing application's network.
+
+=== Transaction boundary: one journal step, never the whole dispatch
+A database transaction in the component is exactly one journal step. `@Transactional` therefore
+sits on the repository implementations in `service.adapter.persistence` — each method performs one
+state function (`mail.mark_mail_journal_*`) or one insert — and nowhere else on the adapter side;
+the application layer opens no transaction of its own. This is a deliberate departure from the
+invoicing application's rule that transactions are declared in the application layer, for a
+reason: a dispatch is not one atomic unit of work but a chain of steps across three stores, and
+pulling S3 and NATS into one database transaction would only pretend to make them atomic.
+
+The chain is safe without a distributed transaction because every non-database step is idempotent
+and verifiable: the journal row commits (`CREATED`), then `authored.json` is written to S3 under a
+key derived from the journal id with canonical content, then the row commits `QUEUED` together
+with that object's SHA-256, then the envelope is published; the consumer reads the state from the
+row, never from the message, verifies the object against the anchored hash, and claims the single
+SMTP attempt by a compare-and-set on the row (`QUEUED` → `SENDING`). A redelivered envelope on a
+terminal row is a no-op, a stalled `QUEUED` row is republished by the sweeper, an orphaned S3
+object (process death between the write and `QUEUED`) costs storage but never correctness, and a
+missing `app.now` on a connection fails the step loudly instead of stamping the server clock.
+`MailTransactionBoundaryTest` (ArchUnit, email-app) enforces that only classes implementing an
+email-core repository port may open a transaction on the adapter side.
+
+== Consequences
+
+=== Positive
+* An instance without the capability carries nothing of it — no container, schema, bucket,
+  stream, Valkey index, route, secret or backup entry; the invoicing application's image is
+  identical either way.
+* Independent release cycles and failure domains for the send path, one database and one identity
+  to administer, and a contract that keeps neither side's persisted values or deployment timing
+  constraining the other's.
+
+=== Negative
+* A cross-context foreign key from a mail row to an invoice row is physically possible; the
+  boundary is enforced by grants and review, not by the database engine.
+* The mail views are unusable without the invoicing application: they are part of it, so if it
+  is down no mail can be composed or inspected even though the component itself is healthy.
+* A change to the component's REST API requires a matching change to the invoicing application's
+  HTTP adapters; the frozen contract package and schema versions limit that coupling.
+
+=== Mitigation
+* Everything the capability adds is gated on one switch — container, schema, bucket, streams,
+  route, secrets, backup set — so "enabled" and "disabled" are two states, not a matrix of
+  half-configured ones.
+* The schema's exclusivity and the internal-only requirement are each a rule with a single owner
+  (the migration directory; the reverse-proxy configuration), stated in code, not left implicit.
+
+'''
+_Architecture Decision Record — source: `kotlin-email`,
+`kotlin-mail-contract/src/main/kotlin/de/littletrotter/shared/mail/`,
+`kotlin-invoice/src/main/kotlin/de/littletrotter/infrastructure/mail/`,
+`docker/caddy/Caddyfile`._

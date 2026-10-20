@@ -1,0 +1,33 @@
+
+[[adr-035]]
+= ADR-035: Archiving Is the Operator's Responsibility
+
+== Status
+Accepted, 2026-10-07
+
+== Context
+Invoices must be kept for 8 years, books and annual statements for 10 years. The application is a pure invoicing program: issued invoices
+are handed over to the business's bookkeeping or tax advisor. It is not a document archive (<<adr-034,ADR-034>>): there is no bucket versioning, no
+retention and no archive package that counts as an independent copy. Invoices are normally
+dispatched by e-mail, so the recipient-bound copy exists in the mail path as well.
+
+== Decision
+Archiving and retention are the operator's responsibility. Sent invoices, including the XML of
+the e-invoice, are stored in the bookkeeping or archive system. Because invoices are sent by
+e-mail, an e-mail archive that stores mail immutably is recommended. The application keeps its
+document store for operation and for the recovery described in ADR-034, not as a retention
+medium.
+
+== Consequences
+* The operator must archive every sent invoice with its XML outside the application.
+* An immutable e-mail archive covers the dispatched copy; invoices not dispatched by mail must
+  reach the archive or bookkeeping system by another route.
+* Backups of the application database and object store are an operational safeguard, not an
+  archive.
+* Data access during a tax audit is provided by that archive or the bookkeeping
+  system; the application delivers XML and PDF.
+* Bookkeeping, DATEV export, payment tracking, dunning and receiving incoming e-invoices are out
+  of scope of the application.
+
+'''
+_Architecture Decision Record — source: Product owner decision, 2026-10-07._

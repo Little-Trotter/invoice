@@ -1,0 +1,73 @@
+[[adr-018]]
+= ADR-018: Apache POI for the Excel Export, Not a Hand-Rolled or Commercial Alternative
+
+== Status
+Accepted
+
+== Context
+The invoice export lets an accountant or auditor pull every invoice header, position and
+change-journal entry into a spreadsheet and recalculate the totals independently. That sets
+three requirements for the generator: the file must be a genuine `.xlsx` that opens without a
+repair dialog; money cells must stay numeric so the spreadsheet can sum them; and an export of
+tens of thousands of rows must not be held in memory. Only `kotlin-invoice` needs the export;
+`kotlin-xpdf` builds to a native image and must not gain a JVM-only dependency.
+
+== Decision
+Apache POI (`poi-ooxml`, Apache-2.0, pinned in the root `pom.xml`) is the export's only
+document-generation dependency, used from one package in `kotlin-invoice`. Files are written
+with POI's streaming workbook (bounded row window, temp files compressed, disposed in a
+`finally`), and every cell style is created once per workbook, because POI caps the number of
+styles per workbook. The full `poi-ooxml` artifact is used, not the lite variant, because the
+control-column highlighting needs conditional formatting. The workbook's palette mirrors the
+application's design tokens; the header fill is Material Blue 700 rather than the accent blue
+to keep a 5.4:1 contrast against white text, and a test guards that ratio.
+
+=== Alternatives Considered
+* *Hand-written SpreadsheetML.* Avoids the dependency, but shared strings, styles and package
+  relationships written by hand are exactly the class of subtle file-format bug the export cannot
+  afford, and every value guard POI provides would have to be reimplemented.
+* *CSV renamed to `.xls`.* Not a spreadsheet: no sheets, cell types, conditional formatting or
+  frozen header. The positions-only CSV export stays deliberately narrow for that reason.
+* *A commercial library.* Adds license cost and a closed-source dependency to a project that
+  otherwise runs on Apache-2.0/MIT-class licenses; rejected on that basis alone.
+
+== Consequences
+
+=== Positive
+* Every exported file is verified in tests by reading it back with POI, proof that it opens.
+* The streaming writer keeps memory bounded regardless of export size.
+* Apache-2.0 like the rest of the dependencies; no `NOTICE` entry needed.
+
+=== Negative
+* `xmlbeans` and `commons-compress` come along transitively and are not small; they land in the
+  `kotlin-invoice` image.
+* `log4j-api` (API only, never `log4j-core`, so no Log4Shell exposure) is a second logging
+  facade in the module and is routed to the Quarkus log manager.
+
+=== Mitigation
+* Confined to `kotlin-invoice`; `kotlin-xpdf` does not and must not depend on POI.
+* The dependency, its transitives and the pinning are explained next to `${poi.version}` in
+  `pom.xml`, so a version bump needs no archaeology.
+
+== Data protection
+The export contains personal data (names, addresses, email addresses, VAT identification numbers and bank details of contact and signatory persons). The application and the operator split the duties as follows.
+
+=== Enforced by the application
+* The export dialog shows a privacy hint for the selected format before the download starts; CSV has no cover sheet, so for CSV the dialog is the only notice.
+* The first sheet, "Export", carries the creation time, the creating user, the applied selection and the application version, so a copy found later can be attributed.
+* The same sheet ends with a data protection section in seven paragraphs (GDPR Articles 4, 5, 6, 17, 28 and 32) and a closing line stating that it is general guidance, not legal advice. The texts are the i18n keys `invoiceExport.privacy.<n>.*` and `invoiceExport.cover.closing`; tests assert that the sheet writer emits all seven paragraphs in order and that every key resolves.
+* The workbook is streamed to the download response. The application keeps no copy; POI temporary files are disposed in a `finally`.
+* The workbook is labelled a snapshot copy and not an invoice document; the archived e-invoices remain authoritative.
+
+=== Operator responsibility
+* Data processing agreement with any service provider that receives the file.
+* Storage with access control or encryption, no transfer by unencrypted email, and deletion of the copy after use.
+* Legal basis for any use beyond the original purpose, and the retention rules for the originals.
+* The data protection officer decides on the concrete handling; the cover sheet text is orientation only.
+
+=== Not provided
+The export has no role restriction of its own and no dedicated audit record of who exported which selection beyond the creator named on the cover sheet. Both would be a separate decision.
+
+'''
+_Architecture Decision Record — source: `pom.xml` (`${poi.version}`),
+`kotlin-invoice/src/main/kotlin/de/littletrotter/infrastructure/export/workbook/`._

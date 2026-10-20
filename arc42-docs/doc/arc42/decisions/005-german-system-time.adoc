@@ -1,0 +1,47 @@
+[[adr-005]]
+= ADR-005: Displayed System Time Is Always German Local Time
+
+== Status
+Accepted
+
+== Context
+The application's containers run without an explicit `TZ`, i.e. on UTC. Every display that used
+`ZoneId.systemDefault()` or a zone-less `LocalDateTime.now()` (print-job timestamps, the message
+center, the validation report's "checked at" timestamp, the status-tile dialog, backup
+timestamps) therefore rendered UTC — two hours off from German local time during summer (CEST).
+
+== Decision
+The application always displays German local time (`Europe/Berlin`, DST-aware), as a product
+property rather than a deployment setting: Little Trotter X-Invoice is a German e-invoicing product,
+and its primary audience reads timestamps in German local time regardless of what timezone the host
+happens to run in. This is implemented in two layers: a central constant,
+`GermanTime.ZONE = ZoneId.of("Europe/Berlin")` (`kotlin-shared`), which every display call site and
+every zone-less `LocalDateTime.now()` write path (including the two `analyzedAt` persistence writes)
+uses instead of `ZoneId.systemDefault()`; and, as a supporting deployment measure,
+`TZ: Europe/Berlin` set on the application's own containers in the root compose file, so log
+timestamps also read German local time. Persisted timestamps stored as `OffsetDateTime`/`Instant`
+are untouched — they already carry their own offset and remain correct as points in time; only the
+conversion used for *display* is German local time.
+
+== Consequences
+
+=== Positive
+* Display timestamps are correct and consistent regardless of the host's system timezone or
+  container `TZ` configuration — the code-level conversion does not depend on the deployment measure
+  to be correct.
+* A single named constant makes every display call site auditable by search, rather than each
+  one independently deciding which zone to use.
+
+=== Negative
+* A German-only default time-display policy requires explicit configuration or per-tenant/branch
+  settings when serving users outside Germany's timezone in a multi-region deployment.
+
+=== Mitigation
+* The core data layer, event streams, and object storage persist strictly in UTC (<<adr-029,ADR-029>>).
+  With `Europe/Berlin` serving as the out-of-the-box default, localized presentation can be parameterized
+  per branch or user profile to support multi-timezone operations across distributed branch offices
+  (Niederlassungen) for mid-sized enterprises (Mittelstand).
+
+'''
+_Architecture Decision Record — source: `kotlin-shared` `GermanTime`, root `docker-compose.yml`
+(`TZ: Europe/Berlin`)._

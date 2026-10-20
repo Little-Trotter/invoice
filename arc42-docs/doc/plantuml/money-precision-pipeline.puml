@@ -1,0 +1,45 @@
+@startuml money-precision-pipeline
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam linetype ortho
+skinparam roundCorner 0
+skinparam nodesep 50
+skinparam ranksep 70
+
+skinparam rectangle {
+  FontSize 12
+  FontStyle plain
+  FontColor #ffffff
+  BorderColor #2D66B0
+  BackgroundColor #3C88EB
+}
+
+skinparam database {
+  FontSize 12
+  FontStyle plain
+  FontColor #ffffff
+  BorderColor #1456AE
+  BackgroundColor #1662C5
+}
+
+skinparam arrow {
+  Color #5F6368
+  FontColor #202124
+  FontSize 11
+}
+
+rectangle "<b>1. Wide Accumulation (Scale 4+)</b>\n<color:#D5E8FF>Money.exact(...) | plusExact()</color>\nNo intermediate rounding drift" as S4 #1A73E8
+
+rectangle "<b>2. Quotation & Normalization (Scale 2)</b>\n<color:#D5E8FF>Money.of(...) | +, -, *, /</color>\nHALF_UP to Money.SCALE (2 decimals)\nallocate(): largest-remainder distribution" as S2 #3C88EB
+
+rectangle "<b>3. Domain Write Model & Enforcement</b>\n<color:#D5E8FF>MoneyConverter (JPA AttributeConverter)</color>\nArchUnit: Ban of raw BigDecimal for money" as Converter #5F6368
+
+database "<b>PostgreSQL Storage</b>\n<color:#D5E8FF>NUMERIC(14,2) / exact base-10</color>\nGuaranteed zero binary float drift" as DB
+
+S4 -down-> S2 : Single rounding point\nat display / invoice total
+S2 -down-> Converter : Normalizes on write
+Converter -down-> DB : Stores exact decimal
+
+@enduml

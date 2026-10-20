@@ -1,0 +1,25 @@
+@startuml sequence-save-invoice-header
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "little-trotter-invoice" as WebApp
+database "PostgreSQL\n<size:10>[Database]</size>" as DB
+
+OfficeManager -> WebApp: save shared header / B2B form
+WebApp -> DB: begin short transaction / load invoice
+DB --> WebApp: current aggregate + version
+WebApp -> WebApp: validate status, version, note and tax decision
+alt validation or persistence failure
+  WebApp -> DB: rollback
+  WebApp --> OfficeManager: retain input + navigable errors
+else valid command
+  WebApp -> DB: write header, note and B2B overrides
+  DB --> WebApp: commit completed
+  WebApp -> DB: reload committed DTO
+  DB --> WebApp: saved invoice
+  WebApp --> OfficeManager: show saved state
+end
+
+$SequenceStorageLegend()
+@enduml

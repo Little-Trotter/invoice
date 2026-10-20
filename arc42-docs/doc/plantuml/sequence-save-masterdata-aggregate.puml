@@ -1,0 +1,58 @@
+@startuml sequence-save-masterdata-aggregate
+
+!include sequence-styling.puml.inc
+
+actor "Office Manager" as OfficeManager
+participant "Vaadin UI\n<size:10>[SenderProfileView / Form]</size>" as UI
+participant "Application Boundary\n<size:10>[SellerProfileService / Module]</size>" as App
+participant "Aggregate Root\n<size:10>[SenderProfile (Rich Model)]</size>" as Aggregate
+participant "Domain Helper\n<size:10>[reconcileOwnedChildren]</size>" as Reconciler
+database "PostgreSQL\n<size:10>[Database (JPA)]</size>" as DB
+
+OfficeManager -> UI: Submit edited seller profile\n(Form DTO with expectedVersion & VAT rows)
+activate UI
+
+UI -> App: save(formDto) / write(rows)
+activate App
+
+App -> DB: Load managed root for edit (findByIdForEdit)
+activate DB
+DB --> App: managed SenderProfile + live version
+deactivate DB
+
+App -> App: First-Writer-Wins check:\nformDto.expectedVersion == managed.version
+alt version mismatch (Stale form)
+  App --> UI: OptimisticLockException
+  UI --> OfficeManager: Conflict error notification (reload required)
+else version match
+  App -> App: Map DTO rows to immutable commands\n(List<SellerVatRegistrationCommand>)
+
+  App -> Aggregate: updateVatRegistrations(commands, today)
+  activate Aggregate
+
+  Aggregate -> Aggregate: Map commands to candidates\n(SellerVatRegistration.of)
+  Aggregate -> Reconciler: reconcileOwnedChildren(current, proposed, strategy)
+  activate Reconciler
+
+  Reconciler -> Reconciler: Invariant check (assertUniqueCountries)
+  Reconciler -> Reconciler: Match by key (country):\nretain DB identity, add new, remove omitted
+  Reconciler --> Aggregate: updated collection (private rows modified)
+  deactivate Reconciler
+
+  Aggregate --> App: aggregate state updated
+  deactivate Aggregate
+
+  App -> DB: Commit transaction (advance @Version)
+  activate DB
+  DB --> App: commit completed
+  deactivate DB
+
+  App --> UI: Success
+  deactivate App
+
+  UI --> OfficeManager: Show saved state & updated version
+  deactivate UI
+end
+
+$SequenceStorageLegend()
+@enduml

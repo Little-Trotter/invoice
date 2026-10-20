@@ -1,0 +1,62 @@
+@startuml state-generation-job-lifecycle
+
+skinparam nodesep 40
+skinparam ranksep 50
+
+skinparam defaultFontName "Roboto, Segoe UI, sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+
+skinparam state {
+  FontSize 12
+  FontStyle bold
+  FontColor #ffffff
+  ArrowColor #5F6368
+  ArrowFontColor #202124
+  ArrowFontSize 11
+  BackgroundColor #3C88EB
+  BorderColor #2D66B0
+}
+
+skinparam state<<initial>> {
+  BackgroundColor #1A73E8
+  BorderColor #1456AE
+}
+
+skinparam state<<progress>> {
+  BackgroundColor #F4511E
+  BorderColor #C43D12
+}
+
+skinparam state<<terminal_ok>> {
+  BackgroundColor #188038
+  BorderColor #115C28
+}
+
+skinparam state<<terminal_err>> {
+  BackgroundColor #D93025
+  BorderColor #A52219
+}
+
+[*] --> PENDING : createJob()\n[persisted in DB]
+
+PENDING : Awaiting dispatch or recovery
+PENDING -[#1A73E8]-> DELEGATED : DocumentJobPublisher.publish()\n[published to JetStream]
+
+state DELEGATED <<progress>> {
+  DELEGATED : In-flight in kotlin-xpdf
+  DELEGATED : heartbeat: message.inProgress()
+}
+
+DELEGATED -[#188038]-> COMPLETED : ResultConsumer receives success\n[PDF/XML in RustFS]
+DELEGATED -[#D93025]-> FAILED : ResultConsumer receives error\nor poison DLQ
+
+state "Recovery Check\n(Message gone?)" as RecoveryCheck <<initial>>
+DELEGATED -[#F4511E,dashed]-> RecoveryCheck : Stale (cutoff >= 2 min)
+RecoveryCheck -[#F4511E]-> PENDING : Yes (burned attempt)
+RecoveryCheck --> DELEGATED : No (still in flight/stream)
+
+COMPLETED --> [*]
+FAILED --> [*]
+
+@enduml

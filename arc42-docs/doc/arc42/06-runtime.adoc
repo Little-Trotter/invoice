@@ -1,0 +1,347 @@
+= Runtime View
+
+The scenarios below are the load-bearing runtime paths of the system, each presented as one sequence
+diagram per use case, kept at container level rather than at class level. The concrete classes, NATS
+subjects, and infrastructure-level guarantees behind each queue hop are covered once in
+<<_messaging_event_driven_architecture,Messaging>>; this chapter cross-references that section
+instead of repeating it. See <<_building_block_view,Building Block View>> for the containers and
+components involved.
+
+[[_save_invoice_header]]
+== Save Invoice Header and B2B Values
+
+.Sequence: Save Invoice Header
+image::sequence-save-invoice-header.svg[Sequence diagram: saving an invoice header with its B2B values]
+
+The standard and guided entry views use the same bound fields and submit one
+`UpdateInvoiceHeaderCommand`. `InvoiceHeaderUpdateService.updateHeader` verifies status and
+version, applies the invoice-owned note snapshot and its provenance, merges previously
+unmapped B2B header values into editable free text once, and evaluates a submitted tax
+decision. Invoice fields and B2B overrides commit in the same PostgreSQL transaction.
+A failed validation or write rolls back the entire command; the UI retains its input and
+shows navigable field errors. The `EditInvoiceHeaderUseCase` implementation reloads the DTO
+after the transactional call returns, before the UI reports success. PDF/XML read the saved
+note, not a live provider note.
+
+Invoice unit labels use the unit catalogue's explicit translation keys rather than derived
+enum names. German is the default and English is selectable. Persistence and XML keep their
+ordinal/UN-ECE contracts; user-facing labels and validation arguments are localized at the
+presentation boundary. Category wording remains a separate industry-profile concern.
+
+[[_generate_e_invoice]]
+== Generate E-Invoice
+
+Generating a PDF/A-3b or ZUGFeRD/XRechnung XML document is asynchronous: the Office Manager requests
+generation via the UI, `GenerationJobCreationService.createJob()` validates invoice state (`VOIDED`
+rejected, except for a `REPRODUCTION` job, which the document recovery requests only after the stored
+original, an identical copy in the store and the mail journal all came up empty; it renders the frozen
+state again and changes no invoice data), stores a `GenerationJob` in `PENDING`, and returns immediately.
+
+.Sequence: Generate E-Invoice
+image::sequence-generate-e-invoice.svg["Sequence diagram: asynchronous e-invoice generation across application, NATS and renderer"]
+
+The job is dispatched via NATS JetStream to `kotlin-xpdf`, which renders documents via Typst and
+Mustang Project (embedded KoSIT validator) and stores them in RustFS. The result queue notifies
+`little-trotter-invoice`: the job is marked terminal (`COMPLETED`/`FAILED`) and UI status chips
+update via Vaadin server push (with a fallback poll tick).
+
+*Job lanes:* every `GenerationJob` carries a lane (`generation_job.job_lane`, `INTERACTIVE` or `BULK`) that `createJob` receives as a required parameter and that never changes afterwards. Interactive: a user waits in the UI (send, print, credit note issued from the UI). Bulk: import, regeneration, reproduction, scheduled and admin sweeps, quote documents.
+
+[cols="1,2,2",options="header"]
+|===
+|Aspect |Bulk lane |Interactive lane
+|Subject |`document-jobs` |`document-jobs-interactive`
+|Durable consumer (kotlin-xpdf) |`kotlin-xpdf-group` |`kotlin-xpdf-interactive`
+|Worker threads |`JOB_WORKER_THREADS` |`JOB_INTERACTIVE_WORKER_THREADS` (default 1)
+|Dispatch bulkhead |`invoice.generation.bulkhead.max-concurrent-calls` |`invoice.generation.interactive-bulkhead.max-concurrent-calls` (default 4)
+|Fast-path publish |shared managed executor |dedicated small executor
+|===
+
+Both subjects live in the stream `LITTLE_TROTTER_JOBS`; results use the shared subject `document-job-results`. The pending-job poller orders interactive jobs before bulk jobs, then by creation time. Recovery and republish use the stored lane.
+
+.State Machine: Generation Job Lifecycle & Recovery
+image::state-generation-job-lifecycle.svg[State diagram of the generation job lifecycle including recovery]
+
+*Robustness & Recovery Principles:*
+
+* *Lease Heartbeat*: `kotlin-xpdf`'s pull consumer leases each job (`ackWaitSeconds = 120s`) and
+sends periodic heartbeats (`ackWaitSeconds / 3`).
+* *Durable Recovery Scan*: The worker scans hourly (`invoice.jobs.recovery-interval`) and on
+startup. It resets stale `DELEGATED` jobs (`staleCutoffMinutes = 2`) back to `PENDING` only if their
+message actually vanished from the stream, burning one attempt.
+* *Dispatch Gate*: `DocumentJobDispatchGate` applies a `@Bulkhead`
+(`invoice.generation.bulkhead.max-concurrent-calls`) to bound concurrent bulk dispatches against memory
+limits. Interactive dispatches use a separate bulkhead
+(`invoice.generation.interactive-bulkhead.max-concurrent-calls`, default 4), so concurrent bulk dispatches cannot reject them. A durable database state ensures resilience without in-process retry.
+
+[[_render_the_combined_document]]
+== Render the Combined Document (Invoice Pages, Receipt Annex, BG-24)
+
+Every generation job renders one combined PDF/A-3b document. `kotlin-xpdf` builds it from the frozen invoice state in a fixed order:
+
+. The invoice pages (Typst).
+. The receipt annex: `ReceiptAnnexBuilder` walks `orderedDistinctReceipts()` (invoice-level receipts first, then line-item receipts, within each in BG-24 order) and appends one rasterised page per source page of each receipt. Rasterising isolates the document from foreign PDF defects (fonts, colour spaces) that would break its PDF/A-3 conformance. A page's stored JPEG is reused when present. Every annex page carries a header band "Anlage n/m – <file name>", for a line-item receipt also "Pos. <no>".
+. The embedded e-invoice XML: exactly one file.
+. The attachments (BG-24): `MustangTransactionBuilder` emits one `AdditionalReferencedDocument` (type code 916, `application/pdf`) per distinct receipt, at document level only, never per line: BT-122 the file name, BT-123 the receipt description or, when blank, the file name, BT-125 the Base64 content. The trip workbook (XLSX) rides along as an additional BG-24 but is not an annex page.
+
+*Rules:*
+
+* *De-duplication:* receipts are distinct by object key, the first occurrence wins and its positions accumulate. A receipt assigned on invoice level and on a line item appears once, in the annex and in BG-24.
+* *Credit notes:* a credit note copies the receipts of the original, on invoice level and on line items, and therefore renders the same annex.
+* *Size:* receipts are reduced once at upload and never at export (<<_upload_receipt,Upload Receipt>>); the annex embeds the stored version unchanged.
+* *Failure:* a receipt that cannot be loaded raises `ReceiptUnavailableException` and fails the job. No receipt is silently dropped.
+
+*Quote document:* the quote PDF follows the same page rule for the customer files of a quote (`QuoteAttachmentKind.CUSTOMER`, <<adr-042,ADR-042>>).
+
+. Before the job leaves, the quote service stages each PDF customer file into the document worker's bucket under `quotes/<quote-id>/<document-id>/receipts/<sha256>-<file name>`, as it does for the UBL XML, and lists it in `QuoteDocumentPayload.receipts`.
+. The worker verifies the SHA-256 of each staged file and refuses the job on mismatch.
+. After the quote pages, `ReceiptAnnexBuilder` appends the rasterised pages (150 dpi, one page at a time) with the header band "Anlage n/m – <file name> (Seite i/k)" or, for an English quote, "Attachment n/m – <file name> (page i/k)".
+. The size of the final bytes after the post-render mark is checked against the 20 MiB limit; exceeding it fails the job with a readable error.
+
+*Verifiable invariant:* page count >= 1 + number of distinct receipts, and the number of BG-24 attachments (excluding the workbook) equals the number of distinct receipts. The workshop repository's demo load checks this invariant on the generated documents after every demo load.
+
+[[_send_invoice]]
+== Finalize an Invoice
+
+Reaching `ISSUED` is never a direct, synchronous status change — it is always the *result* of a
+successfully completed, `SEND`-triggered `GenerationJob`. "Finalize" (the btn:[Festschreiben] action in
+status `IN_REVIEW`) only requests that job
+(`InvoiceSendService.requestSend`, itself a thin wrapper over
+<<_generate_e_invoice,`GenerationJobCreationService.createJob`>> with `trigger = SEND`) and returns
+immediately; the invoice stays `IN_REVIEW` while the job is in flight (visible via the job's own
+`GenerationJobStatus`, not a new invoice status — see
+<<_invoice_lifecycle_state_machine,Invoice Lifecycle State Machine>>).
+
+.Sequence: Send an Invoice
+image::sequence-send-invoice.svg[Sequence diagram: sending an invoice as a generation job whose result triggers the ISSUED transition]
+
+The job travels the same queue pipeline as <<_generate_e_invoice,Generate E-Invoice>> above. What
+differs is what happens on result delivery: `GenerationJobResultConsumer` calls
+`GenerationJobResultHandler.resolveSendOutcome` as a plain, synchronous, sequential continuation right
+after its own `markCompleted`/`markFailed` call — the arrival of the worker's result *is* the
+trigger, so no polling and no extra `@Scheduled` bean exist anywhere in this path (see
+<<_green_it_principles,Green IT Principles>>). `resolveSendOutcome` reads the job's already-merged
+KoSIT report directly; sending waits while the asynchronous veraPDF check is still pending and
+the setting `VERAPDF_CHECK` is on (<<adr-041,ADR-041>>). Only a `VALID` outcome calls `InvoiceLifecycleService.transition(id, ISSUED)`
+— still the single place that stamps the invoice date, freezes
+the payment-term snapshot, and runs the <<_the_finalization_gate,Finalization Gate>>. A `FAILED` job
+or a `COMPLETED` job that resolves `INVALID`/`UNAVAILABLE` leaves the invoice untouched and records
+a message-center entry instead; a retry always creates a fresh `SEND` job.
+
+After validation the status transition to `ISSUED` commits. `SendTransitionRunner` publishes an
+`InvoiceStatusChangedEvent` only after that commit, so an open cockpit refreshes within a second; the
+5-second poll remains the fallback. The cockpit never reacts to a status that is not yet persisted.
+
+The one exception stays synchronous and manual: an Office
+Manager can override a `VALIDATION_UNAVAILABLE` outcome with an audited reason, calling
+`InvoiceLifecycleService.transition(id, ISSUED, overrideReason)` directly — the Finalization Gate
+escalation, reached from its own explicit UI action rather than the "Send"
+button. `INVALID`/`PENDING`/`NOT_VALIDATED` remain non-overridable.
+
+The `SEND`-triggered job always becomes the invoice's issued document
+(`GenerationJob.issued = true`, set regardless of the invoice's `IN_REVIEW` status at the moment
+the job is created — a deliberate, documented exception to the rule every other job creation
+follows) and is protected by the same single-generation rule as any other issued job once it
+completes.
+
+[[_open_mail_editor]]
+== Open the Invoice E-Mail Editor
+
+The editor opens only on an explicit click on btn:[E-Mail senden] in status `ISSUED`. There is no automatic
+navigation after job completion. The button is gated by one server-side rule, `MailSendGate`, with the
+reasons: job in flight, not issued, validation not passed, document missing, reproduced copy, recipient
+without e-mail address. The readiness query and the mail handover both evaluate this same rule, so the
+UI and the handover can never disagree.
+
+`InvoiceMailDispatchService.compose` runs without a database transaction. It calls
+`InvoiceMailComposeTransactions.prepare`, a short `@Transactional` read of the invoice, its latest
+issued document and the presigned attachment URLs. The synchronous HTTP handover to the mail
+component (`POST /mail/api/compose`) follows with no open database transaction; the UI then
+navigates to `mail/compose/{draftId}`. Opening the editor does not use NATS — the streams
+`LITTLE_TROTTER_MAIL` and `LITTLE_TROTTER_MAIL_RESULT` carry only sending and results.
+
+The result is `MailComposeResult`, either `Ready(handover)` or `DocumentPending`:
+
+* `DocumentPending`: an issued, non-failed generation job exists but has no completed, checksummed
+  document yet. The send action creates its job in the interactive lane, so the document is normally
+  ready within the QS-14 limit even while bulk jobs are queued (<<_generate_e_invoice,Generate E-Invoice>>).
+* No issued job, or only failed jobs: `MailDispatchException`.
+* Reproduced documents stay blocked (`ReproductionNotSendableException`).
+
+`InvoiceMailReadinessQueryPort.readiness(invoiceId)` (implemented by `InvoiceMailReadinessService`)
+returns a `MailSendGate` value: `READY` or the first violated condition in priority order. The gate result drives the
+button state and its tooltip; the job-finished push and the 5 s poll only refresh the view and do not
+open the editor. The quote send path (`QuoteDispatchHandlers` in kotlin-quote) follows the same pattern: `QuoteSendGateQueryPort.gate(quoteId)` evaluates one pure rule (`READY`, `NOT_IN_REVIEW`, `COPY_IN_FLIGHT`, `COPY_STALE`, `COPY_MISSING`, `NO_RECIPIENT_EMAIL`), the dispatch copy is requested explicitly by the user, and `send` composes the mail draft only for `READY`; otherwise it fails with the gate reason.
+
+[[_send_mail_dispatch]]
+== E-Mail Dispatch and Signed Archive Package (`tar.gz`)
+
+After an invoice is finalized and locked (`ISSUED`), the Office Manager triggers the external customer
+dispatch via "Rechnung per E-Mail senden" in `kotlin-invoice`. The mail dispatch is handled by the
+headless Self-Contained System `kotlin-email` (<<adr-015,ADR-015>>):
+
+.Sequence: Send E-Invoice via Mail and Package Archive
+image::sequence-send-mail.svg[Sequence diagram: asynchronous mail dispatch via NATS JetStream, SMTP submission and deterministic archive packaging]
+
+1. *Composition*: `ComposeResource` renders the personalized mail draft using tenant master data,
+evaluated placeholders and the finalized invoice document (PDF/A-3 and embedded XML).
+2. *Enqueue & Handover*: `SendResource` / `SendMailUseCase` stores the request in `mail.mail_journal`
+(`status = QUEUED`) and publishes a dispatch order to NATS JetStream (`mail.send.order`).
+3. *SMTP Delivery*: `MailSendConsumerService` picks up the job from JetStream, transmits the MIME message
+(`.eml`) via authenticated TLS to the corporate SMTP server and updates the journal to `SENT`.
+4. *Operator Archive Handover*: When configured, an identical journal copy of the outbound email is
+simultaneously dispatched to the operator's archive address (<<adr-037,ADR-037>>).
+5. *Deterministic Signed Archive (`tar.gz`)*: Once `ISSUED` commits, `MailArchivePackageService` runs
+the deterministic packaging (`BuildMailArchivePackageUseCase`):
+* Collects `<journalId>.eml` and `<journalId>-authored.json` into `original/` alongside their `.sha256` checksums.
+* Generates detached Ed25519 signatures in `signed/` (`<journalId>.eml.sig`, `<journalId>-authored.json.sig`, `manifest.json.sig`).
+* Writes normalized `manifest.json` (timestamps, recipient, messageId, signer fingerprint).
+* Compresses deterministically into `<journalId>.tar.gz` (zeroed mtimes, sorted entries) and stores it in RustFS.
+* Marks `mail_journal.archive_status = ARCHIVED` via append-only write guard. Any packaging failure isolates to `archive_status = FAILED` and triggers an alarm without invalidating the already-delivered customer mail.
+
+
+[[_upload_receipt]]
+== Upload Receipt
+
+Receipts are uploaded once and de-duplicated by content before they can be linked to an invoice.
+
+.Sequence: Upload Receipt
+image::sequence-upload-receipt.svg[Sequence diagram: receipt upload with size reduction and checksum de-duplication]
+
+`ReceiptPoolView` accepts a PDF upload (up to `ReceiptSizePolicy.MAX_UPLOAD_SIZE`, 10 MiB,
+magic-byte checked) and hands the bytes to `ReceiptUploadService.upload()`. Little Trotter stores exactly
+one version per receipt: the original or its reduction, decided at upload (dialog or setting "Große Belege
+automatisch verkleinern", default on) and final (<<adr-042,ADR-042>>). Before sizing, a readability check
+evaluates effective resolution and sharpness (Laplace variance) and offers a rescan warning without blocking.
+A file above `ReceiptSizePolicy.TARGET_RECEIPT_SIZE` (440 KiB) is reduced towards it by `ReceiptPdfReducer`
+(<<_receipt_normalisation_at_upload,Receipt normalisation at upload>>); if the target size remains out of
+reach, the smallest version is stored with a budget warning. At upload, the page count, A4 factor, raster
+kind (`IMAGE_PDF` or `DOCUMENT`) and bytes are persisted without rendering (`page_count`, `a4_factor`,
+`raster_kind`, `size_bytes`). A SHA-256 checksum on the stored bytes drives duplicate detection: the
+cache is checked first as a fast path, then `ReceiptRepository.findByChecksum()` is the
+authoritative check regardless of the cache result. Only a genuinely new receipt is written to the
+object store and persisted; the cache entry is then marked known, without a TTL, since the
+database's unique constraint on the checksum — not the cache — is the real guard against
+duplicates, so an evicted entry costs at most one extra query. Linking a receipt to a line item is
+a separate step, covered next.
+
+[[_assign_receipt_to_line_item]]
+== Assign Receipt to a Line Item
+
+.Sequence: Assign Receipt to a Line Item
+image::sequence-assign-receipt-to-line-item.svg[Sequence diagram: linking an uploaded receipt to an invoice line item]
+
+Assignment (`setReceiptsForItem`/`addReceiptsToItem`) links an already-uploaded receipt to an
+`InvoiceItem` — an n:m relationship, since one receipt commonly covers several items or the
+invoice as a whole. The service checks the invoice status and the supplied version before
+assignment changes, and enforces the invoice-wide receipt count of 19 distinct receipts; an
+estimated document size above 20 MiB warns instead of refusing the link — see
+<<_document_size_budget,Document Size Budget>>. Removing a link leaves its pool document
+intact. The common dialog refreshes both scope tables after the write commits; empty scope
+tables remain visible. Pool deletion is a separate operation guarded by reference usage.
+
+[[_print_job_overview]]
+== Print Job Overview
+
+`PrintJobListView` is a read-only, cross-invoice monitoring view over all `GenerationJob` records.
+
+.Sequence: Print Job Overview
+image::sequence-print-job-overview.svg[Sequence diagram: print job overview with fast and polling update paths]
+
+Opening the view loads a two-level tree grid (day → jobs) using projection DTOs
+(`PrintJobOverviewRow`) via `PrintJobOverviewQueryService`. The new-job count badge is updated via
+dual channels:
+
+* *Fast Path*: Local `UiEventBus` (`JobFinishedEvent`) within the same JVM.
+* *Guaranteed Path*: Polling interval (≤ 2 s) active while jobs in the current filter remain
+non-terminal, ensuring live updates when workers run in separate processes. Grid rows do not reload
+on poll ticks to preserve operator scroll/expansion state.
+
+[[_download_document]]
+== Download Rendered PDF/XML
+
+.Sequence: Download Rendered PDF/XML
+image::sequence-download-document.svg[Sequence diagram: lazy download of a rendered PDF or XML document]
+
+Neither the download nor the validation-report dialog does any work until the Office Manager clicks.
+`DocumentStore.get()` fetches bytes from the object store lazily, keyed by the
+`pdfObjectKey`/`xmlObjectKey` already visible in the overview row. Opening the validation-report
+dialog is the one place this scenario touches the database again, loading the full
+`GenerationJob` entity only at that point.
+
+[[_verify_vat_id]]
+== Verify an Invoice Recipient's VAT ID
+
+An invoice recipient's VAT ID is one text field (`VatIdField`); `VatIdValidator` recognises its
+two-character country prefix, auto-completes it from the billing address when the Office Manager
+types digits only, and validates the format on blur. Asking the EU VIES REST API whether the id
+is actually registered is a second, separate step: a small "VIES prüfen" button, enabled only for
+a format-valid EU prefix, that the Office Manager clicks explicitly — see
+<<_error_handling_and_validation,Error Handling and Validation>> for the field's validation
+layer and <<adr-023,ADR-023>> for why the request is never automatic.
+
+.Sequence: Verify an Invoice Recipient's VAT ID
+image::sequence-verify-vat-id.svg[Sequence diagram: explicit VIES verification of a recipient VAT ID]
+
+`VatIdValidator.prefixOf`/`numberOf` split the normalised id before the call, never the address
+country — the number carries the country the id was actually issued for, which need not match where
+the invoice recipient is registered. `ViesHttpClient` reads VIES's `isValid` together with its
+`userError`, `name` and `address` fields and resolves to one of three outcomes: `VERIFIED` and
+`FAILED` are recorded on the still-open dialog (`RecipientView.pendingVerification`) — shown
+immediately as the verification checkbox, badge and helper text, `VERIFIED` additionally showing the
+trader name/address VIES returned and prefilling the verification note with them if it is still
+blank — and only reach `Recipient.vatIdVerificationStatus`/`vatIdVerifiedAt` in PostgreSQL once the
+Office Manager saves the invoice recipient; cancelling the dialog discards the outcome.
+`UNREACHABLE` names the reason (timeout, VIES busy, VIES down, or the request itself was rejected)
+and never changes that dialog state at all — an unreachable VIES is not a statement about the VAT
+ID. This is the only place the system calls VIES: the invoice issuer profile and additional invoice
+issuer VAT registrations are format-validated the same way but never verified against VIES, and no
+scheduler or background job ever triggers a VIES call.
+
+[[_quote_acceptance_to_invoice]]
+== Quote Invoice Order to Invoice Draft
+
+Recording the acceptance of a `SENT` quote only sets the status to `ACCEPTED` and writes a log
+entry; it sends nothing to the invoicing application. The hand-over is a separate, addressable
+invoice order that the user triggers with "Rechnungsentwurf erstellen" from `SENT` or `ACCEPTED`
+(with the permissions to decide on quotes and to create invoices; in the UI, `QuoteAcceptDialog`
+also offers a pre-selected checkbox to open the invoice order dialog immediately after recording
+acceptance). In one short transaction the
+quote module records the acceptance if the quote is still `SENT`, stores the order as `REQUESTED`
+in `quote.quote_invoice_order`, writes a log entry and an outbox row for
+`quote.invoice-order.requested`; the outbox relay publishes after the commit (and once at startup
+for rows a crash left behind) with the order id as JetStream message id and marks a row published
+only after the JetStream acknowledgement. A quote has at most one order in `REQUESTED` or
+`CREATED`. The event carries references only (order id, quote id and number, acceptance date,
+order reference, optional delivery date or service period, actor), because the content is
+immutable from `REVIEW` on. The invoicing application's `QuoteInvoiceOrderConsumer` reads the
+quote snapshot, the PDF and the customer attachments through the quote contract REST and
+`CreateInvoiceFromQuoteUseCase` creates the invoice draft with its number drawn at creation,
+delivery date or service period set from the order. The quote number becomes the order reference
+(BT-14), the acceptance date its date; creation is idempotent through the quote id on the
+invoice, and a repeated order for an existing invoice is answered with that invoice and the new
+order id. The reply `invoice.created-from-quote` (order id, invoice id and number) marks the order
+`CREATED`, stores the invoice id and number on it and writes a protocol line; the quote stays `ACCEPTED`; if the draft cannot be created,
+`invoice.creation-from-quote.rejected` marks the order `REJECTED` with the reason and leaves the
+quote `ACCEPTED`, and the user orders again, which creates a new order. Replies for unknown or
+already answered orders are acknowledged and logged without effect. While NATS is unavailable the
+order stays `REQUESTED` and the relay delivers it later. After five failed deliveries the
+message goes to the dead-letter subject and appears in the message center.
+
+When the quote module starts without ever having received master data, it requests a snapshot
+(`masterdata.snapshot.requested`) and the invoicing application streams its reference data back in
+chunks; afterwards the replicas keep the module usable while the invoicing application is down.
+
+[[_quote_statistics]]
+== Quote Statistics
+
+A user with the permission `QUOTE_VIEW` opens the quote statistics and picks a period.
+`QuoteStatisticsView` asks its narrow input port; the HTTP adapter calls
+`GET /quote/api/statistics/dashboard` of the quote application (the ranking view uses
+`/statistics/ranking`). `QuoteStatisticsResource` delegates to `QuoteStatisticsDashboardQueryPort`;
+the read model selects the per-quote facts of the period (quotes in `SENT`, `ACCEPTED`
+or `REJECTED` by `quote_date`, plus the open ones for "in progress") with the net amount per line
+rounded to cents, and `QuoteKpis` and `QuoteStatusCounts` compute the figures. The anti-corruption
+layer maps `QuoteDashboardView` to the presentation model, `QuoteStatisticsPresenter` formats it and
+the shared statistics components render it. The call is read-only and starts no transaction that
+writes; if the quote application is down, the view shows an error state instead of figures.

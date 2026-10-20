@@ -1,0 +1,79 @@
+[[adr-042]]
+= ADR-042: One Version per Receipt, Preparation at Upload
+
+== Status
+Accepted (implementation); visible texts: PO-Freigabe (Datum): 2026-10-12
+
+== Context
+Receipt pages were rendered and re-encoded at every print, and the budget estimate assumed a fixed
+factor of the stored bytes. A receipt that could not be reduced to the target size was refused at
+upload.
+
+== Decision
+* Little Trotter stores exactly one version per receipt: the original or its reduction. The choice
+  is made at upload (dialog, or the setting "Große Belege automatisch verkleinern", default on) and
+  is final. No derivatives, no second copy, no later recalculation. The same version is attached as
+  BG-24 and is the source of the receipt pages.
+* At upload, without rendering, the page count, the A4 factor (sum of displayed page area relative to
+  A4, using the shared display-size rule), the raster kind (`IMAGE_PDF` or `DOCUMENT`) and the bytes
+  are persisted on the receipt (`page_count`, `a4_factor`, `raster_kind`, `size_bytes`).
+* `IMAGE_PDF`: every page is one plain JPEG over the whole page at or below the print resolution
+  (shared `ReceiptPdfInspector`). The print copies the JPEG unchanged. The export worker re-checks the
+  structure and renders the page if the check fails.
+* `DOCUMENT`: the print renders one page at a time at the configured raster (`receipt.raster.dpi`,
+  `receipt.raster.jpeg-quality`, never below the resolution threshold of the readability policy, `ReadabilityPolicy.MIN_EFFECTIVE_DPI`).
+* If the target size is out of reach, the smallest version is stored and the user is warned that the
+  invoice can exceed the total size. The budget estimate uses the persisted profile.
+* The setting is the feature flag `feature.receipt-auto-reduce.enabled` (missing row = on).
+
+== Consequences
+* The job contract `ReceiptDto` gains `rasterKind`, `pageCount`, `a4Factor` (additive, nullable).
+* Header band and post-render marks are still applied at print time.
+* The former on-demand reduction of a stored receipt in the receipt pool (use case, port, row
+  action and texts) is removed: a stored version is never replaced, so no second version and no
+  recalculation can arise. Visible change: the pool row action "Beleg reduzieren" is gone.
+
+== Addendum: quote attachments
+Files attached to a quote (quote attachments, receipt-pool documents of the quote component, line
+attachments) follow the same rule and use the same texts as invoice receipts.
+
+* Upload rule: with "Große Belege automatisch verkleinern" on, a PDF above the target size is reduced
+  without a question and reported with a notice ("before to after", target missed, lost text layer
+  after rasterising); with it off, the receipt dialog asks per file with both sizes and a preview.
+  Before the size decision the readability hint runs as for receipts: rescan ends the upload,
+  accept continues. Only PDFs are checked and reduced; other files are stored as sent.
+* One stored version per file in the quote component: the original or its reduction, never both.
+* One reducer: `shared.receipt.reduce.PdfReceiptReducer` in `kotlin-shared` serves both components,
+  each through its own adapter (`PdfBoxReceiptPdfReducer` in the invoice component, the quote
+  component's attachment reducer adapter).
+* The UI decides and transmits the choice as `reduce` over the quote contract (schema version 3,
+  additive): the three upload requests (quote attachment, library entry, library version) carry
+  `reduce`; the answer carries the optional `reduction` (stage and stored size), absent when not
+  reported. The quote component reduces only on request and never reads the setting itself.
+
+== Addendum: customer files in the quote document
+* The customer files of a quote (`QuoteAttachmentKind.CUSTOMER`) are shown as rasterised pages
+  behind the quote pages, through the same `ReceiptAnnexBuilder` and raster settings as invoice
+  receipts (150 dpi, JPEG 0.75, one page at a time). The header band is in the quote's document
+  language: DE "Anlage n/m – file (Seite i/k)", EN "Attachment n/m – file (page i/k)". Only PDF
+  customer files become pages; other customer files are referenced in the XML only.
+* The quote service stages each PDF customer file into the document worker's bucket under
+  `quotes/<quote-id>/<document-id>/receipts/<sha256>-<file name>` before the job leaves (as it
+  already does for the UBL XML). The worker verifies the SHA-256 and refuses the job on mismatch.
+  The staged copy is job input; the stored attachment remains the one version per file.
+* The UBL Quotation XML lists every customer file as `cac:AdditionalDocumentReference` (ID = file
+  name; `cac:Attachment/cac:ExternalReference` with `cbc:DocumentHash` = SHA-256,
+  `cbc:HashAlgorithmMethod` = `SHA-256`, `cbc:MimeCode`, `cbc:FileName` = name of the mail
+  attachment). There is no `EmbeddedDocumentBinaryObject` and no presigned URL: quotes have no
+  XML-only channel, the files travel as mail attachments, and Base64 was the largest item in the
+  <<adr-039,ADR-039>> size measurement.
+* The job contract is additive: `QuoteDocumentPayload.receipts` (`QuoteDocumentReceiptRef`); the
+  quotation model gains `attachedDocuments`.
+* Final size backstop: the quote PDF has the same 20 MiB limit as the invoice document, checked on
+  the final bytes after the post-render mark. Exceeding it fails the job with a readable error.
+* Open point: non-PDF customer files (images) as pages are not decided; they are currently
+  XML references only.
+
+== Approval of visible texts
+Upload dialog, automatic-reduction messages, setting text and removal of the pool row action "Beleg reduzieren": PO-Freigabe (Datum): 2026-10-12.
+Quote PDF receipt pages, header band texts DE/EN and the XML document references: PO-Freigabe (Datum): 2026-10-13.

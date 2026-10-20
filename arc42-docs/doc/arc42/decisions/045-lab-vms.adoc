@@ -1,0 +1,29 @@
+[[adr-045]]
+= ADR-045: Lab VMs instead of host-shared test instances
+
+== Status
+Accepted; PO decision: 2026-10-15
+
+== Context
+Dev, E2E and stress runs shared the dev server with `demo` and `prod`: worktrees, port isolation
+(`E2E_PROJECT`, `PW_EDGE_PORT`), user-scope data services and agents competed for one host, and runs were
+hard to reproduce or clean up. In the TUI, function keys were swallowed by tmux, herdr and Windows
+Terminal, and the background colour was set by `LHORSE_BACKGROUND` next to other keys.
+
+== Decision
+. *Lab VMs.* The dev server is a customer model with `demo` and `prod` only. Dev, E2E and stress run in Multipass
+  VMs cloned from a stopped golden VM (`lt-golden`) and deleted after evaluation. One workshop-only tool
+  manages them: `lt lab` (create, push, run, open, collect, purge); `lhorse` box 3 and its wizards are
+  presets of the same commands. The VMs are reached as `<vm>.lab.<domain>` through the host edge Caddy and
+  monitored through Prometheus `file_sd`. The Mac stays the interactive workstation (`make dev`,
+  `make purge`).
+. *One theme path.* `lt` and `lhorse` read `LT_THEME=auto|light|dark|classic` and the stored choice in
+  `~/.config/little-trotter/ui.toml`. `LHORSE_BACKGROUND` is removed without an alias (greenfield). Every
+  colour pair meets WCAG AA on xterm-256 and on three 16-colour palettes; status always carries a glyph.
+
+== Consequences
+* Reproducible, disposable test environments; the host stays unchanged by test runs. Clone start takes
+  under a minute (Multipass 1.15 or later).
+* Stress runs alone on the host; the first VM run is a calibration run against the host reference.
+* `lhorse` uses five boxes without function keys; operators set the theme in box 4 or `ui.toml`.
+* Related: <<adr-043,ADR-043>> (operator tools language).

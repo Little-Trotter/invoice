@@ -1,0 +1,77 @@
+Visual guide to C4 Model elements and their official notation, following https://c4model.com/diagrams/notation[C4 Model standards].
+
+== Official C4 Notation Diagram
+
+The C4 model defines four levels of abstraction — Context, Container, Component, and Code — each with a
+specific shape, color, and purpose, as defined by Simon Brown. The three levels this documentation
+actually models are cross-referenced here rather than repeated: system context in
+<<_system_scope_and_context,System Scope and Context>>, containers and components in
+<<_building_block_view,Building Block View>>.
+
+The notation legends below show the element types and relationship styles used across this documentation's diagrams.
+
+=== System Context Notation
+
+The System Context diagram shows the high-level scope of the system and its external actors.
+
+.System Context elements and notation
+image::structurizr-SystemContext-key.svg[System Context notation,align=center,width=100%]
+
+=== Container and Component Notation
+
+Container and Component diagrams build on System Context notation by adding internal structure.
+
+.Container elements and notation
+image::structurizr-Containers-key.svg[Container notation,align=center,width=100%]
+
+.Component elements and notation
+image::structurizr-Components-key.svg[Component notation,align=center,width=100%]
+
+=== Deployment Notation
+
+The Deployment diagram extends these notations to show how containers are mapped to infrastructure nodes.
+
+.Deployment elements and notation
+image::structurizr-ServerDeployment-key.svg[Deployment notation,align=center,width=100%]
+
+== Element Reference
+
+[cols="2,3,2", options="header"]
+|===
+|Element |Purpose |Color Code
+
+| *Person* | Users, actors, stakeholders | [.c4-person]#5F6368#
+| *Software System* | High-level systems | [.c4-system]#1A73E8#
+| *External System* | Third-party systems | [.c4-external]#9AA0A6#
+| *Container* | Deployable units, applications | [.c4-container]#3C88EB#
+| *Database* | Data storage | [.c4-database]#1662C5#
+| *Component* | Code groupings, modules | [.c4-component]#81B2F2#
+| *Deployment Node* | Infrastructure: VMs, containers, machines | border only (white fill)
+|===
+
+== Views
+
+[cols="1,2,2,2", options="header"]
+|===
+|View |Name |Audience |Focus
+
+| *1* | System Context | Non-technical stakeholders | Business scope
+| *2* | Container | Technical stakeholders | Technology choices
+| *3* | Component | Software architects | Code organization
+| *4* | Code | Developers | Implementation details
+| *Deployment* | Deployment | DevOps, architects | Infrastructure and runtime topology
+| *Dynamic* | Dynamic (Sequence) | Architects, developers | Runtime interaction flows
+|===
+
+The *Deployment View* is orthogonal to the four levels of abstraction — it maps containers onto the real
+infrastructure nodes (Docker containers, servers) where they run. See <<_deployment_view>>.
+
+The *Dynamic View* traces a specific runtime scenario (e.g. issuing an invoice) across containers and
+components.
+
+== References
+
+* *C4 Model*: https://c4model.com/
+* *Notation Guide*: https://c4model.com/diagrams/notation
+* *Structurizr*: https://structurizr.com/
+* *arc42 Template*: https://arc42.org/

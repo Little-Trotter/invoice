@@ -1,0 +1,5310 @@
+/* littletrotter theme: extends Lumo. Order: variables (light, dark), foundations, utilities, components, views.
+   Components attach these classes and, where a value comes from data (a bar height, a percentage), set only a
+   custom property such as --lt-bar-h. */
+
+/* ==========================================================================
+   Variables (light)
+   ========================================================================== */
+
+:root {
+  --lt-shadow-card: 0 2px 8px rgb(0 0 0 / 6%);
+  --lt-shadow-card-hover: 0 8px 20px rgb(0 0 0 / 12%);
+  --lt-bar-primary-end: #2196F3;
+  --lt-bar-ok-end: #4CAF50;
+  --lt-accent-solid: #1A73E8;
+  --lt-on-accent-solid: #FFF;
+  /* Farbsystem / Design-Tokens */
+
+  /* Google-Material-Farbtemperatur: vertrauenswürdig, empathisch fröhlich.
+     Kein reines Schwarz, kein reines Weiß als Textfarbe. Farben gewählt nach Material-Design-Richtlinien. */
+  --lt-text-primary: #202124;   /* Material-Grauton statt reinem Schwarz — weicher, gleich lesbar */
+  --lt-brand-name: #036;        /* Markenfarben nur Navy und Gold, wie im Signet */
+  --lt-text-secondary: #5F6368; /* ersetzt --bau-muted */
+  --lt-accent: #1A73E8;          /* Primäraktion, Material-Blau */
+  --lt-header-height: 3.125rem;  /* navbar height; .main-header and the toast offset share it */
+  --lt-header-bg: #036;                          /* app-shell header: navy, white type (12.6:1) */
+  --lt-header-fg: #FFF;
+  --lt-header-hover: rgb(255 255 255 / 14%);     /* hover/active fills stay on the header hue */
+  --lt-header-active: rgb(255 255 255 / 24%);
+  --lt-header-focus: #FFD54F;                    /* focus ring: amber on navy (10.4:1), never blends in */
+  --lt-header-rule: transparent;                 /* dark mode draws a 1px separator instead of a fill */
+  --lt-ok: #188038;              /* Erfolg */
+  --lt-warn: #F9AB00;            /* Warnung — Füllfarbe, Text darauf dunkel */
+  --lt-warn-text: #E65100;       /* Warn-Text auf hellem Grund (AA-groß) */
+  --lt-error: #D93025;           /* Fehler */
+  --lt-review: #F4511E;          /* Prüfstatus — eigene Familie (Material Deep Orange), keine Markenfarbe */
+  --lt-tech-error: #8E24AA;      /* technischer Prüf-Fehlschlag — eigene Familie (Material Purple),
+                                     bewusst getrennt von --lt-error (nicht konform) und --lt-review (Prüfstatus) */
+  --lt-storno: #455A64;          /* CANCELLED (Storno) — eigene Familie (Material Blue Grey),
+                                     bewusst getrennt von --lt-error: eine stornierte Rechnung wurde
+                                     wirklich versandt und ordnungsgemäß aufgehoben, das ist kein
+                                     Fehlerzustand wie VOIDED (nie versandt, verworfen). */
+  --lt-bg: #FFF;              /* page/body background */
+  --lt-surface: #FFF;
+  --lt-surface-raised: #F8F9FA;  /* Zebra/Hover-Grund */
+  --lt-rule: #DADCE0;            /* Trennlinie */
+  --lt-hover: #E8F0FE;           /* sehr helles Blau für Hover */
+  --lt-selection: #D2E3FC;       /* Auswahl */
+  --lt-border-subtle: #DADCE0;   /* subtle borders, replaces one-off rgba/hex border colors */
+  --lt-text-disabled: #9AA0A6;   /* disabled elements only */
+
+  /* Statusfarben von Markenfarben getrennt (D.3): Chips nutzen diese Tokens,
+     nie --lt-accent — sonst liest sich Status als Aktion. */
+  --lt-status-ok: var(--lt-ok);
+  --lt-status-warn: var(--lt-warn);
+  --lt-status-warn-text: var(--lt-warn-text);
+  --lt-status-error: var(--lt-error);
+  --lt-status-neutral: var(--lt-text-secondary);
+
+  /* Altlasten als Aliase auf die neuen Tokens — die 2300 Zeilen
+     darunter bleiben unangetastet. */
+  --ino-text-muted: var(--lt-text-secondary);
+  --ino-text-accent: var(--lt-accent);
+  --ino-text-on-blue: #002d5c;
+  --ino-bg-surface: var(--lt-surface);
+
+  /* Bauhaus-Aliase: Werte auf die neue Palette umgestellt, Namen bleiben. */
+  --bau-primary: var(--lt-error);      /* rot → Material-Fehlerrot */
+  --bau-accent: var(--lt-accent);      /* blau → Material-Blau */
+  --bau-yellow: var(--lt-warn);        /* gelb → Material-Amber */
+  --bau-green: var(--lt-ok);           /* grün → Material-Grün */
+  --bau-neutral: var(--lt-text-primary); /* ink → Material-Grauton, kein Schwarz */
+  --bau-muted: var(--lt-text-secondary);
+  --bau-surface: var(--lt-surface);
+  --bau-contrast: var(--lt-text-primary); /* KEIN reines Schwarz mehr */
+  --bau-rule: var(--lt-rule);
+
+  /* Spacing module: 4 / 8 / 16 / 24 / 32 */
+  --ino-spacing-xs: 4px;
+  --ino-spacing-sm: 8px;
+  --ino-spacing-md: 8px;
+  --ino-spacing: 16px;
+  --ino-spacing-lg: 24px;
+  --ino-radius-sm: var(--lt-radius-field);
+  --ino-radius-md: var(--lt-radius-card);
+  --ino-radius-pill: var(--lt-radius-pill);
+  --ino-shadow-soft: none;
+  --ino-shadow-strong: none;
+
+  /* Status color tokens: flat single-tone backgrounds, no gradients.
+     Werte leiten sich aus den --lt-status-*-Tokens ab (Status ≠ Markenfarbe). */
+  --ino-status-draft: var(--lt-accent);
+  --ino-status-draft-bg: #d2e3fc;
+  --ino-status-review: var(--lt-review);
+  --ino-status-review-bg: #ffe0b2;
+  --ino-status-sent: var(--lt-ok);
+  --ino-status-sent-bg: #dff0d8;
+  --ino-status-cancelled: var(--lt-error);
+  --ino-status-cancelled-bg: #f8d7da;
+
+  /* the CANCELLED (Storno) status label/chip — its own Blue Grey family, never
+     the --ino-status-cancelled red pair above (which — despite its name — is the general
+     "rejected" red also used for VOIDED and unrelated error faces like .checklist-icon--missing). */
+  --ino-status-storno: var(--lt-storno);
+  --ino-status-storno-bg: #ECEFF1;
+  --ino-status-unknown: var(--lt-status-neutral);
+  --ino-status-unknown-bg: #ecf0f2;
+  --ino-status-success: var(--lt-ok);
+  --ino-status-success-bg: #e6f9f0;
+  --ino-status-warning: var(--lt-warn-text);
+  --ino-status-warning-bg: #fff6e2;
+
+  /* Validation chips: Farben aus den --lt-status-*-Tokens */
+  --ino-validation-valid-bg: #d4edda;
+  --ino-validation-valid-color: var(--lt-ok);
+  --ino-validation-invalid-bg: #f8d7da;
+  --ino-validation-invalid-color: var(--lt-error);
+  --ino-validation-pending-bg: #e7f3ff;
+  --ino-validation-pending-color: #0c65c7;
+
+  /* "empty slot" chip for NOT_VALIDATED (no run has
+     ever started, nothing to report yet). Deliberately the same neutral gray as --ino-status-
+     unknown rather than a new hand-picked color, so it stays in the Material gray family (no
+     brown) and already carries that pair's dark-mode/AA treatment. */
+  --ino-validation-none-bg: var(--ino-status-unknown-bg);
+  --ino-validation-none-color: var(--ino-status-unknown);
+
+  /* UNAVAILABLE ("Nicht prüfbar") is its own face, revising the 2026-08-24 decision to
+     read it exactly like INVALID. Reuses the same vetted amber pair as [B2bProfilesTab
+     .requirementBadge][de.littletrotter.ui.view.referencedata.B2bProfilesTab] / StatusChip's
+     `--warning` variant — no brown, already checked against both themes. Red stays exclusive to
+     INVALID. */
+  --ino-validation-unavailable-bg: var(--ino-status-warning-bg);
+  --ino-validation-unavailable-color: var(--ino-status-warning);
+
+  /* Flat tint helpers (former "pill" rgba backgrounds) */
+  --ino-pill-sent-bg: #e1f0e2;
+  --ino-pill-review-bg: #ffe0b2;
+  --ino-pill-draft-bg: #d2e3fc;
+  --ino-pill-cancelled-bg: #fbe3e4;
+
+  /* Common surface tokens */
+  --ino-surface-border: #dde5f0;
+  --ino-tile-shadow: none;
+  --ino-tile-shadow-strong: none;
+
+  /* Banner border tokens */
+  --ino-banner-sent-border: #1f7d27;
+  --ino-banner-cancelled-border: #a80d1b;
+
+  /* Invoice total card tokens: flat tint per status, no gradients */
+  --ino-total-card-sent-bg: #e1f0e2;
+  --ino-total-card-sent-border: rgb(31 125 39 / 35%);
+  --ino-total-card-cancelled-bg: #fbe3e4;
+  --ino-total-card-cancelled-border: rgb(168 13 27 / 35%);
+
+  /* the real CANCELLED (Storno) total-hero card, distinct from the VOIDED pair above. */
+  --ino-total-card-storno-bg: #E9EDEF;
+  --ino-total-card-storno-border: rgb(38 50 56 / 35%);
+  --ino-total-card-review-bg: #ffe0b2;
+  --ino-total-card-review-border: rgb(244 81 30 / 35%);
+  --ino-total-card-draft-bg: #d2e3fc;
+  --ino-total-card-draft-border: rgb(26 115 232 / 35%);
+  --ino-avatar-bg: #d2e3fc;
+  --font-sans: system-ui, -apple-system, "Segoe UI", roboto, "Helvetica Neue", arial;
+  --base-font-size: 16px;
+
+  /* Lumo-Variablen umlenken auf die Bauhaus-Tokens */
+  --lumo-header-text-color: var(--lt-text-primary);
+  --lumo-body-text-color:   var(--lt-text-primary);
+  --lumo-secondary-text-color: var(--lt-text-secondary);
+
+  /* Form scale: soft-oval shapes. Buttons and chips are capsules, fields are slightly rounded,
+     cards and dialogs get larger radii. Table cells and rows stay square. */
+  --lt-radius-pill: 999px;
+  --lt-radius-field: 10px;
+  --lt-radius-card: 16px;
+  --lt-radius-dialog: 24px;
+
+  /* Spacing module (4 / 8 / 16 / 24 / 32) and the content width of form and detail pages. */
+  --lt-space-xs: 4px;
+  --lt-space-s: 8px;
+  --lt-space-m: 16px;
+  --lt-space-l: 24px;
+  --lt-space-xl: 32px;
+  --lt-content-max: 72rem;
+
+  /* Type sizes taken from what the file already uses: page title = the h1 size, section heading
+     = the h2 size, body = the base size (--base-font-size, the most common full-size value). */
+  --lt-font-size-title: 1.875rem;
+  --lt-font-size-section: 1.25rem;
+  --lt-font-size-body: 1rem;
+
+  /* Tinted chip surfaces per status family: a light wash of the family colour on the page
+     surface with the family colour (darkened where needed) as text. Ratios are text against the
+     wash, WCAG AA needs 4.5:1. Light mode: */
+  --lt-chip-ok-bg: color-mix(in srgb, var(--lt-ok) 12%, var(--lt-surface));
+  --lt-chip-ok-fg: color-mix(in srgb, var(--lt-ok) 85%, black); /* 5.5:1 */
+  --lt-chip-warn-bg: color-mix(in srgb, var(--lt-warn-text) 12%, var(--lt-surface));
+  --lt-chip-warn-fg: color-mix(in srgb, var(--lt-warn-text) 70%, black); /* 5.8:1 */
+  --lt-chip-error-bg: color-mix(in srgb, var(--lt-error) 12%, var(--lt-surface));
+  --lt-chip-error-fg: color-mix(in srgb, var(--lt-error) 80%, black); /* 5.7:1 */
+  --lt-chip-review-bg: color-mix(in srgb, var(--lt-review) 12%, var(--lt-surface));
+  --lt-chip-review-fg: color-mix(in srgb, var(--lt-review) 65%, black); /* 6.1:1 */
+  --lt-chip-tech-error-bg: color-mix(in srgb, var(--lt-tech-error) 12%, var(--lt-surface));
+  --lt-chip-tech-error-fg: var(--lt-tech-error); /* 5.8:1 */
+  --lt-chip-storno-bg: color-mix(in srgb, var(--lt-storno) 12%, var(--lt-surface));
+  --lt-chip-storno-fg: var(--lt-storno); /* 6.1:1 */
+  --lt-chip-neutral-bg: color-mix(in srgb, var(--lt-text-secondary) 12%, var(--lt-surface));
+  --lt-chip-neutral-fg: var(--lt-text-secondary); /* 5.1:1 */
+  --lt-chip-accent-bg: color-mix(in srgb, var(--lt-accent) 12%, var(--lt-surface));
+  --lt-chip-accent-fg: color-mix(in srgb, var(--lt-accent) 80%, black); /* 5.5:1 */
+}
+
+/* ==========================================================================
+   Variables (dark)
+   ========================================================================== */
+
+html[theme~="dark"] {
+  --lt-shadow-card: 0 2px 8px rgb(0 0 0 / 35%);
+  --lt-shadow-card-hover: 0 8px 20px rgb(0 0 0 / 50%);
+  --lt-bar-primary-end: #64B5F6;
+  --lt-bar-ok-end: #81C784;
+  --lt-brand-name: #E8B43A;     /* Navy verschwindet auf dunklem Grund, darum Gold aus dem Signet */
+  --lt-bg: #202124;
+  --lt-surface: #292A2D;
+  --lt-surface-raised: #35363A;
+  --lt-rule: #3C4043;
+  --lt-hover: color-mix(in srgb, #8AB4F8 12%, var(--lt-surface));
+  --lt-selection: #404B5E;
+  --lt-border-subtle: #3C4043;
+  --lt-text-primary: #E8EAED;
+  --lt-text-secondary: #BDC1C6;
+  --lt-text-disabled: #9AA0A6;
+  --lt-accent: #8AB4F8;
+  --lt-ok: #81C995;
+  --lt-warn: #FDD663;
+  --lt-warn-text: #FDD663;
+  --lt-error: #F28B82;
+  --lt-review: #FF8A65;
+  --lt-tech-error: #CE93D8;
+  --lt-storno: #90A4AE;          /* Material Blue Grey 300 — 5.5:1+ against both dark
+                                     surfaces used below, distinct from --lt-error's dark tone. */
+  /* Tinted chip surfaces, dark mode (text against the wash, AA needs 4.5:1). */
+  --lt-chip-ok-bg: color-mix(in srgb, var(--lt-ok) 16%, var(--lt-surface));
+  --lt-chip-ok-fg: var(--lt-ok); /* 5.2:1 */
+  --lt-chip-warn-bg: color-mix(in srgb, var(--lt-warn-text) 16%, var(--lt-surface));
+  --lt-chip-warn-fg: var(--lt-warn-text); /* 6.8:1 */
+  --lt-chip-error-bg: color-mix(in srgb, var(--lt-error) 16%, var(--lt-surface));
+  --lt-chip-error-fg: color-mix(in srgb, var(--lt-error) 90%, white); /* 5.0:1 */
+  --lt-chip-review-bg: color-mix(in srgb, var(--lt-review) 16%, var(--lt-surface));
+  --lt-chip-review-fg: color-mix(in srgb, var(--lt-review) 90%, white); /* 5.1:1 */
+  --lt-chip-tech-error-bg: color-mix(in srgb, var(--lt-tech-error) 16%, var(--lt-surface));
+  --lt-chip-tech-error-fg: color-mix(in srgb, var(--lt-tech-error) 90%, white); /* 4.9:1 */
+  --lt-chip-storno-bg: color-mix(in srgb, var(--lt-storno) 16%, var(--lt-surface));
+  --lt-chip-storno-fg: color-mix(in srgb, var(--lt-storno) 80%, white); /* 5.2:1 */
+  --lt-chip-neutral-bg: color-mix(in srgb, var(--lt-text-secondary) 16%, var(--lt-surface));
+  --lt-chip-neutral-fg: var(--lt-text-secondary); /* 5.5:1 */
+  --lt-chip-accent-bg: color-mix(in srgb, var(--lt-accent) 16%, var(--lt-surface));
+  --lt-chip-accent-fg: var(--lt-accent); /* 4.9:1 */
+  --lt-status-ok: var(--lt-ok);
+  --lt-status-warn: var(--lt-warn);
+  --lt-status-warn-text: var(--lt-warn-text);
+  --lt-status-error: var(--lt-error);
+  --lt-status-neutral: var(--lt-text-secondary);
+  --ino-status-draft-bg: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --ino-status-review-bg: color-mix(in srgb, var(--lt-review) 10%, var(--lt-surface));
+  --ino-status-sent-bg: color-mix(in srgb, var(--lt-ok) 10%, var(--lt-surface));
+  --ino-status-cancelled-bg: color-mix(in srgb, var(--lt-error) 10%, var(--lt-surface));
+  --ino-status-storno-bg: color-mix(in srgb, var(--lt-storno) 10%, var(--lt-surface));
+  --ino-status-unknown-bg: color-mix(in srgb, var(--lt-text-secondary) 10%, var(--lt-surface));
+  --ino-status-success-bg: color-mix(in srgb, var(--lt-ok) 10%, var(--lt-surface));
+  --ino-status-warning-bg: color-mix(in srgb, var(--lt-warn) 10%, var(--lt-surface));
+  --ino-validation-valid-bg: color-mix(in srgb, var(--lt-ok) 10%, var(--lt-surface));
+  --ino-validation-invalid-bg: color-mix(in srgb, var(--lt-error) 10%, var(--lt-surface));
+  --ino-validation-pending-bg: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --ino-validation-pending-color: var(--lt-accent);
+  --ino-pill-sent-bg: color-mix(in srgb, var(--lt-ok) 10%, var(--lt-surface));
+  --ino-pill-review-bg: color-mix(in srgb, var(--lt-review) 10%, var(--lt-surface));
+  --ino-pill-draft-bg: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --ino-pill-cancelled-bg: color-mix(in srgb, var(--lt-error) 10%, var(--lt-surface));
+  --ino-total-card-sent-bg: color-mix(in srgb, var(--lt-ok) 10%, var(--lt-surface));
+  --ino-total-card-sent-border: color-mix(in srgb, var(--lt-ok) 40%, transparent);
+  --ino-total-card-cancelled-bg: color-mix(in srgb, var(--lt-error) 10%, var(--lt-surface));
+  --ino-total-card-cancelled-border: color-mix(in srgb, var(--lt-error) 40%, transparent);
+  --ino-total-card-storno-bg: color-mix(in srgb, var(--lt-storno) 10%, var(--lt-surface));
+  --ino-total-card-storno-border: color-mix(in srgb, var(--lt-storno) 40%, transparent);
+  --ino-total-card-review-bg: color-mix(in srgb, var(--lt-review) 10%, var(--lt-surface));
+  --ino-total-card-review-border: color-mix(in srgb, var(--lt-review) 40%, transparent);
+  --ino-total-card-draft-bg: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --ino-total-card-draft-border: color-mix(in srgb, var(--lt-accent) 40%, transparent);
+  --ino-avatar-bg: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --ino-surface-border: var(--lt-border-subtle);
+  --ino-banner-sent-border: color-mix(in srgb, var(--lt-ok) 40%, transparent);
+  --ino-banner-cancelled-border: color-mix(in srgb, var(--lt-error) 40%, transparent);
+  --lumo-base-color: var(--lt-surface);
+  --lumo-body-text-color: var(--lt-text-primary);
+  --lumo-secondary-text-color: var(--lt-text-secondary);
+  --lumo-primary-color: var(--lt-accent);
+  --lumo-primary-text-color: var(--lt-accent);
+  --lumo-primary-contrast-color: #202124;
+  --lumo-error-color: var(--lt-error);
+
+  /* ino-text-on-blue sits on light-blue fills that become 10% tints in dark, so it must
+     flip to the state-300 text convention instead of staying a fixed dark navy (added here,
+     not inside the phase-1 token block above, per the work package). */
+  --ino-text-on-blue: var(--lt-accent);
+
+  /* App-shell header in the dark scheme: a surface separated by a rule; type, hover and focus
+     follow the dark palette (text 12.6:1, accent focus ring 7.6:1 on the surface). */
+  --lt-header-bg: var(--lt-surface);
+  --lt-header-fg: var(--lt-text-primary);
+  --lt-header-hover: color-mix(in srgb, var(--lt-accent) 14%, transparent);
+  --lt-header-active: color-mix(in srgb, var(--lt-accent) 24%, transparent);
+  --lt-header-focus: var(--lt-accent);
+  --lt-header-rule: var(--lt-rule);
+  /* component colours that differ in the dark scheme */
+  --lt-status-chip-clickable-hover-filter: brightness(1.15);
+  --lt-quick-filter-chip-hover-filter: brightness(1.15);
+  --lt-main-header-bell-wrapper-bell-badge-color: #202124;
+  --lt-invoice-total-hero-color: #202124;
+  --lt-inh-rule-background: rgb(32 33 36 / 26%);
+  --lt-inh-gross-section-background: rgb(32 33 36 / 14%);
+  --lt-inh-gross-section-hover-background: rgb(32 33 36 / 20%);
+  --lt-cockpit-hero-draft-ch-bg: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --lt-cockpit-hero-review-ch-bg: color-mix(in srgb, var(--lt-review) 10%, var(--lt-surface));
+  --lt-cockpit-hero-sent-ch-bg: color-mix(in srgb, var(--lt-ok) 10%, var(--lt-surface));
+  --lt-cockpit-hero-cancelled-ch-bg: color-mix(in srgb, var(--lt-storno) 10%, var(--lt-surface));
+  --lt-cockpit-hero-voided-ch-bg: color-mix(in srgb, var(--lt-error) 10%, var(--lt-surface));
+  --lt-ch-btn-review-part-button-background: color-mix(in srgb, var(--lt-review) 10%, var(--lt-surface));
+  --lt-ch-btn-review-part-button-color: var(--lt-review);
+  --lt-ch-btn-review-part-button-border-color: color-mix(in srgb, var(--lt-review) 40%, transparent);
+  --lt-ch-btn-review-hover-part-button-background: color-mix(in srgb, var(--lt-review) 18%, var(--lt-surface));
+  --lt-ch-btn-review-hover-part-button-border-color: var(--lt-review);
+  --lt-ch-btn-draft-part-button-background: var(--lt-surface-raised);
+  --lt-ch-btn-draft-part-button-border-color: var(--lt-border-subtle);
+  --lt-ch-btn-finalize-part-button-background: var(--lt-ok);
+  --lt-ch-btn-finalize-part-button-color: #202124;
+  --lt-ch-btn-finalize-part-button-border-color: var(--lt-ok);
+  --lt-ch-btn-finalize-hover-part-button-background: color-mix(in srgb, var(--lt-ok) 85%, white);
+  --lt-ch-btn-finalize-hover-part-button-border-color: color-mix(in srgb, var(--lt-ok) 85%, white);
+  --lt-ch-btn-void-part-button-background: color-mix(in srgb, var(--lt-error) 10%, var(--lt-surface));
+  --lt-ch-btn-void-part-button-color: var(--lt-error);
+  --lt-ch-btn-void-part-button-border-color: color-mix(in srgb, var(--lt-error) 40%, transparent);
+  --lt-ch-btn-void-hover-part-button-background: color-mix(in srgb, var(--lt-error) 18%, var(--lt-surface));
+  --lt-ch-btn-void-hover-part-button-border-color: var(--lt-error);
+  --lt-ch-btn-storno-part-button-background: color-mix(in srgb, var(--lt-error) 10%, var(--lt-surface));
+  --lt-ch-btn-storno-part-button-color: var(--lt-error);
+  --lt-ch-btn-storno-part-button-border-color: color-mix(in srgb, var(--lt-error) 40%, transparent);
+  --lt-ch-btn-storno-hover-part-button-background: color-mix(in srgb, var(--lt-error) 18%, var(--lt-surface));
+  --lt-ch-btn-storno-hover-part-button-border-color: var(--lt-error);
+  --lt-ch-btn-recalculate-part-button-background: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --lt-ch-btn-refresh-master-data-part-button-background: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --lt-ch-btn-recalculate-part-button-color: var(--lt-accent);
+  --lt-ch-btn-refresh-master-data-part-button-color: var(--lt-accent);
+  --lt-ch-btn-recalculate-part-button-border-color: color-mix(in srgb, var(--lt-accent) 40%, transparent);
+  --lt-ch-btn-refresh-master-data-part-button-border-color: color-mix(in srgb, var(--lt-accent) 40%, transparent);
+  --lt-ch-btn-recalculate-hover-part-button-background: color-mix(in srgb, var(--lt-accent) 18%, var(--lt-surface));
+  --lt-ch-btn-refresh-master-data-hover-part-button-background: color-mix(in srgb, var(--lt-accent) 18%, var(--lt-surface));
+  --lt-ch-btn-recalculate-hover-part-button-border-color: var(--lt-accent);
+  --lt-ch-btn-refresh-master-data-hover-part-button-border-color: var(--lt-accent);
+  --lt-cockpit-dates-card-background: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --lt-system-view-sys-blue: var(--lt-accent);
+  --lt-system-view-sys-blue-soft: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --lt-system-view-sys-red: var(--lt-error);
+  --lt-system-view-sys-yellow: var(--lt-warn);
+  --lt-system-view-sys-line: var(--lt-border-subtle);
+  --lt-system-view-sys-paper: var(--lt-surface);
+  --lt-system-view-background: var(--lt-bg);
+  --lt-system-health-ok-background: color-mix(in srgb, var(--lt-ok) 10%, var(--lt-surface));
+  --lt-system-health-bad-background: color-mix(in srgb, var(--lt-error) 10%, var(--lt-surface));
+  --lt-system-refresh-btn-color: #202124;
+  --lt-system-refresh-btn-part-button-color: #202124;
+  --lt-sbom-grid-wrapper-background: color-mix(in srgb, var(--lt-accent) 10%, var(--lt-surface));
+  --lt-skip-link-color: #202124;
+  --lt-segmented-checked-part-color: #202124;
+  --lt-segmented-checked-label-color: #202124;
+}
+
+/* ==========================================================================
+   Foundations
+   ========================================================================== */
+
+/* Lumo bridge: route the framework radii to the form scale. Set on html so it applies in light
+   and dark mode alike (dark mode only swaps colours). */
+html {
+  --lumo-border-radius-s: var(--lt-radius-field);
+  --lumo-border-radius-m: var(--lt-radius-field);
+  --lumo-border-radius-l: var(--lt-radius-card);
+  --vaadin-input-field-border-radius: var(--lt-radius-field);
+  --vaadin-button-border-radius: var(--lt-radius-pill);
+}
+
+vaadin-button {
+  border-radius: var(--lt-radius-pill);
+}
+
+vaadin-dialog-overlay::part(overlay),
+vaadin-confirm-dialog-overlay::part(overlay) {
+  border-radius: var(--lt-radius-dialog);
+}
+
+/* Menus, tooltips and dropdown lists share the field radius. */
+vaadin-context-menu-overlay::part(overlay),
+vaadin-menu-bar-overlay::part(overlay),
+vaadin-tooltip-overlay::part(overlay),
+vaadin-combo-box-overlay::part(overlay),
+vaadin-select-overlay::part(overlay),
+vaadin-multi-select-combo-box-overlay::part(overlay),
+vaadin-date-picker-overlay::part(overlay),
+vaadin-time-picker-overlay::part(overlay) {
+  border-radius: var(--lt-radius-field);
+}
+
+/* body background/text follow the theme tokens in both light and dark mode */
+body {
+  background: var(--lt-bg);
+  color: var(--lt-text-primary);
+}
+
+/* Chrome's native rubber-band overscroll glow (a light-blue radial flash at the boundary you
+   scroll past via trackpad/mouse wheel) is purely a compositor effect, unrelated to any theme
+   color here — it shows up hardest at the top edge, right under .main-header, and reads as a
+   "flicker" against the dark-mode header in particular. Firefox/Safari don't draw it, so it
+   never showed on this project before. `overscroll-behavior: none` on the scroll root suppresses
+   it without touching Vaadin's own internal scroll containers (grids, dialogs), which manage
+   their own overscroll independently. */
+html, body {
+  overscroll-behavior: none;
+}
+
+h1 { font-size: var(--lt-font-size-title); font-weight: 700; }
+
+h2 { font-size: var(--lt-font-size-section); font-weight: 600; color: var(--bau-neutral); }
+
+/* Screen-reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Fokus-Einheitlichkeit */
+:focus-visible {
+  outline: 3px solid rgb(0 86 179 / 50%);
+  outline-offset: 2px;
+}
+
+@media (width <= 480px) {
+  /* Responsive typography & spacing tweaks */
+  :root { --base-font-size: 15px; }
+}
+
+@media (width >= 481px) and (width <= 900px) {
+  :root { --base-font-size: 15.5px; }
+}
+
+@media (width >= 901px) {
+  :root { --base-font-size: 16px; }
+}
+
+/* a small helper to slightly tighten vertical rhythm in compact contexts */
+.compact .invoice-card { padding-top: 0.85rem; padding-bottom: 0.85rem; }
+
+/* Dark mode theme support */
+/* Single source of truth for dark mode: the `theme="dark"` attribute on
+   <html>, kept in sync with the OS preference by the inline script in
+   AppShell.configurePage(). No @media query here. */
+/* Dark-specific interaction states */
+html[theme~="dark"] :focus-visible {
+  outline-color: var(--lt-accent);
+}
+
+/* the field editor popup: docked to the right edge instead of centered, narrow
+   (~480px) and tall enough (~85vh) to hold the whole form, while the rules table stays fully
+   visible (and, being non-modal, interactive) to its left — the rule "nie blind
+   bearbeiten", without permanently costing width the way a side panel would.
+   Vaadin mirrors an overlay-based component's `theme` attribute onto its actual overlay element
+   (here `<vaadin-dialog-overlay>`, rendered outside the light DOM Dialog puts its content in) —
+   that mirrored attribute is the only way from outside CSS to reach the overlay's own shadow-DOM
+   parts, so B2bFieldEditorPanel tags its Dialog with the "b2b-field-popup" theme name and this
+   selector targets the resulting attribute instead of the Dialog component's own element. */
+vaadin-dialog-overlay[theme~="b2b-field-popup"]::part(overlay) {
+  position: fixed;
+  top: 50%;
+  right: var(--lumo-space-m);
+  transform: translateY(-50%);
+  margin: 0;
+  width: 480px;
+  max-width: min(480px, 92vw);
+  max-height: 85vh;
+}
+
+vaadin-dialog-overlay[theme~="b2b-field-popup"]::part(content) {
+  overflow-y: auto;
+  max-height: 85vh;
+}
+
+/* mode B's segmented format switch ("Kippschalter")
+   The underlying control stays a plain vaadin-radio-group (RadioButtonGroup, role=radiogroup,
+   keyboard-navigable, checked state read by assistive technology) — this theme variant only
+   repaints it as a two-segment switch. `[part]` selectors reach into a component's own shadow
+   root; from this outer stylesheet the equivalent is `::part(...)`, exactly like the
+   vaadin-grid/vaadin-button rules already above in this file. */
+vaadin-radio-group[theme~="lt-segmented"]::part(label) {
+  /* Visually hidden, not removed — the segments explain themselves (design spec), but the
+     group's accessible name must still reach a screen reader. Same technique as this file's own
+     .sr-only utility, applied to a shadow part instead of a light-DOM element. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+vaadin-radio-group[theme~="lt-segmented"]::part(group-field) {
+  display: flex;
+  flex-flow: row nowrap;
+  gap: 0;
+  border: 1px solid var(--lt-rule);
+
+  /* A rounded "stadium" container plus overflow:hidden turns the two plain segments into a
+     proper Material segmented-button pill without giving each segment its own radius/math. */
+  border-radius: 999px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button {
+  --vaadin-radio-button-size: 0;
+  --vaadin-radio-button-gap: 0;
+
+  white-space: nowrap;
+  flex: 1 1 0;
+  margin: 0;
+
+  /* Material's minimum comfortable tap target is ~2.75rem tall; the old 0.45rem vertical
+     padding fell short of that. */
+  padding: 0.85rem 1.2rem;
+  justify-content: center;
+  text-align: center;
+  border-radius: 0;
+  cursor: pointer;
+
+  /* A tonal resting fill (Google's own "selected/hover" blue-tint token) instead of plain
+     white — the un-picked segment no longer looks inert, and the checked/unchecked states
+     now animate into one another instead of flipping abruptly. */
+  background-color: var(--lt-hover);
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button:not(:last-of-type) {
+  border-inline-end: 1px solid var(--lt-rule);
+}
+
+/* Narrow screens: the pill would exceed the card, so the segments stack full width as a
+   rounded block and each label may wrap; field labels in the settings cards wrap instead of
+   ending in an ellipsis. */
+@media (width <= 480px) {
+  vaadin-radio-group[theme~="lt-segmented"]::part(group-field) {
+    flex-flow: column nowrap;
+    width: 100%;
+    border-radius: 1.5rem;
+  }
+
+  vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button {
+    white-space: normal;
+    padding: 0.85rem 1rem;
+  }
+
+  vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button:not(:last-of-type) {
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--lt-rule);
+  }
+
+  .settings-view :is(vaadin-integer-field, vaadin-text-field, vaadin-number-field, vaadin-select, vaadin-combo-box)::part(label) {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button:not([checked]):hover {
+  background-color: var(--lt-selection);
+}
+
+/* The radio dot itself: zero-sized already (--vaadin-radio-button-size above), this only removes
+   the border/background box that would otherwise still paint at 0×0. */
+vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button::part(radio) {
+  display: none;
+}
+
+vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button[checked] {
+  background: var(--lt-accent);
+}
+
+/* The visible text is the slotted light-DOM <label>, not the shadow part: Lumo sets its colour
+   on the element itself, so the part rule alone does not reach it. Both selectors, both modes. */
+vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button[checked]::part(label),
+vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button[checked] > label {
+  color: var(--lt-segmented-checked-part-color, #FFF);
+  font-weight: 700;
+}
+
+vaadin-radio-group[theme~="lt-segmented"] vaadin-radio-button[focus-ring] {
+  outline: 2px solid var(--lt-accent);
+  outline-offset: -2px;
+}
+
+/* ==========================================================================
+   Utilities
+   ========================================================================== */
+
+/* Semantic text colours */
+.lt-text-ok { color: var(--lt-ok); }
+
+.lt-text-warn { color: var(--lt-warn-text); }
+
+.lt-text-error { color: var(--lt-error); }
+
+.lt-text-secondary { color: var(--lumo-secondary-text-color); }
+
+/* Layout utilities (the html prefix lets them outrank single-class component rules) */
+html .lt-w-full { width: 100%; }
+
+html .lt-border-box { box-sizing: border-box; }
+
+html .lt-flex-1 { flex: 1; }
+
+html .lt-flex-grow { flex-grow: 1; }
+
+html .lt-flex-shrink-0 { flex-shrink: 0; }
+
+html .lt-flex-wrap { flex-wrap: wrap; }
+
+html .lt-block { display: block; }
+
+html .lt-nowrap { white-space: nowrap; }
+
+html .lt-semibold { font-weight: 600; }
+
+html .lt-medium { font-weight: 500; }
+
+html .lt-gap-025 { gap: 0.25rem; }
+
+html .lt-gap-030 { gap: 0.3rem; }
+
+html .lt-gap-035 { gap: 0.35rem; }
+
+html .lt-gap-040 { gap: 0.4rem; }
+
+html .lt-gap-050 { gap: 0.5rem; }
+
+html .lt-gap-060 { gap: 0.6rem; }
+
+html .lt-gap-075 { gap: 0.75rem; }
+
+html .lt-gap-100 { gap: 1rem; }
+
+html .lt-gap-150 { gap: 1.5rem; }
+
+html .lt-text-s { font-size: var(--lumo-font-size-s); }
+
+html .lt-text-error-strong { color: var(--lumo-error-text-color); }
+
+html .lt-text-primary { color: var(--lumo-primary-color); }
+
+html .lt-text-error-base { color: var(--lumo-error-color); }
+
+.lt-page-centered { margin: 0 auto; }
+
+.lt-toolbar-end { display: flex; align-items: center; gap: var(--lumo-space-m); }
+
+.lt-pre-wrap { white-space: pre-wrap; }
+
+.lt-sticky-top { position: sticky; top: 0; align-self: start; }
+
+.lt-margin-inline-end-auto { margin-inline-end: auto; }
+
+.lt-inline-center { align-items: center; gap: var(--lumo-space-s); }
+
+.lt-form-column-gap { column-gap: var(--lumo-space-l); }
+
+.lt-mail-problem { color: var(--lumo-error-text-color); display: block; }
+
+html .lt-mb-050 { margin-bottom: 0.5rem; }
+
+.lt-justify-start { justify-content: flex-start; }
+
+.lt-pre-line { white-space: pre-line; }
+
+html .lt-mt-100 { margin-top: 1rem; }
+
+html .lt-min-w-5 { min-width: 5rem; }
+
+.lt-text-085 { font-size: 0.85rem; }
+
+/* Paragraph Helpers */
+.text-muted {
+  color: var(--lumo-secondary-text-color);
+}
+
+.text-primary {
+  color: var(--lumo-primary-text-color);
+}
+
+.py-1 {
+  padding: 1rem 0;
+}
+
+.text-block { display: block; }
+
+.font-weight-semibold { font-weight: 600; }
+
+.text-warning { color: var(--lumo-warning-color, orange); }
+
+.text-error { color: var(--lumo-error-text-color, var(--lumo-error-color, #d32f2f)); }
+
+.fs-08 { font-size: 0.8rem; }
+
+.m-0 { margin: 0; }
+
+.text-right { text-align: right; display: block; width: 100%; }
+
+.flex-1 { flex: 1 1 0; }
+
+.toolbar-full { width: 100%; box-sizing: border-box; }
+
+/* ==========================================================================
+   Button
+   ========================================================================== */
+
+.lt-default-star { color: var(--lumo-primary-color); margin-inline-start: var(--lumo-space-xs); }
+
+.lt-line-advice-dismiss { cursor: pointer; margin-left: 0.4rem; font-weight: 700; }
+
+/* action icon anchors styled to match Lumo tertiary buttons */
+.action-icon-anchor {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border-radius: var(--lt-radius-pill);
+  border: none;
+  background: transparent;
+  color: var(--lumo-tertiary-text-color);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.action-icon-anchor:hover {
+  background: var(--lumo-tertiary-color);
+}
+
+.action-icon-anchor:focus-visible {
+  outline: 3px solid rgb(0 86 179 / 50%);
+  outline-offset: 2px;
+}
+
+.system-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 2.15rem;
+  color: var(--lt-system-refresh-btn-color, #fff);
+  background: var(--sys-blue);
+  border-radius: var(--lt-radius-pill);
+  border: 1px solid color-mix(in srgb, var(--sys-blue) 85%, black);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.77rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  max-width: 100%;
+}
+
+.system-refresh-btn::part(button) {
+  background: var(--sys-blue);
+  color: var(--lt-system-refresh-btn-part-button-color, #fff);
+  border: 1px solid color-mix(in srgb, var(--sys-blue) 85%, black);
+  border-radius: var(--lt-radius-pill);
+  min-height: 44px;
+  padding: 0.45rem 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.system-refresh-btn:hover::part(button) {
+  background: color-mix(in srgb, var(--sys-blue) 85%, black);
+  border-color: color-mix(in srgb, var(--sys-blue) 85%, black);
+}
+
+.system-refresh-btn:focus-visible::part(button) {
+  outline: 3px solid #ffbf47;
+  outline-offset: 2px;
+}
+
+html[theme~="dark"] .system-refresh-btn:focus-visible::part(button) {
+  outline-color: var(--lt-accent);
+}
+
+html[theme~="dark"] .ch-btn--draft::part(button) {
+  color: var(--lt-text-secondary);
+}
+
+html[theme~="dark"] .ch-btn--draft:hover::part(button) {
+  background: color-mix(in srgb, var(--lt-text-secondary) 14%, var(--lt-surface-raised));
+  border-color: var(--lt-text-secondary);
+}
+
+html[theme~="dark"] .system-refresh-btn:hover::part(button) {
+  background: color-mix(in srgb, var(--sys-blue) 85%, white);
+  border-color: color-mix(in srgb, var(--sys-blue) 85%, white);
+}
+
+/* Action buttons */
+.ch-action-btn::part(button) {
+  border-radius: var(--lt-radius-pill);
+  padding: 0.42rem 1.05rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+  border: 1.5px solid transparent;
+}
+
+.ch-action-btn::part(label) { font-weight: 600; }
+
+.ch-action-btn::part(prefix) { font-size: var(--lt-font-size-body); }
+
+/* Zur Prüfung – orange */
+.ch-btn--review::part(button) {
+  background: var(--lt-ch-btn-review-part-button-background, #fff3e6);
+  color: var(--lt-ch-btn-review-part-button-color, #F4511E);
+  border-color: var(--lt-ch-btn-review-part-button-border-color, #FB8C00);
+}
+
+.ch-btn--review:hover::part(button) { background: var(--lt-ch-btn-review-hover-part-button-background, #ffe0b2); border-color: var(--lt-ch-btn-review-hover-part-button-border-color, #F4511E); }
+
+/* Zurück zu Entwurf – neutral */
+.ch-btn--draft::part(button) {
+  background: var(--lt-ch-btn-draft-part-button-background, #F9FAFB);
+  color: #374151;
+  border-color: var(--lt-ch-btn-draft-part-button-border-color, #D1D5DB);
+}
+
+.ch-btn--draft:hover::part(button) { background: #F3F4F6; border-color: #9CA3AF; }
+
+/* Finalisieren – green filled */
+.ch-btn--finalize::part(button) {
+  background: var(--lt-ch-btn-finalize-part-button-background, var(--lt-ok));
+  color: var(--lt-ch-btn-finalize-part-button-color, #fff);
+  border-color: var(--lt-ch-btn-finalize-part-button-border-color, var(--lt-ok));
+}
+
+.ch-btn--finalize:hover::part(button) {
+  background: var(--lt-ch-btn-finalize-hover-part-button-background, color-mix(in srgb, var(--lt-ok) 85%, black));
+  border-color: var(--lt-ch-btn-finalize-hover-part-button-border-color, color-mix(in srgb, var(--lt-ok) 85%, black));
+}
+
+/* Annullieren – red outlined */
+.ch-btn--void::part(button) {
+  background: var(--lt-ch-btn-void-part-button-background, #FFF);
+  color: var(--lt-ch-btn-void-part-button-color, var(--lt-error));
+  border-color: var(--lt-ch-btn-void-part-button-border-color, #FCA5A5);
+}
+
+.ch-btn--void:hover::part(button) {
+  background: var(--lt-ch-btn-void-hover-part-button-background, #FFF7F7);
+  border-color: var(--lt-ch-btn-void-hover-part-button-border-color, var(--lt-error));
+}
+
+/* Stornieren (createCreditNote) – same red-outlined family as .ch-btn--void above; a separate class because it's a distinct action (creates a credit note, not a
+   status transition of the current invoice) that is never rendered alongside .ch-btn--void. */
+.ch-btn--storno::part(button) {
+  background: var(--lt-ch-btn-storno-part-button-background, #FFF);
+  color: var(--lt-ch-btn-storno-part-button-color, var(--lt-error));
+  border-color: var(--lt-ch-btn-storno-part-button-border-color, #FCA5A5);
+}
+
+.ch-btn--storno:hover::part(button) {
+  background: var(--lt-ch-btn-storno-hover-part-button-background, #FFF7F7);
+  border-color: var(--lt-ch-btn-storno-hover-part-button-border-color, var(--lt-error));
+}
+
+/* Nachkalkulation – neutral blue outlined, sits next to the status actions */
+.ch-btn--recalculate::part(button),
+.ch-btn--refresh-master-data::part(button) {
+  background: var(--lt-ch-btn-recalculate-part-button-background, #F0F6FF);
+  color: var(--lt-ch-btn-recalculate-part-button-color, #1D4ED8);
+  border-color: var(--lt-ch-btn-recalculate-part-button-border-color, #93C5FD);
+}
+
+.ch-btn--recalculate:hover::part(button),
+.ch-btn--refresh-master-data:hover::part(button) {
+  background: var(--lt-ch-btn-recalculate-hover-part-button-background, #DBEAFE);
+  border-color: var(--lt-ch-btn-recalculate-hover-part-button-border-color, #3B82F6);
+}
+
+/* Animated Refresh Button – Bauhaus Flair */
+.refresh-button-animated:active iron-icon {
+  animation: spin 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.einvoice-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  margin: 0;
+  border: none;
+  border-bottom: 1px solid var(--bau-rule);
+  border-left: 4px solid transparent;
+  background: transparent;
+  color: var(--bau-neutral);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.einvoice-step-btn--active { border-left-color: var(--bau-accent); }
+
+.einvoice-step-btn .bau-eyebrow { margin-bottom: 0; flex: 1 1 auto; }
+
+@media (width <= 700px) {
+  .einvoice-step-btn { width: auto; border-bottom: none; border-left: none; border-top: 4px solid transparent; }
+  .einvoice-step-btn--active { border-left-color: transparent; border-top-color: var(--bau-accent); }
+}
+
+.journal-detail-button { color: var(--lt-text-secondary); }
+
+.journal-detail-button:hover { color: var(--lt-accent); }
+
+.journal-expand-button { color: var(--lt-text-secondary); }
+
+.journal-expand-button:hover { color: var(--lt-accent); }
+
+/* Colours are shared with .ch-btn--recalculate; only the micro-interaction lives here. */
+.ch-btn--refresh-master-data::part(button) { transition: transform 0.12s ease, background 0.1s ease, border-color 0.1s ease; }
+
+.ch-btn--refresh-master-data:hover::part(button) { transform: translateY(-1px); }
+
+.ch-btn--refresh-master-data:active::part(button) { transform: translateY(0) scale(0.97); }
+
+/* ==========================================================================
+   Field
+   ========================================================================== */
+
+.lt-article-ref-recipient { flex: 2 1 14rem; min-width: 0; max-width: 100%; }
+
+.lt-article-ref-number { flex: 1 1 10rem; min-width: 0; max-width: 100%; }
+
+.lt-article-ref-name { flex: 2 1 16rem; min-width: 0; max-width: 100%; }
+
+.lt-article-ref-remove { flex: 0 0 auto; }
+
+.lt-enum-row { margin: 0; }
+
+.lt-enum-row__code { color: var(--lumo-secondary-text-color); font-size: var(--lumo-font-size-s); }
+
+.lt-unit-row { margin: 0; }
+
+.lt-unit-row__symbol { color: var(--lumo-secondary-text-color); font-size: var(--lumo-font-size-s); }
+
+.lt-check-mark { font-weight: 700; color: var(--lumo-contrast-50pct); }
+
+.lt-check-mark--ok { color: var(--lumo-success-color); }
+
+.lt-check-label { font-size: 0.875rem; color: var(--lumo-secondary-text-color); }
+
+.lt-check-label--ok { color: var(--lumo-primary-text-color); }
+
+/* the positions toolbar's category filter row read as a list of counters, not as
+   filters: the inactive chips carried Lumo's borderless TERTIARY variant (no chrome at all).
+   .item-filter-chip is the outlined pill that gives every inactive chip a visible clickable
+   affordance; .item-filter-chip--active is the selected one, filled instead of outlined so
+   selection is never colour-only (weight + fill differ, and aria-pressed carries it for screen
+   readers). These classes sit on a Vaadin [Button] host, so the paintable box is its
+   `::part(button)` (same idiom as .ch-btn/.ch-action-btn above), not the host element itself.
+   All colours come from tokens that already redefine themselves under html[theme~="dark"] above
+   (--lt-*, --lumo-primary-*), so no separate dark block is needed here — the same mechanism the
+   --ino-status-*-bg tokens already use for the chips above. */
+.item-filter-chip::part(button) {
+  border-radius: 999px;
+  border: 1.5px solid var(--lt-border-subtle);
+  background: transparent;
+  color: var(--lt-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.item-filter-chip:not([disabled]):hover::part(button) {
+  border-color: var(--lt-accent);
+  background: var(--lt-hover);
+  color: var(--lt-accent);
+}
+
+.item-filter-chip--active::part(button) {
+  border-color: var(--lumo-primary-color);
+  background: var(--lumo-primary-color);
+  color: var(--lumo-primary-contrast-color);
+  font-weight: 700;
+}
+
+.item-filter-chip--active:not([disabled]):hover::part(button) {
+  border-color: var(--lumo-primary-color);
+  background: var(--lumo-primary-color);
+  color: var(--lumo-primary-contrast-color);
+}
+
+.item-filter-chip[disabled]::part(button) {
+  color: var(--lt-text-disabled);
+  border-color: var(--lt-border-subtle);
+  cursor: not-allowed;
+}
+
+/* the Rechnungsliste's "Eingrenzen" filter row (Kunde/Anbieter/Status/Reverse
+   Charge/Von-Bis), set off from the "Neue Rechnung"/Textsuche row above it. Same tinted-section
+   idiom as the B2B editor (--lumo-contrast-5pct, already proven dark-mode-safe and
+   brown-free elsewhere in this file) — no new color values here. */
+.invoice-filter-row {
+  background: var(--lumo-contrast-10pct);
+  border-radius: var(--lt-radius-card);
+  padding: 0.5rem 0.75rem;
+  align-items: center;
+}
+
+/* Formular-Validierung (Rechnungsbearbeitung): ein Feld, das gerade als fehlerhaft markiert
+   wurde, wird kurz geschüttelt und pulsiert rot, bevor es in den ruhigen (aber weiterhin roten)
+   Fehlerzustand übergeht — reine Bestätigung "hier hinsehen", keine Dauerbewegung. */
+@keyframes lt-field-shake {
+  0%, 100% { transform: translateX(0); }
+  15%, 55% { transform: translateX(-6px); }
+  35%, 75% { transform: translateX(6px); }
+  90% { transform: translateX(-2px); }
+}
+
+@keyframes lt-field-alert-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--lt-error) 55%, transparent); }
+  100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--lt-error) 0%, transparent); }
+}
+
+.lt-field-flash {
+  animation:
+    lt-field-shake 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    lt-field-alert-ring 0.9s ease-out;
+  border-radius: var(--lt-radius-field);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-field-flash { animation: none; }
+}
+
+/* Betragsvorschau */
+.lt-amount-preview .row { display: flex; justify-content: space-between; gap: var(--ino-spacing); }
+
+.lt-amount-preview .label { color: var(--lumo-secondary-text-color); font-size: 0.85rem; }
+
+.lt-amount-preview .amount { font-variant-numeric: tabular-nums; text-align: right; min-width: 9ch; }
+
+.lt-amount-preview .row.emphasized { font-weight: 700; font-size: 1.05em; }
+
+.lt-amount-preview .row.emphasized .label { color: var(--lumo-body-text-color); }
+
+.lt-amount-preview hr { border: none; border-top: 1px solid var(--lumo-contrast-10pct); margin: 0.25rem 0; }
+
+/* Kunde/B2B-Tab: größere Felder statt einer verlorenen
+   Mini-ComboBox in einem sonst leeren Tab */
+.recipient-b2b-field {
+  --lumo-text-field-size: 3rem;
+
+  font-size: 1.1rem;
+  max-width: 480px;
+}
+
+.recipient-b2b-field::part(input-field) {
+  font-size: 1.1rem;
+}
+
+/* reference-data sub-tab bar never scrolls horizontally: below Lumo's common 640px
+   breakpoint the Tabs bar is swapped for a full-width Select bound to the same selection model
+   (ReferenceDataView). Visibility toggles purely via this media query on stable class names —
+   no JS/resize listeners. */
+.reference-data-subtab-select {
+  display: none;
+}
+
+@media (width <= 640px) {
+  .reference-data-subtab-select {
+      display: block;
+      width: 100%;
+    }
+}
+
+/* the article-select combos' (GoodsItemDialog/ServiceItemDialog) suggestion rows: a
+   fixed-width, tabular-figures number column so numbers line up like a ledger, the name next to
+   it, and a muted single-line description underneath (ArticleComboSupport.kt's ComponentRenderer).
+   The overlay is widened so the number column never wraps on the 2-column form layout. */
+.article-select-combo {
+  --vaadin-combo-box-overlay-width: 28rem;
+}
+
+.article-combo-suggestion {
+  padding: 0.2rem 0;
+  max-width: 100%;
+}
+
+.article-combo-header {
+  align-items: baseline;
+}
+
+.article-combo-number {
+  display: inline-block;
+  min-width: 7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--lt-text-secondary);
+}
+
+.article-combo-name {
+  font-weight: 600;
+}
+
+.article-combo-description {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lt-text-secondary);
+}
+
+/* reverse-charge field (ReverseChargeField): binary lt-segmented control, one row */
+.rc-field { margin-top: 0.5rem; }
+
+.rc-field-row { gap: 0.75rem; justify-content: space-between; flex-wrap: nowrap; }
+
+.rc-field-label { font-size: 0.9rem; font-weight: 600; color: var(--lt-text-primary); white-space: nowrap; }
+
+/* Segmented control: radio group shown as joined pills, the circle hidden. */
+.lt-segmented {
+  display: inline-flex;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--lumo-contrast-20pct);
+  border-radius: 999px;
+}
+
+.lt-segmented::part(group-field-container) {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+}
+
+.lt-segmented vaadin-radio-button {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.9rem;
+  background: transparent;
+  color: var(--lumo-body-text-color);
+  font-size: var(--lumo-font-size-s);
+  cursor: pointer;
+}
+
+.lt-segmented vaadin-radio-button::part(radio) {
+  display: none;
+}
+
+.lt-segmented vaadin-radio-button[checked] {
+  background: var(--lumo-primary-color);
+  color: var(--lumo-primary-contrast-color);
+}
+
+/* ==========================================================================
+   Chip
+   ========================================================================== */
+
+/* System view */
+.lt-status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+.lt-status-dot--up { background: var(--lt-ok); }
+
+.lt-status-dot--down { background: var(--lt-error); }
+
+.lt-status-dot--small { width: 8px; height: 8px; margin-right: 0.75rem; }
+
+.status-chip.lt-enum-row__group { font-size: var(--lumo-font-size-xs); }
+
+.status-chip.lt-unit-row__domain { font-size: var(--lumo-font-size-xs); }
+
+/* Status Chips
+   One shared capsule geometry for every status chip in the app. Colours come only from the
+   --lt-chip-<tone>-bg/-fg pairs (light + dark defined with the tokens above); the tone modifier
+   classes at the end of this block map each ChipTone onto its pair. */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+
+  /* the invoice-list validation column is 11rem; a state label that
+     doesn't fit ellipsizes here instead of overflowing the cell or forcing the grid wider.
+     Every chip already carries a `title` attribute with the full label/tooltip text. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* One uniform cue on every chip: the leading dot; state identity still comes from the label text
+   (the non-colour a11y cue). role="status" (set on the component) covers the rest. */
+.status-chip::before {
+  content: "\25CF";
+  font-size: 0.55em;
+  line-height: 1;
+  color: currentcolor;
+}
+
+/* A chip with its own symbol drops the dot; the symbol takes the tone colour via currentcolor. */
+.status-chip--icon::before { content: none; }
+
+.status-chip--icon vaadin-icon {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+}
+
+/* Tone modifiers: one per ChipTone. */
+.status-chip--neutral { background: var(--lt-chip-neutral-bg); color: var(--lt-chip-neutral-fg); }
+
+.status-chip--accent { background: var(--lt-chip-accent-bg); color: var(--lt-chip-accent-fg); }
+
+.status-chip--ok { background: var(--lt-chip-ok-bg); color: var(--lt-chip-ok-fg); }
+
+.status-chip--warn { background: var(--lt-chip-warn-bg); color: var(--lt-chip-warn-fg); }
+
+.status-chip--error { background: var(--lt-chip-error-bg); color: var(--lt-chip-error-fg); }
+
+.status-chip--review { background: var(--lt-chip-review-bg); color: var(--lt-chip-review-fg); }
+
+.status-chip--tech-error { background: var(--lt-chip-tech-error-bg); color: var(--lt-chip-tech-error-fg); }
+
+.status-chip--storno { background: var(--lt-chip-storno-bg); color: var(--lt-chip-storno-fg); }
+
+/* Clickable chips and quick-filter chips are real <button> elements so Enter/Space activate them;
+   reset the browser's default button chrome so they read as the same capsule as every static chip.
+   Deliberately doesn't touch background/color — the tone modifiers own those. */
+button.status-chip {
+  margin: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  appearance: none;
+}
+
+.status-chip--clickable:hover {
+  filter: var(--lt-status-chip-clickable-hover-filter, brightness(0.96));
+}
+
+/* quick-filter chip row above the grid: one chip per validation state with a
+   non-zero count in the current filter, toggling [InvoiceListView]'s validationStatusFilter. */
+.validation-quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+}
+
+.quick-filter-chip:hover {
+  filter: var(--lt-quick-filter-chip-hover-filter, brightness(0.96));
+}
+
+/* The active/selected quick-filter chip needs a non-color cue too (A11y) — a solid ring in the
+   chip's own color, not a new hand-picked accent. */
+.quick-filter-chip--active {
+  box-shadow: 0 0 0 2px currentcolor;
+}
+
+/* Work in progress: the chip's leading dot pulses gently so "in progress" is visible without the
+   label needing a "..." suffix. */
+@keyframes status-chip-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+.status-chip--pulse::before {
+  animation: status-chip-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-chip--pulse::before {
+      animation: none;
+    }
+}
+
+/* Symbol-only status (list overviews): the icon takes the tone's foreground colour; label lives in title/aria-label. */
+.status-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.status-glyph--clickable { cursor: pointer; }
+
+.status-glyph--neutral { color: var(--lt-chip-neutral-fg); }
+
+.status-glyph--accent { color: var(--lt-chip-accent-fg); }
+
+.status-glyph--ok { color: var(--lt-chip-ok-fg); }
+
+.status-glyph--warn { color: var(--lt-chip-warn-fg); }
+
+.status-glyph--error { color: var(--lt-chip-error-fg); }
+
+.status-glyph--review { color: var(--lt-chip-review-fg); }
+
+.status-glyph--tech-error { color: var(--lt-chip-tech-error-fg); }
+
+.status-glyph--storno { color: var(--lt-chip-storno-fg); }
+
+.status-glyph--pulse { animation: status-chip-pulse 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .status-glyph--pulse {
+      animation: none;
+    }
+}
+
+.system-status-dot {
+  border: 1px solid color-mix(in srgb, var(--lt-text-primary) 20%, transparent);
+}
+
+.entry-dirty-dot { color: var(--bau-primary); font-size: 0.9rem; line-height: 1; }
+
+/* Bauhaus status square, shared by the tab caption, the guided
+   step rail and the PRÜFUNG step. Filled vs. outline, not color alone, carries the state. */
+.bau-status-square {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--bau-neutral);
+  background: transparent;
+}
+
+.bau-status-square--filled { background: var(--bau-green); border-color: var(--bau-green); }
+
+.bau-status-square--open { background: transparent; border-color: var(--bau-neutral); }
+
+/* "{n} Regeln · {m} Pflicht · {k} bedingt" + the usage chip, both plain Lumo
+   `badge` pills (see B2bProfilesTab.buildSummaryChips) — this class only supplies the row layout. */
+.b2b-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.b2b-term-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--lumo-border-radius-l);
+  background: var(--lumo-primary-color-10pct);
+  color: var(--lumo-primary-text-color);
+  font-weight: 600;
+}
+
+/* the "vorbelegt" (autoFilled) badge: an unobtrusive marker, next to the selected term's
+   badge and per picker suggestion row, for a term the application always populates on every
+   invoice — Lumo's success token pair (not the primary/blue used by .b2b-term-badge itself, so
+   the two never read as the same signal) auto-adjusts for dark mode and keeps sufficient contrast
+   the same way every other Lumo-token color in this file already does. */
+.b2b-term-autofilled-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--lumo-border-radius-m);
+  background: var(--lumo-success-color-10pct);
+  color: var(--lumo-success-text-color);
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 700;
+}
+
+/* KI-Sichtbarkeit: advisory chip + finding↔recommendation badges
+   The advisory chip uses the neutral tone: the LLM result is advisory only and must never read
+   as a verdict on the invoice. */
+/* Inline "KI-Tipp" badge (ValidationReport.kt's aiTipBadgeMarkdown) linking a KoSIT/Business
+   finding to the AI passage that discusses it — same neutral tone as the chip above. */
+.ai-tip-badge {
+  display: inline-block;
+  padding: 0.05em 0.55em;
+  margin-left: 0.35em;
+  border-radius: 999px;
+  background: var(--lumo-contrast-10pct);
+  color: var(--lumo-primary-text-color);
+  font-size: 0.75em;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ai-tip-badge:hover {
+  background: var(--lumo-contrast-20pct);
+}
+
+/* The verb symbol replaces the generic ● marker every other status chip
+   carries — one cue per chip, not two. */
+.journal-chip::before { content: none; }
+
+.journal-chip-icon {
+  width: 0.85em;
+  height: 0.85em;
+  flex: none;
+}
+
+.settings-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid #141414;
+  border-radius: var(--lt-radius-pill);
+  padding: 2px var(--lt-space-s);
+}
+
+.settings-chip-aktiv {
+  background-color: #f7b500;
+  color: #141414;
+}
+
+.settings-chip-inaktiv {
+  background-color: #fff;
+  color: #9a9a9a;
+  border-color: #c5c5c5;
+}
+
+.settings-chip:focus-visible {
+  outline: 3px solid #141414;
+  outline-offset: 2px;
+}
+
+.settings-meta {
+  margin-top: 0.5rem;
+}
+
+.settings-meta-text {
+  font-size: 0.78rem;
+  color: #6f6f6f;
+}
+
+/* non-standard-value chips */
+/* Chips row above the editor: flat, rectilinear pills (--ino-radius-sm is 0 project-wide), one
+   accent colour as a light tint border/text — never a solid fill, so the row stays quiet next to
+   the toolbar. No chip at all (isVisible = false in FreeTextChips) reserves no space. */
+.lt-freetext-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.lt-freetext-chip {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--lt-accent) 45%, transparent);
+  border-radius: var(--ino-radius-sm);
+  background: color-mix(in srgb, var(--lt-accent) 8%, var(--lt-surface));
+  color: var(--lt-accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+}
+
+.lt-freetext-chip:hover {
+  background: color-mix(in srgb, var(--lt-accent) 18%, var(--lt-surface));
+}
+
+html[theme~="dark"] .lt-freetext-chip:hover {
+  background: color-mix(in srgb, var(--lt-accent) 28%, var(--lt-surface));
+}
+
+/* chip caption: short label in secondary colour, then the value (ellipsised when long) */
+.lt-freetext-chip__label {
+  color: var(--lt-text-secondary);
+  font-weight: 400;
+  margin-right: 0.4rem;
+}
+
+.lt-freetext-chip__value {
+  display: inline-block;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Placeholder chips of the template editor: flat pills without borders, one gap in both directions,
+   so a wrapped group spaces exactly like separate groups. The token lives in the tooltip. */
+.mail-template-chip-panel {
+  gap: 0.375rem;
+}
+
+.mail-template-chip-panel .lt-freetext-chips {
+  gap: 0.375rem;
+}
+
+.mail-template-chip-panel .lt-freetext-chip {
+  --lumo-button-size: 1.625rem;
+  --vaadin-button-background: var(--lumo-contrast-10pct);
+  --vaadin-button-tertiary-background: var(--lumo-contrast-10pct);
+
+  display: inline-flex;
+  align-items: center;
+  height: 1.625rem;
+  min-height: 0;
+  margin: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--lumo-contrast-10pct);
+  color: var(--lumo-body-text-color);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 0 0.65rem;
+}
+
+.mail-template-chip-panel .lt-freetext-chip:hover,
+.mail-template-chip-panel .lt-freetext-chip:focus-visible,
+.mail-template-chip-panel .lt-freetext-chip[focus-ring] {
+  background: var(--lumo-primary-color-10pct);
+  color: var(--lumo-primary-text-color);
+}
+
+.mail-template-chip-panel .lt-freetext-chip:focus-visible,
+.mail-template-chip-panel .lt-freetext-chip[focus-ring] {
+  outline: 2px solid var(--lumo-primary-color);
+  outline-offset: 1px;
+}
+
+.mail-template-chip-panel .lt-freetext-chip__value {
+  display: none;
+}
+
+.mail-template-chip-panel .lt-freetext-chip__label {
+  margin-right: 0;
+  color: inherit;
+  font-weight: inherit;
+}
+
+/* new-jobs badge above the print-job grid
+   Oval "N new" indicator of PrintJobListView. Same pill geometry as .status-chip, but its own
+   class: it counts jobs, it is not a job status. Colours are the info pair of the validation
+   chip (--ino-validation-pending-*), which already flips for dark mode. */
+.new-jobs-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--ino-validation-pending-bg);
+  color: var(--ino-validation-pending-color);
+}
+
+/* ==========================================================================
+   Grid
+   ========================================================================== */
+
+.ranking-truncate { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.lt-document-columns { gap: 1rem; flex-wrap: wrap; align-items: stretch; }
+
+html .lt-perdiem-col-date { width: 10rem; flex: none; }
+
+html .lt-perdiem-col-participant { width: 12rem; flex: none; }
+
+html .lt-perdiem-col-symbol { display: flex; justify-content: center; box-sizing: border-box; flex: none; width: 2.5rem; }
+
+.lt-day-date { font-weight: 600; }
+
+.lt-day-row { gap: 0.5rem; }
+
+.lt-day-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--lt-day-badge-color);
+  font-size: 0.78rem;
+}
+
+/* Rechnungstabelle: rechtsbündige numerische Spalten */
+/* Tabular figures + right padding for money/quantity columns, applied via
+   Grid.Column#asNumericColumn() (ui/component/NumericColumn.kt). */
+vaadin-grid::part(bau-num) { font-variant-numeric: tabular-nums; padding-right: var(--lt-space-m); }
+
+/* Category color bar (4px) on the position column, replacing the old three-tab split */
+vaadin-grid::part(item-cat-product) { border-left: 4px solid var(--bau-primary); }
+
+vaadin-grid::part(item-cat-service) { border-left: 4px solid var(--bau-accent); }
+
+vaadin-grid::part(item-cat-travel) { border-left: 4px solid var(--bau-yellow); }
+
+.toolbar-wrap { flex-wrap: wrap; }
+
+/* The Excel link wraps an icon button; as a plain inline box it sits on the line box, not on the
+   button, and drifts above the pager in baseline-aligned toolbar rows. */
+.spreadsheet-download { display: inline-flex; }
+
+.toolbar-wrap vaadin-button,
+.toolbar-wrap vaadin-combo-box {
+  white-space: nowrap;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* unread message-center rows (Grid.setPartNameGenerator "unread-row"): weight only, no
+   color, so it reads correctly in both themes without a token lookup. */
+/* Narrow screens: cell text wraps instead of being cut to an ellipsis, so message and journal
+   texts stay readable without horizontal scrolling. */
+@media (width <= 700px) {
+  .message-center-grid .lt-cell-ellipsis,
+  .mail-journal-table .lt-cell-ellipsis,
+  .journal-grid .lt-cell-ellipsis {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .message-center-grid::part(cell),
+  .mail-journal-table::part(cell),
+  .journal-grid::part(cell) {
+    overflow-wrap: anywhere;
+  }
+}
+
+.message-center-grid::part(unread-row) {
+  font-weight: 700;
+}
+
+@media (width <= 480px) {
+  .invoice-table { font-size: 0.85rem; }
+  .toolbar-wrap { gap: 0.45rem; }
+}
+
+@media (width >= 481px) and (width <= 900px) {
+  .invoice-table { font-size: 0.92rem; }
+}
+
+@media (width >= 901px) {
+  .invoice-table { font-size: 0.92rem; }
+}
+
+.sbom-grid-wrapper {
+  min-height: clamp(28rem, 68vh, 52rem);
+  padding: 0.75rem;
+  border-radius: var(--lt-radius-card);
+  background: var(--lt-sbom-grid-wrapper-background, #eef3fa);
+}
+
+.sbom-grid-wrapper vaadin-grid {
+  min-height: clamp(28rem, 68vh, 52rem);
+}
+
+.sbom-grid-wrapper .sbom-description-cell {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  -webkit-line-clamp: 3;
+  line-height: 1.4;
+  max-height: calc(1.4em * 3);
+  padding-right: 0.25rem;
+}
+
+.sbom-grid-wrapper .sbom-description-cell::after {
+  content: "";
+}
+
+/* Skeleton loaders for invoice list */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+/* Grid wrapper and Pager
+   GridWrapper supplies a consistent vertical spacing and allows attaching a Pager component.
+   These rules are intentionally minimal — components add class names for specifics.
+ */
+.sp-grid-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ino-spacing-sm, 0.5rem);
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* the grid takes the height left above the pager; the minimum keeps it usable in short windows */
+.sp-grid-wrapper > vaadin-grid:not([all-rows-visible]) {
+  flex: 1 1 auto;
+  min-height: 16rem;
+}
+
+.sp-pager {
+  display: flex;
+  gap: var(--ino-spacing-xs, 0.5rem);
+  align-items: center;
+  padding: var(--ino-spacing-xs, 0.35rem) 0;
+  justify-content: flex-end;
+}
+
+.sp-pager button {
+  min-width: 2.2rem;
+  height: 2.2rem;
+  border-radius: var(--lt-radius-pill);
+}
+
+.invoice-item-description-cell {
+  min-width: 200px;
+  max-width: 320px;
+  white-space: normal !important;
+  overflow-wrap: break-word;
+  line-height: 1.4;
+}
+
+/* BT-154/BT-156 sublines under a PRODUCT position's description (positions grid).
+   Smaller and muted (color comes from .text-muted, already dark-mode-safe via Lumo tokens) so they
+   read as supplementary detail, not a second row of equal weight. */
+.invoice-item-subline {
+  display: block;
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}
+
+/* Ensure horizontal scrolling on small screens */
+vaadin-grid {
+  border-radius: var(--lt-radius-card);
+  overflow: hidden;
+  border: 1px solid var(--lumo-contrast-10pct);
+}
+
+/* GridScrollBox: the grid runs as wide as its columns and the box scrolls sideways. The grid's own
+   scroller lives in its shadow DOM and cannot be styled, so under overlay scrollbars (macOS) it
+   stays invisible and the right-hand columns look cut off. A styled ::-webkit-scrollbar is always
+   drawn by Chromium and Safari; Firefox gets the standard properties instead (setting them in
+   Chromium would switch the styled scrollbar off again, hence the @supports). */
+.lt-grid-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.lt-grid-scroll > vaadin-grid {
+  width: max-content;
+  min-width: 100%;
+}
+
+.lt-grid-scroll::-webkit-scrollbar { height: 0.625rem; }
+.lt-grid-scroll::-webkit-scrollbar-track { background: transparent; }
+
+.lt-grid-scroll::-webkit-scrollbar-thumb {
+  background: var(--lumo-contrast-30pct);
+  border-radius: var(--lt-radius-pill);
+}
+
+.lt-grid-scroll::-webkit-scrollbar-thumb:hover { background: var(--lumo-contrast-50pct); }
+
+@supports not selector(::-webkit-scrollbar) {
+  .lt-grid-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--lumo-contrast-30pct) transparent;
+  }
+}
+
+/* active-row highlight (Material accent) for whichever rule the field editor popup
+   currently shows; Grid has no row-level setClassNameGenerator in this Vaadin version, only
+   setPartNameGenerator (see MessageCenterView's "unread-row" for the same idiom). */
+.b2b-rules-grid::part(active-rule-row) {
+  background: var(--lumo-primary-color-10pct);
+}
+
+/* the "Beschreibung" column cell: single-line, ellipsized, never grows past the column
+   so it can no longer push the requirement/placement/default-value columns or the row's
+   edit/delete buttons out of view; the full text lives in the cell's title attribute (mouse-over
+   tooltip). */
+.b2b-definition-cell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* resizable columns everywhere, tooltips on truncatable text columns
+   Generic single-line ellipsis cell for any DataTable text column whose content can be long
+   (descriptions, notes, file names, message texts). Pairs with a native-tooltip `title`
+   attribute carrying the full value — the same idiom as .b2b-definition-cell above, generalized
+   for reuse across views instead of copy-pasting per-view classes. See
+   de.littletrotter.ui.component.ellipsizedTextColumn. */
+.lt-cell-ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Material two-line list item cell (de.littletrotter.ui.component.twoLineTextColumn):
+   identity (short primary line + longer secondary line) in one column instead of two. */
+.lt-cell-two-line {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-block: var(--lumo-space-xs);
+}
+
+.lt-cell-two-line__primary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  font-weight: 500;
+  color: var(--lumo-body-text-color);
+}
+
+.lt-cell-two-line__secondary {
+  font-size: var(--lumo-font-size-s);
+  line-height: var(--lumo-line-height-xs);
+  color: var(--lumo-secondary-text-color);
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* Rechter Rand: Luft für jede Textdarstellung
+   Befund: Text/Steuerelemente liefen in mehreren Masken bündig am rechten
+   Container-Rand aus. Zwei wiederkehrende Ursachen, an dieser Stelle zentral behoben statt pro
+   View geflickt: (1) overflow-y: auto-Bereiche, deren Scrollbalken den deklarierten
+   padding-right auffrisst — siehe scrollbar-gutter-Ergänzungen weiter oben bei .sp-form-body,
+   .entry-workspace, .b2b-editor-scroll-area; (2) Kopfzeilen-Layouts mit
+   justify-content: space-between/END ohne eigenen rechten Innenabstand, wo rechts platzierte
+   Aktionen/Zähler direkt am Containerrand kleben. */
+/* der Rechnungspositionen-Kopfzeile (InvoiceDetailViewItems.kt): Positionszähler links,
+   „Neu"-Buttons rechts via justify-content: space-between auf einem ungepolsterten Div-Slot
+   innerhalb des TabSheets. */
+.item-toolbar-row {
+  padding-right: var(--lumo-space-s);
+  box-sizing: border-box;
+}
+
+/* title and entry count live in the grid's own top header row, joined across all columns:
+   one flat band (4px accent edge, hairline beneath, no fill of its own), the column labels are
+   the row below it. The cell part carries edge, hairline and zero padding; the band inside sets
+   the one horizontal inset, so title-left and count-right are symmetric (the right side adds the
+   edge width). */
+.journal-grid::part(journal-band-cell) {
+  --vaadin-grid-cell-padding: 0;
+
+  border-left: 4px solid var(--lt-accent);
+  border-bottom: 1px solid var(--lt-border-subtle);
+}
+
+/* the action-grouped grid: "Vorgang" (tile + label), "Was genau", "Δ Brutto" and the
+   expand toggle. The "journal-row--warning" part (Grid.setPartNameGenerator, same
+   idiom as MessageCenterView's own "unread-row") is the ONE row-level emphasis this view ever
+   applies (action 0/UNSPECIFIED together with a DB-role actor); every other row stays unstyled
+   beyond its own tile colour. */
+.journal-grid::part(journal-row--warning) { background: var(--ino-status-warning-bg); }
+
+/* glyph column headers (Status, Validierung): the symbol must read as a column title, not as a
+   dimmed tertiary button inside the grid's secondary-coloured header row. */
+vaadin-grid .tile-column-header {
+  --lumo-button-size: 1.75rem;
+
+  color: var(--lt-text-primary);
+  margin: 0;
+  padding: 0;
+  border-bottom: 2px solid var(--lt-accent);
+}
+
+vaadin-grid .tile-column-header vaadin-icon { width: 1.15rem; height: 1.15rem; }
+
+vaadin-grid .tile-column-header:hover,
+vaadin-grid .tile-column-header:focus-visible {
+  color: var(--lt-accent);
+}
+
+/* ==========================================================================
+   ActionBar
+   ========================================================================== */
+
+.lt-header-actions-slot { display: flex; align-items: center; gap: 0.75rem; }
+
+/* Action bar */
+.sp-action-bar {
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  border-top: 1px solid var(--lumo-contrast-10pct);
+  padding: 0.85rem 1.5rem;
+  flex-shrink: 0;
+}
+
+/* receipts tab + dialog SelectionActionBar: Material "contextual app bar" that replaces a
+   table's normal header the moment a row is selected. One action colour (--lt-accent) as a light
+   tint, not a solid fill, so the bar's own tertiary/error buttons still read clearly against it;
+   flat/rectangular (the theme's --ino-radius tokens already default to 0). Expressed purely via
+   tokens that already redefine themselves under html[theme~="dark"] (see the --ino-status-*-bg
+   color-mix pattern above), so dark mode needs no separate override here. */
+.selection-action-bar {
+  background: color-mix(in srgb, var(--lt-accent) 12%, var(--lt-surface));
+  border: 1px solid var(--lt-accent);
+  padding: 0.5rem 0.75rem;
+}
+
+.selection-action-bar__count {
+  font-weight: 600;
+  color: var(--lt-text-primary);
+}
+
+/* Action bar pinned to the bottom edge of the page: state on the left, actions on the right. */
+.lt-actionbar-sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lumo-space-m);
+  margin-top: var(--lumo-space-m);
+  padding: var(--lumo-space-s) var(--lumo-space-m);
+  background: var(--lumo-base-color);
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: var(--lumo-border-radius-l);
+  box-shadow: var(--lumo-box-shadow-s);
+}
+
+.lt-actionbar-sticky__state,
+.lt-actionbar-sticky__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-s);
+}
+
+.lt-actionbar-sticky__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--lumo-contrast-40pct);
+}
+
+.lt-actionbar-sticky__dot--primary {
+  background: var(--lumo-primary-color);
+}
+
+.lt-actionbar-sticky__dot--warning {
+  background: var(--lumo-warning-color);
+}
+
+.lt-actionbar-sticky__label {
+  font-size: var(--lumo-font-size-s);
+  color: var(--lumo-secondary-text-color);
+}
+
+/* Page shell (title row, filters, content) */
+.sp-action-bar {
+  gap: var(--lt-space-s, 8px);
+}
+
+.sp-action-bar-leading {
+  align-items: center;
+  gap: var(--lt-space-s, 8px);
+  color: var(--lt-text-secondary);
+}
+
+/* ==========================================================================
+   PageShell
+   ========================================================================== */
+
+/* Small shared pieces */
+.lt-notification-row { display: flex; align-items: center; gap: var(--lumo-space-m); }
+
+.lt-stat-breadcrumbs {
+  margin-bottom: var(--lumo-space-s);
+  color: var(--lumo-secondary-text-color);
+  font-size: var(--lumo-font-size-s);
+}
+
+.lt-stat-chevron { font-size: var(--lumo-font-size-xs); }
+
+.lt-hint-text { color: var(--lumo-secondary-text-color); margin: 0; }
+
+/* Skip Link (accessibility) */
+.skip-link {
+  position: fixed;
+  top: -999px;
+  left: -999px;
+  background: var(--ino-status-draft);
+  color: var(--lt-skip-link-color, #fff);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--ino-radius-sm);
+  z-index: 1000;
+  transition: top 0.2s ease-in-out, left 0.2s ease-in-out;
+}
+
+.skip-link:focus-visible {
+  top: 0.75rem;
+  left: 0.75rem;
+  /* the link appears over the header, so its ring uses the header's own focus colour */
+  outline-color: var(--lt-header-focus);
+}
+
+.empty-state { padding: 2rem; text-align: center; color: var(--lumo-secondary-text-color); }
+
+.empty-state-title { font-size: 1.1rem; font-weight: 600; }
+
+.hint-text { font-size: 0.85rem; color: var(--lumo-secondary-text-color); }
+
+/* App-shell header. The navbar is the header: Vaadin's own navbar padding, gap and container
+   fill are zeroed so the navy bar runs edge to edge and nothing frames it. Every control inside
+   sits on the header hue with the same white type, hover fill and amber focus ring, which keeps
+   the bar readable in both schemes (WCAG 2.4.7 focus visibility, 1.4.3/1.4.11 contrast). */
+vaadin-app-layout {
+  --vaadin-app-layout-navbar-background: var(--lt-header-bg);
+  --vaadin-app-layout-navbar-padding-top: 0px;
+  --vaadin-app-layout-navbar-padding-bottom: 0px;
+  --vaadin-app-layout-navbar-padding-inline-start: 0px;
+  --vaadin-app-layout-navbar-padding-inline-end: 0px;
+  --vaadin-app-layout-navbar-gap: 0px;
+}
+
+vaadin-app-layout::part(navbar) {
+  min-height: var(--lt-header-height);
+  background: var(--lt-header-bg);
+  border-bottom: 1px solid var(--lt-header-rule);
+}
+
+.main-header {
+  --vaadin-focus-ring-color: var(--lt-header-focus);
+  --vaadin-focus-ring-width: 2px;
+
+  box-sizing: border-box;
+  height: var(--lt-header-height);
+  margin: 0;
+  padding: 0 0.5rem 0 0.25rem;
+  background-color: var(--lt-header-bg);
+  color: var(--lt-header-fg);
+}
+
+/* Toasts sit bottom-left, away from the view action buttons on the right. While the drawer is
+   open and docked (not the overlay of narrow screens) the container starts at its edge, so a toast
+   never covers the navigation. 16em is the Lumo drawer width. */
+html:has(vaadin-app-layout[drawer-opened]:not([overlay])) vaadin-notification-container {
+  left: var(--vaadin-app-layout-drawer-width, 16em);
+}
+
+.header-logo {
+  margin: 0 1rem 0 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.header-logo-text {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--lt-header-fg);
+}
+
+/* Hamburger, search, bell and logout: one family. Lumo's tertiary blue and the base button's
+   container fill are replaced by the header type colour on a transparent ground; the fill only
+   appears on hover/active. */
+.main-header .header-toggle,
+.main-header .command-palette-button,
+.main-header .bell-button,
+.main-header .header-logout {
+  --vaadin-button-background: transparent;
+  --vaadin-button-tertiary-background: transparent;
+  --vaadin-button-text-color: var(--lt-header-fg);
+  --vaadin-button-tertiary-text-color: var(--lt-header-fg);
+  --vaadin-button-border-color: transparent;
+  --vaadin-icon-color: var(--lt-header-fg);
+
+  margin: 0;
+  background: transparent;
+  color: var(--lt-header-fg);
+  border-radius: var(--lt-radius-pill);
+  transition: background-color 150ms ease;
+}
+
+.main-header .header-toggle {
+  width: var(--lt-header-height);
+  height: var(--lt-header-height);
+  margin: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.main-header .header-toggle:hover,
+.main-header .command-palette-button:hover,
+.main-header .bell-button:hover,
+.main-header .header-logout:hover {
+  background-color: var(--lt-header-hover);
+}
+
+.main-header .header-toggle:active,
+.main-header .command-palette-button:active,
+.main-header .bell-button:active,
+.main-header .header-logout:active {
+  background-color: var(--lt-header-active);
+}
+
+.main-header .header-toggle:focus-visible,
+.main-header .command-palette-button:focus-visible,
+.main-header .bell-button:focus-visible,
+.main-header .header-logout:focus-visible {
+  outline: 2px solid var(--lt-header-focus);
+  outline-offset: -3px;
+  background-color: var(--lt-header-hover);
+}
+
+/* app-shell bell + unread badge (header-spacer pushes bell+version to the right edge). */
+.header-spacer {
+  flex: 1 1 auto;
+}
+
+.bell-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.25rem;
+}
+
+/* Unread counter: a solid pill on the bell's top-right corner, ringed in the header colour so it
+   reads against the icon. Lumo's 10 % tinted badge would vanish on the navy bar, so the fill is
+   the solid error red with white type (4.6:1); the dark scheme flips to dark type on the light
+   red (9.6:1). Specificity beats Lumo's [theme~="badge"][theme~="error"]. */
+.main-header .bell-wrapper .bell-badge {
+  position: absolute;
+  top: -0.2rem;
+  right: -0.3rem;
+  box-sizing: border-box;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: calc(1.25rem - 4px);
+  text-align: center;
+  color: var(--lt-main-header-bell-wrapper-bell-badge-color, #FFF);
+  background: var(--lt-error);
+  border: 2px solid var(--lt-header-bg);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+/* logout keeps its small "leave" micro-interaction */
+.header-logout vaadin-icon {
+  transition: transform 150ms ease;
+}
+
+.header-logout:hover vaadin-icon,
+.header-logout:focus-visible vaadin-icon {
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-header .header-toggle,
+    .main-header .command-palette-button,
+    .main-header .bell-button,
+    .main-header .header-logout,
+    .header-logout vaadin-icon,
+    .header-logout:hover vaadin-icon,
+    .header-logout:focus-visible vaadin-icon {
+      transition: none;
+      transform: none;
+    }
+}
+
+.disclaimer-panel {
+  background: var(--lumo-base-color);
+  border: 1px solid var(--lumo-contrast-20pct);
+  border-radius: var(--lt-radius-card);
+  padding: 1.1rem;
+  max-width: 100%;
+  margin-bottom: 1rem;
+}
+
+.disclaimer-panel h3,
+.disclaimer-panel h4 {
+  margin: 0.35rem 0;
+}
+
+.disclaimer-section {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.disclaimer-section > ul {
+  list-style: disc inside;
+  margin-left: 0.5rem;
+}
+
+@media (width <= 768px) {
+  .disclaimer-panel {
+      padding: 0.8rem;
+    }
+}
+
+.disclaimer-brand-horse {
+  width: 260px;
+  max-width: 100%;
+  height: auto;
+}
+
+.disclaimer-brand-name {
+  font-size: var(--lumo-font-size-xl);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lt-brand-name);
+}
+
+.disclaimer-version {
+  font-weight: 700;
+  font-size: var(--lumo-font-size-m);
+  color: var(--lumo-primary-text-color);
+}
+
+/* breadcrumb in the navbar. Breadcrumb container flexes to fill available space
+   (between logo and spacer); the nav/ol inside it constrains content via overflow and ellipsis.
+   At narrow viewports (360px), the breadcrumb truncates middle segments first before the navbar
+   can wrap to a second line. */
+.breadcrumb-container {
+  flex: 0 1 auto;
+  min-width: 0; /* allows overflow to work with flex layout */
+  overflow: hidden;
+}
+
+.nav-breadcrumb nav {
+  display: block;
+  font-size: 0.875rem;
+}
+
+.nav-breadcrumb .breadcrumb-list {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumb-segment {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0; /* allows text-overflow in child spans */
+}
+
+.breadcrumb-segment a,
+.breadcrumb-segment span {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Separator between neighbouring segments; drawn here so every breadcrumb builder gets it. */
+.breadcrumb-segment + .breadcrumb-segment::before {
+  content: "›";
+  margin-right: 0.25rem;
+  color: var(--lumo-secondary-text-color);
+}
+
+.breadcrumb-segment a:hover {
+  text-decoration: underline;
+}
+
+/* Middle segments (not terminal) get ellipsis with tooltip on hover.
+   Terminal segment (aria-current="page") is never truncated. */
+.breadcrumb-segment li:not(:last-child) span,
+.breadcrumb-segment li:not(:last-child) a {
+  max-width: 8rem;
+}
+
+@media (width <= 360px) {
+  .breadcrumb-segment li:not(:last-child) span,
+    .breadcrumb-segment li:not(:last-child) a {
+      max-width: 5rem;
+    }
+}
+
+/* command palette: the magnifier button is styled with the other header controls
+   (.main-header block); below is the result list inside the dialog. Selection highlight uses
+   Lumo tokens only, so it self-adjusts for dark mode. */
+.command-palette-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+}
+
+.command-palette-group-header {
+  padding: 0.5rem 0.5rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--lumo-secondary-text-color);
+}
+
+.command-palette-result {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--lumo-border-radius-m);
+  cursor: pointer;
+}
+
+.command-palette-result:hover {
+  background: var(--lumo-contrast-10pct);
+}
+
+.command-palette-result.selected {
+  background: var(--lumo-primary-color-10pct);
+  /* the background alone is ~1.15:1; the keyboard selection also gets a ring and a left bar in the
+     accent token (focus is held by the search field, so :focus-visible never matches a row) */
+  outline: 2px solid var(--lt-accent);
+  outline-offset: -2px;
+  box-shadow: inset 4px 0 0 var(--lt-accent);
+}
+
+.command-palette-result-label {
+  font-size: var(--lt-font-size-body);
+}
+
+.command-palette-result-context {
+  font-size: 0.8rem;
+  color: var(--lumo-secondary-text-color);
+}
+
+.command-palette-empty {
+  padding: 1rem;
+  text-align: center;
+  color: var(--lumo-secondary-text-color);
+}
+
+/* legend dialog: the state's name between tile and sentence, aligned like a ledger column. */
+.legend-word {
+  min-width: 7rem;
+  font-weight: 600;
+}
+
+.lt-page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-m, 16px);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* form and detail pages keep one readable width; lists and overviews use the full area */
+.lt-page-shell--narrow {
+  max-width: var(--lt-content-max, none);
+}
+
+.lt-page-shell__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lt-space-s, 8px) var(--lt-space-m, 16px);
+  padding-bottom: var(--lt-space-s, 8px);
+  border-bottom: 1px solid var(--lt-rule);
+}
+
+.lt-page-shell__header > .sp-action-bar {
+  width: auto;
+  flex-shrink: 0;
+  margin-left: auto;
+  border-top: 0;
+  padding: 0;
+}
+
+/* on a narrow viewport the actions drop below the title instead of overlapping it */
+.lt-page-shell__heading {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.lt-page-shell__title {
+  margin: 0;
+  font-size: var(--lt-font-size-title, var(--lumo-font-size-xl));
+  color: var(--lt-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.lt-page-shell__subtitle {
+  font-size: var(--lumo-font-size-s);
+  color: var(--lt-text-secondary);
+}
+
+.lt-page-shell__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--lt-space-s, 8px);
+}
+
+.lt-page-shell__content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ==========================================================================
+   Dialog
+   ========================================================================== */
+
+/* Statistics: shared pieces */
+.lt-currency-heading {
+  display: block;
+  font-weight: 700;
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lumo-secondary-text-color);
+  margin: var(--lumo-space-m) 0 var(--lumo-space-xs);
+}
+
+.lt-warning-banner {
+  background: var(--ino-status-warning-bg);
+  color: var(--ino-status-warning);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
+.lt-dialog-intro { margin: 0 0 1rem 0; color: var(--lumo-secondary-text-color); }
+
+/* KoSIT report dialog */
+.lt-kosit-scroller { max-height: 60vh; }
+
+.lt-kosit-header {
+  padding: 0.9rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--lumo-contrast-10pct);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lt-kosit-count { font-size: 0.8rem; }
+
+.lt-kosit-count--error { color: var(--lumo-error-color); }
+
+.lt-kosit-count--warning { color: var(--lt-warn-text); }
+
+.lt-kosit-reason { padding: 0 1.25rem 0.75rem; color: var(--lumo-secondary-text-color); font-size: 0.85rem; }
+
+.lt-kosit-stage-row { padding: 0.75rem 1rem; color: var(--lumo-secondary-text-color); }
+
+.lt-kosit-empty {
+  padding: 1.25rem 1.5rem;
+  text-align: center;
+  color: var(--lumo-secondary-text-color);
+  font-size: 0.875rem;
+}
+
+.lt-kosit-section { padding: 0.875rem 1.25rem; border-left: 4px solid var(--lt-kosit-border); }
+
+.lt-kosit-section--error {
+  --lt-kosit-border: var(--lt-error);
+  --lt-kosit-title: var(--lt-error);
+  background: var(--ino-validation-invalid-bg);
+}
+
+.lt-kosit-section--warning {
+  --lt-kosit-border: var(--lt-warn-text);
+  --lt-kosit-title: var(--lt-warn-text);
+  background: var(--ino-status-warning-bg);
+}
+
+.lt-kosit-section__title {
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--lt-kosit-title);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.lt-kosit-row { padding: 0.6rem 0; }
+
+.lt-kosit-row:not(:last-child) { border-bottom: 1px solid var(--lt-rule); }
+
+.lt-kosit-row__text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--lt-text-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.lt-kosit-row__hint {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  color: var(--lt-text-primary);
+  font-style: italic;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.lt-kosit-meta { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+
+.lt-kosit-meta__code {
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: monospace;
+  background: var(--lt-kosit-border);
+  color: var(--lt-on-accent-solid);
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.25rem;
+  letter-spacing: 0.03em;
+}
+
+.lt-kosit-meta__position { font-size: 0.72rem; color: var(--lt-text-secondary); font-family: monospace; }
+
+.lt-kosit-location { margin-top: 0.35rem; display: flex; gap: 0.3rem; align-items: flex-start; }
+
+.lt-kosit-location__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--lt-text-secondary);
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.lt-kosit-location__path {
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: var(--lt-text-secondary);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* the mandatory storno confirmation warning block (not a tooltip, not a hint below the
+   button). Reuses the vetted amber warning pair instead of a new hand-picked colour. */
+.storno-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: var(--ino-status-warning-bg);
+  border-left: 4px solid var(--ino-status-warning);
+  border-radius: var(--ino-radius-md);
+  padding: 0.75rem 1rem;
+  color: var(--lt-text-primary);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.storno-warning-headline { font-weight: 700; }
+
+/* Sender Profile Dialog – Bauhaus Velvet */
+.sp-dialog-hero {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 1.75rem 1.4rem;
+  background: #1A73E8; /* freundliches Google-Blau statt nahezu-schwarzem Neutralton */
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Bauhaus geometric accent circles */
+.sp-dialog-hero::before {
+  content: '';
+  position: absolute;
+  top: -28px; right: -28px;
+  width: 104px; height: 104px;
+  border-radius: 50%;
+  background: rgb(230 57 70 / 18%);
+  pointer-events: none;
+}
+
+.sp-dialog-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -18px; left: 220px;
+  width: 68px; height: 68px;
+  background: rgb(10 132 255 / 13%);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.sp-hero-avatar {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  border-radius: 0;
+  background: var(--bau-primary);
+  color: #fff;
+  font-size: 1.55rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: -0.02em;
+  z-index: 1;
+}
+
+.sp-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  z-index: 1;
+}
+
+.sp-hero-name {
+  font-size: 1.22rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  transition: opacity 0.15s ease;
+}
+
+.sp-hero-sub {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgb(255 255 255 / 42%);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+/* Section blocks */
+.sp-section {
+  background: var(--lt-surface);
+  border: 1px solid var(--lt-border-subtle);
+  border-radius: var(--lt-radius-card);
+  margin-bottom: 1.1rem;
+  padding: 0.65rem;
+}
+
+.sp-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.sp-section-bar {
+  width: 3px;
+  height: 15px;
+  border-radius: 0;
+  background: var(--bau-primary);
+  flex-shrink: 0;
+}
+
+.sp-section-bar--red { background: var(--bau-primary); }
+
+.sp-section-bar--blue { background: var(--bau-accent); }
+
+.sp-section-bar--amber { background: var(--lt-review); }
+
+.sp-section-bar--green { background: var(--lt-ok); }
+
+.sp-section-bar--violet { background: var(--lt-tech-error); }
+
+.sp-section-title {
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--bau-muted);
+}
+
+/* B2B profile dialog redesign: large workspace, Bauhaus × Material
+   Grey shading orders the dialog (master data tinted, rules area on base surface, the field
+   editor popup — set off by its own overlay chrome); every color below is an existing
+   Lumo, --lt- or --ino- token, already proven dark-mode-safe and brown-free elsewhere in this
+   file — no new color values here. */
+/* Stammdaten as a compact, tinted header section. */
+.b2b-master-data {
+  background: var(--lumo-contrast-10pct);
+  padding: var(--lumo-space-m) var(--lumo-space-m) var(--lumo-space-s);
+}
+
+/* the dialog's body is a column flex layout capped at ~82vh; only its scroll area
+   (below) scrolls internally, so the dialog itself never grows past the viewport. */
+.b2b-editor-body {
+  display: flex;
+  flex-direction: column;
+  max-height: 82vh;
+}
+
+/* the scrollable content (master data + summary chips + the full-width rules grid).
+   This, not .b2b-editor-body, carries overflow-y: auto — the footer below is a
+   sibling, so it is never part of the scrolling region and stays pinned to the dialog's bottom
+   edge regardless of window height or rule count ("Aktions-Buttons immer sichtbar"). min-height: 0
+   is required for a flex child to shrink and actually scroll instead of pushing the footer
+   off-screen. */
+.b2b-editor-scroll-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+
+  /* same scrollbar-eats-padding fix as .entry-workspace/.sp-form-body: without this the
+     master-data/summary-chips/rules-grid content sits flush against the scrollbar. */
+  scrollbar-gutter: stable;
+}
+
+/* the rules grid now takes the "Regeln" section's full width; the field editor no
+   longer costs a permanent side-panel column (the former `.b2b-rules-workspace`/
+   `.b2b-rules-grid-column` split is gone — greenfield, no dead layout classes left behind). The
+   field editor's own content wrapper, still carrying its class for any panel-scoped styling, no
+   longer needs a border/background or a flex basis of its own — it is now the docked popup
+   Dialog's sole content instead of a flex sibling of the rules grid (see the popup rule below). */
+.b2b-field-panel {
+  width: 100%;
+}
+
+.b2b-field-panel-title {
+  display: block;
+  font-size: var(--lumo-font-size-s);
+  font-weight: 700;
+  color: var(--lumo-secondary-text-color);
+}
+
+/* term area: either the autocomplete ComboBox (create mode, no term chosen yet) or
+   the term badge (edit mode, or after a term is chosen while creating). */
+.b2b-term-area {
+  display: flex;
+  flex-direction: column;
+}
+
+/* the read-only ZUGFeRD-/EN-16931 definition, an "abgesetzter Infoblock (Grauton)"
+   directly above the business-definition TextArea. */
+.b2b-spec-infoblock-label {
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lumo-secondary-text-color);
+}
+
+.b2b-spec-infoblock {
+  background: var(--lumo-contrast-10pct);
+  border-left: 3px solid var(--lumo-contrast-20pct);
+  padding: 0.6rem 0.85rem;
+  font-size: var(--lumo-font-size-s);
+  color: var(--lumo-secondary-text-color);
+}
+
+/* the term ComboBox's suggestion rendering: BT-code chip + name + one-sentence
+   definition per entry (ComponentRenderer, see B2bFieldEditorPanel.buildTermSuggestion). */
+.b2b-term-suggestion {
+  padding: 0.2rem 0;
+}
+
+.b2b-term-suggestion .bt-code-chip {
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 700;
+  color: var(--lumo-primary-text-color);
+}
+
+.b2b-term-suggestion .term-name {
+  font-weight: 600;
+}
+
+.b2b-term-suggestion .term-definition {
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lumo-secondary-text-color);
+}
+
+/* der Markdown-Prüfbericht (ValidationReportDialog.kt): vormals Inline-Style ohne
+   scrollbar-gutter, Berichtstext lief am Scrollbalken/rechten Rand aus. */
+.validation-report-body {
+  overflow-y: auto;
+  height: 68vh;
+  padding: var(--lumo-space-s) var(--lumo-space-m);
+  scrollbar-gutter: stable;
+}
+
+/* Detail dialog */
+.journal-dialog__head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.25rem 0 0.6rem;
+  width: 100%;
+  border-bottom: 4px solid var(--lt-rule);
+}
+
+.journal-dialog__head--success { border-bottom-color: var(--ino-status-success); }
+
+.journal-dialog__head--warning { border-bottom-color: var(--ino-status-warning); }
+
+.journal-dialog__head--cancelled { border-bottom-color: var(--ino-status-storno); }
+
+.journal-dialog__head .journal-tile { width: 40px; height: 40px; padding: 9px; }
+
+.journal-dialog__titles { display: flex; flex-direction: column; line-height: 1.3; }
+
+.journal-dialog__title { font-size: 1.05rem; font-weight: 700; }
+
+.journal-dialog__subtitle {
+  font-size: 0.85rem;
+  color: var(--lt-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.journal-dialog__body { display: flex; flex-direction: column; gap: var(--ino-spacing-sm); }
+
+/* Who / when / which invoice / which sequence number — four equal cells on a
+   rule, the classic Bauhaus band. Collapses to two columns on narrow screens. */
+.journal-dialog__meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--lt-rule);
+}
+
+.journal-dialog__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ino-spacing-sm);
+  flex-wrap: wrap;
+}
+
+.journal-dialog__count { font-weight: 600; margin-right: auto; }
+
+.journal-dialog__search { width: 14rem; }
+
+.journal-dialog__scroller { max-height: min(58vh, 34rem); }
+
+.journal-dialog__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ino-spacing-sm);
+  width: 100%;
+}
+
+@media (width <= 800px) {
+  .journal-dialog__meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .journal-dialog__search { width: 100%; }
+}
+
+/* ==========================================================================
+   Cards
+   ========================================================================== */
+
+/* Card that carries the warn tone (guided hints, validation summaries). */
+.ino-card--warn { background: var(--lt-chip-warn-bg); color: var(--lt-chip-warn-fg); }
+
+/* Invoice-Card Status Border + Modern Card */
+/* Base rule first – modifiers below will override it (same specificity, later in cascade) */
+.invoice-card:hover {
+  background-color: var(--lumo-contrast-5pct, var(--lt-surface-raised));
+}
+
+/* Card Padding */
+.ino-card--padded {
+  padding: 1.3rem;
+}
+
+.invoice-total-card--sent { background: var(--ino-total-card-sent-bg); border-color: var(--ino-total-card-sent-border); }
+
+/* CANCELLED (Storno) keeps its own Blue Grey family, VOIDED (Annulliert) stays red. */
+.invoice-total-card--cancelled { background: var(--ino-total-card-storno-bg); border-color: var(--ino-total-card-storno-border); }
+
+.invoice-total-card--voided { background: var(--ino-total-card-cancelled-bg); border-color: var(--ino-total-card-cancelled-border); }
+
+.invoice-total-card--review { background: var(--ino-total-card-review-bg); border-color: var(--ino-total-card-review-border); }
+
+.invoice-total-card--draft { background: var(--ino-total-card-draft-bg); border-color: var(--ino-total-card-draft-border); }
+
+.invoice-card .status-chip {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.invoice-card {
+  cursor: pointer;
+  background: var(--lumo-base-color);
+  border: 1px solid var(--lt-border-subtle);
+  border-left-width: 4px;
+  border-radius: var(--lt-radius-card);
+  padding: 0.75rem 1rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  margin-bottom: 0.75rem;
+  min-height: 0;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  font-size: 0.95rem;
+}
+
+.invoice-card * {
+  min-width: 0;
+}
+
+@media (width <= 480px) {
+  .invoice-card { font-size: 0.9rem; padding: 0.6rem 0.75rem; }
+  .invoice-card { padding: 0.6rem 0.75rem; }
+}
+
+@media (width >= 481px) and (width <= 900px) {
+  .invoice-card { padding: 0.7rem 0.9rem; }
+}
+
+@media (width >= 901px) {
+  .invoice-card { padding: 0.75rem 1rem; }
+}
+
+.invoice-total-card {
+  border-radius: var(--lt-radius-card);
+  background: #eef3fa;
+  border: 1px solid rgb(20 50 96 / 30%);
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 0.8rem;
+}
+
+html[theme~="dark"] .invoice-card:focus-visible {
+  outline-color: var(--lt-accent);
+}
+
+/* cockpit overview / KPI */
+html[theme~="dark"] .cockpit-dates-card {
+  border-color: color-mix(in srgb, var(--lt-accent) 40%, transparent);
+}
+
+/* small accessibility tweak: make invoice-card focus ring slightly bolder */
+.invoice-card:focus-visible {
+  outline: 4px solid rgb(0 68 148 / 60%);
+  outline-offset: 2px;
+}
+
+/* subtle micro-interaction for status chip */
+.invoice-card .status-chip {
+  transform-origin: center;
+  transition: transform 0.18s ease;
+}
+
+.invoice-card:hover .status-chip { transform: translateY(-2px) scale(1.02); }
+
+/* Kompaktes Datums-Panel in 2x3 Grid */
+.cockpit-dates-card {
+  background: var(--lt-cockpit-dates-card-background, #f2f7ff);
+  border: 1px solid rgb(11 78 171 / 24%);
+}
+
+/* Job Panel Enhancements */
+.ino-card {
+  transition: border-color 0.15s ease;
+  border: 1px solid var(--lumo-contrast-10pct);
+}
+
+.ino-card:hover {
+  border-color: var(--bau-muted);
+}
+
+.settings-card {
+  display: flex;
+  background-color: var(--lt-surface);
+  border: 1px solid var(--bau-rule);
+  border-radius: var(--lt-radius-card);
+  padding: 1.1rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.settings-card:hover {
+  box-shadow: var(--lt-shadow-card-hover);
+}
+
+vaadin-vertical-layout.settings-card > * {
+  flex: 1 1 auto;
+}
+
+.settings-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--lt-text-primary);
+}
+
+.settings-card-title-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--lt-accent);
+  flex-shrink: 0;
+}
+
+.settings-card .settings-switch:focus-visible {
+  outline: 3px solid var(--lt-text-primary);
+  outline-offset: 2px;
+}
+
+.settings-card-description {
+  font-size: 0.9rem;
+  max-width: 46ch;
+  color: var(--lt-text-secondary);
+}
+
+@media (width <= 40rem) {
+  .settings-card {
+      flex-direction: column;
+      padding: 0.9rem 1rem;
+    }
+}
+
+.mail-preview-card {
+  box-sizing: border-box;
+  min-height: 0;
+  padding: 1rem;
+  overflow: auto;
+  color: #222;
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: var(--lt-radius-card);
+}
+
+html[theme~="dark"] .mail-preview-card {
+  border-color: var(--lumo-contrast-20pct);
+}
+
+.lt-styleguide__icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--lt-space-s, 8px);
+  margin-bottom: var(--lt-space-m, 16px);
+}
+
+.lt-styleguide__icon {
+  display: flex;
+  align-items: center;
+  gap: var(--lt-space-s, 8px);
+  color: var(--lt-text-primary);
+}
+
+.lt-styleguide__icon vaadin-icon {
+  flex: none;
+  color: var(--lt-text-secondary);
+}
+
+.lt-styleguide__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lt-space-s, 8px);
+  margin-bottom: var(--lt-space-m, 16px);
+}
+
+/* ==========================================================================
+   Statistics
+   ========================================================================== */
+
+/* Colour tones shared by KPI tiles and status cards */
+.lt-tone--primary { --lt-tone: var(--lumo-primary-color); --lt-tone-bg: color-mix(in srgb, var(--lumo-primary-color) 6%, transparent); }
+
+.lt-tone--success { --lt-tone: var(--lumo-success-color); --lt-tone-bg: color-mix(in srgb, var(--lumo-success-color) 6%, transparent); }
+
+.lt-tone--error { --lt-tone: var(--lumo-error-color); --lt-tone-bg: color-mix(in srgb, var(--lumo-error-color) 6%, transparent); }
+
+.lt-tone--muted { --lt-tone: var(--lumo-secondary-text-color); --lt-tone-bg: var(--lumo-contrast-5pct); }
+
+.lt-tone--neutral { --lt-tone: var(--lumo-contrast-40pct); --lt-tone-bg: var(--lumo-contrast-5pct); }
+
+.lt-tone--storno { --lt-tone: var(--lt-storno); --lt-tone-bg: color-mix(in srgb, var(--lt-storno) 6%, transparent); }
+
+.lt-tone--total { --lt-tone: var(--lumo-contrast-80pct); --lt-tone-bg: var(--lumo-base-color); }
+
+.lt-kpi-row,
+.lt-status-cards {
+  gap: var(--lumo-space-m);
+  flex-wrap: wrap;
+}
+
+/* One even row with a column per tile (count set by KpiRow); wrapping columns when narrow. */
+.lt-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(var(--lt-kpi-cols, 4), minmax(0, 1fr));
+}
+
+.lt-kpi-row > .lt-kpi-card { min-width: 0; container-type: inline-size; }
+
+@media (width <= 900px) {
+  .lt-kpi-row { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+
+/* KPI tiles */
+.lt-kpi-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--lumo-space-m) var(--lumo-space-l);
+  background: linear-gradient(135deg, var(--lumo-base-color), var(--lumo-contrast-5pct));
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: var(--lumo-border-radius-l);
+  min-width: 180px;
+  flex: 1;
+  box-shadow: var(--lt-shadow-card);
+}
+
+.lt-kpi-card__head { margin-bottom: var(--lumo-space-xs); gap: var(--lumo-space-xs); }
+
+.lt-kpi-card__icon { color: var(--lt-tone); font-size: var(--lumo-font-size-l); }
+
+.lt-kpi-card__label {
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lumo-secondary-text-color);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Sized by the tile width so long amounts stay inside narrow tiles; capped at the former size. */
+.lt-kpi-card__value {
+  font-size: clamp(var(--lumo-font-size-m), 14cqi, var(--lumo-font-size-xxl));
+  font-weight: 700;
+  color: var(--lt-tone);
+  overflow-wrap: anywhere;
+}
+
+.lt-kpi-card__delta { font-size: var(--lumo-font-size-xs); font-weight: 600; margin-top: 2px; }
+
+.lt-kpi-card__delta--up { color: var(--lumo-success-color); }
+
+.lt-kpi-card__delta--down { color: var(--lumo-error-color); }
+
+.lt-kpi-card__extra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  color: var(--lt-tone);
+  font-weight: 700;
+  font-size: var(--lumo-font-size-s);
+}
+
+.lt-kpi-card__caption { font-size: var(--lumo-font-size-xs); color: var(--lumo-tertiary-text-color); margin-top: 2px; }
+
+/* Status cards */
+.lt-status-cards__context {
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lumo-tertiary-text-color);
+  margin-top: var(--lumo-space-xs);
+}
+
+.lt-status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--lumo-space-m);
+  background: var(--lt-tone-bg);
+  border: 2px solid var(--lt-tone);
+  border-radius: var(--lumo-border-radius-l);
+  flex: 1;
+  min-width: 140px;
+  box-shadow: var(--lt-shadow-card);
+}
+
+.lt-status-card__head { gap: var(--lumo-space-xs); margin-bottom: var(--lumo-space-xs); }
+
+.lt-status-card__icon { color: var(--lt-tone); font-size: var(--lumo-font-size-l); }
+
+.lt-status-card__label {
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--lumo-secondary-text-color);
+}
+
+.lt-status-card__count { font-size: var(--lumo-font-size-xxl); font-weight: 800; color: var(--lt-tone); }
+
+.lt-status-card__share { font-size: var(--lumo-font-size-xs); color: var(--lumo-tertiary-text-color); margin-top: 2px; }
+
+/* Revenue matrix */
+.revenue-matrix { width: 100%; display: flex; flex-direction: column; gap: var(--lumo-space-s); }
+
+.revenue-card-row { display: flex; flex-wrap: wrap; gap: var(--lumo-space-m); width: 100%; }
+
+.revenue-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--lumo-space-m) var(--lumo-space-l);
+  border-radius: var(--lumo-border-radius-l);
+  min-width: 9.5rem;
+  flex: 1;
+  box-shadow: var(--lt-shadow-card);
+  transition: box-shadow 0.2s ease-out, transform 0.2s ease-out;
+  background: linear-gradient(135deg, var(--lumo-base-color), var(--lumo-contrast-5pct));
+  border: 1px solid var(--lumo-contrast-10pct);
+}
+
+.revenue-card:hover { box-shadow: var(--lt-shadow-card-hover); transform: translateY(-2px); }
+
+.revenue-card--active {
+  background: var(--lumo-primary-color-10pct);
+  border: 2px solid var(--lumo-primary-color);
+}
+
+.revenue-card--clickable { cursor: pointer; }
+
+.revenue-card__label {
+  font-weight: 700;
+  font-size: var(--lumo-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--lumo-space-xs);
+  color: var(--lumo-secondary-text-color);
+}
+
+.revenue-card__label--primary { color: var(--lumo-primary-color); }
+
+.revenue-card__values { display: flex; flex-direction: column; gap: 2px; }
+
+.revenue-card__row { display: flex; justify-content: space-between; gap: var(--lumo-space-s); }
+
+.revenue-card__row-label { font-size: var(--lumo-font-size-xs); color: var(--lumo-secondary-text-color); }
+
+.revenue-card__row-value { font-size: var(--lumo-font-size-s); font-weight: 500; }
+
+.revenue-card__row-value--bold { font-weight: 700; }
+
+.revenue-card__row-value--primary { color: var(--lumo-primary-color); }
+
+.revenue-card__bar-track {
+  display: flex;
+  align-items: flex-end;
+  height: 2.5rem;
+  margin-top: var(--lumo-space-s);
+}
+
+.revenue-card__bar-fill {
+  width: 100%;
+  height: var(--lt-bar-h, 0%);
+  background: linear-gradient(to top, var(--lumo-primary-color), var(--lt-bar-primary-end));
+  border-radius: 3px 3px 0 0;
+  transition: height 0.5s ease-out;
+}
+
+/* Trend chart */
+.lt-trend-chart {
+  --lt-chart-h: 260px;
+  min-height: 400px;
+  background: var(--lumo-base-color);
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: var(--lumo-border-radius-l);
+  padding: var(--lumo-space-l);
+  box-shadow: var(--lumo-box-shadow-s);
+  overflow-x: auto;
+}
+
+.lt-trend-chart__title { font-size: var(--lumo-font-size-m); font-weight: 600; }
+
+.lt-trend-chart__spacer { flex: 1; }
+
+.lt-trend-chart__dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: var(--lt-space-xs); }
+
+.lt-trend-chart__dot--net { background: var(--lumo-success-color); }
+
+.lt-trend-chart__dot--gross { background: var(--lumo-primary-color); }
+
+.lt-trend-chart__legend-text { font-size: var(--lumo-font-size-xs); color: var(--lumo-secondary-text-color); }
+
+.lt-trend-chart__empty {
+  color: var(--lumo-secondary-text-color);
+  font-size: var(--lumo-font-size-l);
+  padding: var(--lumo-space-xl);
+}
+
+.lt-trend-chart__body {
+  display: flex;
+  align-items: stretch;
+  padding: var(--lumo-space-m) 0 var(--lumo-space-s);
+  width: 100%;
+}
+
+.lt-trend-chart__area {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--lt-space-s);
+  height: var(--lt-chart-h);
+  flex: 1;
+  position: relative;
+  padding-right: var(--lumo-space-xl);
+  background: repeating-linear-gradient(to top, var(--lumo-contrast-10pct) 0, var(--lumo-contrast-10pct) 1px, transparent 1px, transparent calc(var(--lt-chart-h) / 4));
+  border-bottom: 2px solid var(--lumo-contrast-20pct);
+  border-left: 1px solid var(--lumo-contrast-10pct);
+}
+
+.lt-trend-chart__axis {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: space-between;
+  height: var(--lt-chart-h);
+  padding: var(--lt-space-xs) 0;
+  margin-right: var(--lumo-space-s);
+  flex-shrink: 0;
+}
+
+.lt-trend-chart__axis-label {
+  font-size: 9px;
+  color: var(--lumo-tertiary-text-color);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lt-trend-chart__column {
+  flex: 1;
+  min-width: 60px;
+  transition: background 0.2s;
+  padding-bottom: var(--lumo-space-s);
+  cursor: default;
+}
+
+.lt-trend-chart__column--dense { min-width: 20px; }
+
+.lt-trend-chart__column--drillable { cursor: pointer; }
+
+.lt-trend-chart__column--drillable:hover { background-color: var(--lumo-contrast-5pct); }
+
+.lt-trend-chart__value {
+  font-size: 9px;
+  color: var(--lumo-primary-color);
+  font-weight: 700;
+  white-space: nowrap;
+  margin-bottom: 2px;
+  text-align: center;
+}
+
+.lt-trend-chart__bars { gap: 3px; }
+
+.lt-trend-chart__bar {
+  width: 14px;
+  height: var(--lt-bar-h, 0);
+  border-radius: 3px 3px 0 0;
+  transition: height 0.5s ease-out;
+}
+
+.lt-trend-chart__column--dense .lt-trend-chart__bar { width: 6px; }
+
+.lt-trend-chart__bar--net { background: linear-gradient(to top, var(--lumo-success-color), var(--lt-bar-ok-end)); }
+
+.lt-trend-chart__bar--gross { background: linear-gradient(to top, var(--lumo-primary-color), var(--lt-bar-primary-end)); }
+
+.lt-trend-chart__period {
+  font-size: var(--lumo-font-size-xs);
+  font-weight: 600;
+  color: var(--lumo-secondary-text-color);
+  margin-top: var(--lumo-space-xs);
+}
+
+.lt-trend-chart__period--vertical { writing-mode: vertical-rl; }
+
+/* Ranking table */
+.ranking-table { width: 100%; font-size: var(--lumo-font-size-s); overflow-x: auto; }
+
+.ranking-card-stack { display: flex; flex-direction: column; gap: var(--lumo-space-s); }
+
+.ranking-caption-row {
+  display: flex;
+  align-items: center;
+  padding: var(--lumo-space-xs) var(--lumo-space-s);
+  gap: var(--lumo-space-m);
+  font-weight: 700;
+  color: var(--lumo-secondary-text-color);
+  text-transform: uppercase;
+  font-size: var(--lumo-font-size-xs);
+  letter-spacing: 0.5px;
+}
+
+.ranking-caption-rank { width: 36px; flex-shrink: 0; }
+
+.ranking-caption-value { width: 100px; text-align: right; flex-shrink: 0; }
+
+.ranking-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-xs);
+  padding: var(--lumo-space-s) var(--lumo-space-m);
+  background: var(--lumo-base-color);
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: var(--lumo-border-radius-m);
+  box-shadow: var(--lumo-box-shadow-xs);
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+.ranking-card:hover { transform: translateY(-2px); box-shadow: var(--lumo-box-shadow-s); }
+
+.ranking-card-row { display: flex; align-items: center; gap: var(--lumo-space-m); }
+
+.ranking-card-rank {
+  flex-shrink: 0;
+  width: 36px;
+  text-align: center;
+  font-weight: 700;
+  font-size: var(--lumo-font-size-s);
+  padding: var(--lumo-space-xs) 0;
+  border-radius: var(--lumo-border-radius-l);
+  border: 1px solid var(--lumo-contrast-30pct);
+  color: var(--lumo-tertiary-text-color);
+}
+
+.ranking-card-rank--top {
+  border: 0;
+  background: var(--lumo-primary-color);
+  color: var(--lumo-primary-contrast-color);
+}
+
+.ranking-card-value { width: 100px; text-align: right; flex-shrink: 0; }
+
+.ranking-card-value--strong { font-weight: 600; }
+
+.ranking-card-value--accent { color: var(--lumo-primary-color); }
+
+.ranking-card-bar-track {
+  width: 100%;
+  height: 4px;
+  background: var(--lumo-contrast-10pct);
+  border-radius: var(--lumo-border-radius-s);
+  overflow: hidden;
+}
+
+.ranking-card-bar-fill {
+  width: var(--lt-bar-w, 0%);
+  height: 100%;
+  background: linear-gradient(to right, var(--lumo-primary-color), var(--lt-bar-primary-end));
+  transition: width 0.5s ease-out;
+}
+
+.lt-caption {
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lumo-secondary-text-color);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lt-stat-filter-bar { gap: var(--lumo-space-s) var(--lumo-space-m); margin-bottom: var(--lumo-space-m); flex-wrap: wrap; }
+
+/* fixed, shrinkable select widths: five filters share one row at desktop width and wrap on phones */
+.lt-stat-filter-bar vaadin-combo-box {
+  flex: 0 1 10rem;
+  width: 10rem;
+  min-width: 7rem;
+  max-width: 100%;
+}
+
+.lt-stat-section-title {
+  font-size: var(--lumo-font-size-l);
+  font-weight: 700;
+  margin: var(--lumo-space-l) 0 var(--lumo-space-s);
+  color: var(--lumo-primary-text-color);
+}
+
+/* ==========================================================================
+   View: Invoice cockpit
+   ========================================================================== */
+
+.lt-disclaimer-quote {
+  font-style: italic;
+  color: var(--lt-text-secondary);
+  font-size: 0.88rem;
+  margin: 0.25rem 0 0.5rem 0;
+}
+
+.lt-line-advice-title { font-size: 0.75rem; font-weight: 600; color: var(--lumo-secondary-text-color); }
+
+.invoice-overview-main {
+  min-width: 0;
+  flex: 1 1 52rem;
+}
+
+.invoice-overview-sidebar {
+  border: 1px solid color-mix(in srgb, var(--lt-accent) 20%, transparent);
+  border-radius: var(--lt-radius-card);
+  background: var(--bau-surface);
+  flex: 0 0 clamp(20rem, 32vw, 28rem);
+  min-width: 280px;
+  max-width: 28rem;
+  width: 100%;
+  box-sizing: border-box;
+  margin-left: auto;
+}
+
+.invoice-overview-sidebar > * {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.checklist-icon--ok { color: var(--ino-status-sent); }
+
+.checklist-icon--missing { color: var(--ino-status-cancelled); }
+
+html[theme~="dark"] .invoice-total-hero::before { background: rgb(32 33 36 / 32%); }
+
+html[theme~="dark"] .invoice-total-hero::after { background: rgb(32 33 36 / 10%); }
+
+html[theme~="dark"] .inh-sub-dots { border-bottom-color: rgb(32 33 36 / 30%); }
+
+html[theme~="dark"] .inh-gross-section {
+  border-color: rgb(32 33 36 / 26%);
+}
+
+/* COCKPIT HERO – 2-Row Invoice Header (Bauhaus / Google Material)
+ */
+/* COCKPIT HERO — Bauhaus / Google Material Design
+   Layout: two rows.
+     Row 1 (ch-header): invoice number left  |  status badge right
+     Row 2 (ch-footer): sender→recipient     |  action buttons right
+ */
+.cockpit-hero {
+  background: var(--lt-surface);
+  border-radius: var(--lt-radius-card);
+  border: 1px solid var(--bau-rule);
+  border-left: 5px solid var(--ch-accent, #1A73E8);
+  padding: 1.1rem 2.2rem 1rem 1.25rem;
+  /* the card is set to full width; without this its padding and borders come on top and push
+     the right edge (status chip) past the content area, which then scrolls sideways */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+/* Status-specific accent colour via CSS custom property */
+.cockpit-hero--draft { --ch-accent: var(--lt-accent); --ch-bg: var(--lt-cockpit-hero-draft-ch-bg, #f0f6ff); }
+
+.cockpit-hero--review { --ch-accent: var(--lt-review); --ch-bg: var(--lt-cockpit-hero-review-ch-bg, #fff3e6); }
+
+.cockpit-hero--sent { --ch-accent: var(--lt-ok); --ch-bg: var(--lt-cockpit-hero-sent-ch-bg, #f5fdf8); }
+
+/* CANCELLED (Storno, really sent and properly cancelled) reads as its own neutral
+   Blue Grey, never the same red as VOIDED (discarded, never sent — an actual error face). */
+.cockpit-hero--cancelled { --ch-accent: var(--lt-storno); --ch-bg: var(--lt-cockpit-hero-cancelled-ch-bg, #f5f7f8); }
+
+.cockpit-hero--voided { --ch-accent: var(--lt-error); --ch-bg: var(--lt-cockpit-hero-voided-ch-bg, #fff7f7); }
+
+.cockpit-hero--draft,
+.cockpit-hero--review,
+.cockpit-hero--sent,
+.cockpit-hero--cancelled,
+.cockpit-hero--voided { background: var(--ch-bg); }
+
+/* Row 1: number (left) + status badge (right) */
+.ch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-right: max(2ch, 0.5rem);
+}
+
+.ch-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.ch-back-btn { flex-shrink: 0; }
+
+.ch-number {
+  font-size: 1.55rem;
+  font-weight: 900;
+  color: var(--lt-text-primary);
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+  line-height: 1.1;
+
+  /* .ch-identity (the flex parent) already has min-width: 0 so it can shrink on a
+     narrow header; without this the nowrap number then overflows past its own box instead of
+     ellipsizing. Matching .ch-party-name below, whose full value already carries a title. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Status badge — inside .ch-identity after the number */
+.ch-status-badge {
+  font-size: 0.76rem !important;
+  padding: 0.28rem 0.85rem !important;
+  border-radius: var(--lt-radius-pill);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Row 2: parties (left) + actions (right) */
+.ch-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--lt-text-primary) 7%, transparent);
+}
+
+.ch-parties {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.ch-party {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.ch-party-role {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ch-accent, #9CA3AF);
+  opacity: 0.75;
+}
+
+.ch-party-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--lt-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 24rem;
+}
+
+.ch-arrow {
+  font-size: 0.9rem;
+  color: var(--lt-text-disabled);
+  flex-shrink: 0;
+  align-self: flex-end;
+  padding-bottom: 0.1rem;
+}
+
+/* Actions: always right-aligned */
+.ch-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding-right: max(2ch, 0.4rem);
+}
+
+/* KPI (gross) — right side of the header row */
+.ch-kpi { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 0.1rem; }
+.ch-kpi-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--lt-text-secondary);
+  opacity: 0.75;
+}
+.ch-gross {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--lt-text-primary);
+  white-space: nowrap;
+}
+
+/* Fact rail: mail lead fact + tax facts */
+.ch-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1.1rem;
+  font-size: 0.78rem;
+  color: var(--lt-text-secondary);
+  border-top: 1px solid color-mix(in srgb, var(--lt-text-primary) 7%, transparent);
+  padding-top: 0.7rem;
+}
+.ch-fact { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.ch-fact-value { color: var(--lt-text-primary); font-weight: 600; }
+.ch-fact--lead { color: var(--lt-text-primary); }
+.ch-fact--lead vaadin-icon { color: var(--lt-ok); width: 1em; height: 1em; }
+.ch-fact--warn { color: var(--lt-error); font-weight: 600; white-space: normal; }
+.ch-fact--bad .ch-fact-value { color: var(--lt-error); }
+.ch-fact--ok vaadin-icon { color: var(--lt-ok); width: 1em; height: 1em; }
+.ch-fact--progress .ch-fact-value { color: var(--lt-review); }
+.ch-fact-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lt-review);
+  animation: status-chip-pulse 1.4s ease-in-out infinite;
+}
+.ch-btn--busy { opacity: 0.75; cursor: progress; }
+@media (prefers-reduced-motion: reduce) {
+  .ch-fact-dot { animation: none; }
+}
+.ch-fact-link { color: var(--lt-accent, var(--lumo-primary-text-color)); font-weight: 600; text-decoration: none; }
+.ch-rail-sep { width: 1px; height: 14px; background: var(--bau-rule); }
+.ch-actions-sep { width: 1px; height: 22px; background: var(--bau-rule); }
+.ch-btn--danger { background: transparent; color: var(--lt-error); }
+
+@media (width <= 768px) and (width >= 641px) {
+  .cockpit-hero { padding: 1.1rem 1.8rem 1rem 1.25rem; }
+}
+
+@media (width <= 640px) {
+  .cockpit-hero { padding: 0.95rem 1.5rem 0.9rem 1.1rem; }
+  .ch-header { flex-direction: column; align-items: flex-start; gap: 0.5rem; padding-right: 2ch; }
+  .ch-footer { flex-direction: column; align-items: flex-start; }
+  .ch-actions { width: 100%; justify-content: flex-end; padding-right: 2ch; }
+  .cockpit-hero { min-width: 0; max-width: 100%; box-sizing: border-box; }
+  .ch-header, .ch-footer { max-width: 100%; align-self: stretch; }
+
+  /* the stacked footer aligns its rows to the start, which sizes the parties row to its
+     unwrapped names and pushes the card past the screen; stretched, the names ellipsize */
+  .ch-parties { align-self: stretch; max-width: 100%; }
+  .ch-party { flex: 0 1 auto; }
+  .ch-identity { flex-wrap: wrap; max-width: 100%; }
+  .ch-kpi { align-items: flex-start; }
+  .ch-number { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+}
+
+.cockpit-dates-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem 1.2rem;
+}
+
+/* Einzelnes Cockpit-Feld (Label + Wert) */
+.cockpit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cockpit-field-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--lt-text-secondary);
+}
+
+.cockpit-field-value {
+  font-size: 0.93rem;
+  font-weight: 600;
+  color: var(--lt-text-primary);
+}
+
+.cockpit-field-icon {
+  color: var(--lt-text-secondary);
+}
+
+/* INVOICE TOTAL HERO  –  Bauhaus × Google Material
+ */
+.invoice-total-hero {
+  position: relative;
+  width: 100%;
+  border-radius: var(--lt-radius-card);
+  padding: 1.5rem 1.75rem 1.5rem 2.1rem;
+  overflow: hidden;
+  box-sizing: border-box;
+  color: var(--lt-invoice-total-hero-color, #fff);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+/* Bauhaus left accent bar */
+.invoice-total-hero::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 7px;
+  background: rgb(255 255 255 / 42%);
+}
+
+/* Bauhaus geometric circle (top-right decoration) */
+.invoice-total-hero::after {
+  content: '';
+  position: absolute;
+  right: -3rem; top: -3rem;
+  width: 10rem; height: 10rem;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 7%);
+  pointer-events: none;
+}
+
+/* Status-specific backgrounds: flat, no gradient */
+/* Freundliche, Google-Material-typische Markenfarben statt dunkler 900er-Töne —
+   Annulliert bleibt bewusst das kräftigste Rot der Reihe (sofortige Erkennbarkeit, echter
+   Fehlerzustand: nie versandt). Storniert (CANCELLED) ist kein Fehlerzustand — die Rechnung
+   wurde ordnungsgemäß versandt und aufgehoben — und bekommt deshalb seine eigene, neutrale
+   Blue-Grey-Familie statt desselben Rots. */
+.invoice-total-hero.invoice-total-card--draft { background: var(--lt-accent); }
+
+.invoice-total-hero.invoice-total-card--sent { background: var(--lt-ok); }
+
+.invoice-total-hero.invoice-total-card--review { background: var(--lt-review); }
+
+.invoice-total-hero.invoice-total-card--cancelled { background: var(--lt-storno); }
+
+.invoice-total-hero.invoice-total-card--voided { background: var(--lt-error); }
+
+/* Annulliert bleibt klar rot */
+/* Section label */
+.inh-eyebrow {
+  display: block;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 1.25rem;
+  text-align: right;
+}
+
+/* Sub-totals: label left, value right */
+.inh-subtotals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.inh-sub-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.inh-sub-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.65;
+  justify-self: end;
+  text-align: right;
+}
+
+.inh-sub-dots {
+  flex: 1;
+  border-bottom: 1px dotted rgb(255 255 255 / 25%);
+  margin-bottom: 0.2rem;
+}
+
+.inh-sub-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  justify-self: end;
+  text-align: right;
+}
+
+/* Separator */
+.inh-rule {
+  height: 1px;
+  background: var(--lt-inh-rule-background, rgb(255 255 255 / 22%));
+  width: 100%;
+  margin: 0.6rem 0 1rem;
+}
+
+/* Hero gross amount panel */
+.inh-gross-section {
+  width: 100%;
+  align-self: stretch;
+  background: var(--lt-inh-gross-section-background, rgb(255 255 255 / 13%));
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: var(--lt-radius-card);
+  padding: 1rem 1.5rem 0.9rem;
+  text-align: right;
+}
+
+@media (width <= 1100px) {
+  .invoice-overview-main,
+    .invoice-overview-sidebar {
+      flex: 1 1 100%;
+      max-width: 100%;
+    }
+  .invoice-overview-sidebar {
+      margin-left: 0;
+    }
+}
+
+.inh-gross-section:hover {
+  background: var(--lt-inh-gross-section-hover-background, rgb(255 255 255 / 20%));
+}
+
+.inh-gross-amount {
+  display: block;
+  font-size: 2.4rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.inh-gross-label {
+  display: block;
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin-top: 0.3rem;
+  text-align: right;
+}
+
+/* Entry workspace */
+.bau-eyebrow {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bau-muted);
+  margin-bottom: 0.6rem;
+}
+
+.entry-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 56px;
+  padding: 0 1rem;
+  background: var(--bau-surface);
+  border-bottom: 3px solid var(--bau-neutral);
+  flex-wrap: wrap;
+}
+
+.entry-context-identity { display: flex; align-items: center; gap: 0.75rem; }
+
+.entry-context-number { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.01em; color: var(--bau-neutral); }
+
+.entry-context-gross {
+  font-size: 1.2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  color: var(--bau-neutral);
+}
+
+.entry-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  overflow-y: auto;
+
+  /* reported starting point: the entry pane's parties/master-data section (recipientBox/
+     senderBox/refreshSnapshotBtn) sat visually flush right because the vertical scrollbar of this
+     outer scroll area consumed the declared padding-right instead of leaving it as a gap. */
+  scrollbar-gutter: stable;
+  width: 100%;
+  box-sizing: border-box;
+
+  /* Scoped to this form: Lumo's built-in field-invalid styling (border, helper text)
+     picks up our Material red instead of the stock Lumo red, in both themes. */
+  --lumo-error-color: var(--lt-error);
+  --lumo-error-text-color: var(--lt-error);
+  --lumo-error-color-10pct: color-mix(in srgb, var(--lt-error) 10%, transparent);
+  --lumo-error-color-50pct: color-mix(in srgb, var(--lt-error) 50%, transparent);
+}
+
+.entry-section { border-top: 1px solid var(--bau-rule); padding-top: 1rem; }
+
+.entry-section:first-child { border-top: none; padding-top: 0; }
+
+/* Tab content wrapper — same flex/gap rhythm as .entry-workspace used to have directly, now one
+   level down inside each TabSheet tab. */
+.entry-tab-content { display: flex; flex-direction: column; gap: 1.5rem; }
+
+/* Tab 2 caption — status square + label (+ open count). */
+.entry-tab-caption { display: flex; align-items: center; }
+
+/* guided-mode E-Rechnung tab */
+.einvoice-guided { display: flex; flex-direction: column; gap: 1rem; }
+
+.einvoice-progress { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.einvoice-progress-track {
+  width: 100%;
+  height: 4px;
+  background: var(--bau-rule);
+}
+
+.einvoice-progress-fill { height: 100%; width: var(--lt-bar-w, 0%); background: var(--bau-accent); }
+
+.einvoice-progress-label { font-size: 0.8125rem; color: var(--bau-muted); }
+
+.einvoice-guided-body { display: flex; gap: 1.5rem; align-items: flex-start; }
+
+.einvoice-step-rail {
+  display: flex;
+  flex-direction: column;
+  width: 224px;
+  flex: 0 0 224px;
+  border-right: 1px solid var(--bau-rule);
+}
+
+.einvoice-step-content { flex: 1 1 auto; min-width: 0; }
+
+.einvoice-step-num { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--bau-muted); }
+
+.einvoice-step-actions { margin-top: 1.5rem; }
+
+.einvoice-review-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--bau-rule);
+}
+
+.einvoice-review-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+.einvoice-review-row { display: flex; align-items: center; gap: 0.5rem; }
+
+@media (width <= 700px) {
+  .einvoice-guided-body { flex-direction: column; }
+  .einvoice-step-rail {
+      width: 100%;
+      flex: 0 0 auto;
+      flex-flow: row wrap;
+      border-right: none;
+      border-bottom: 1px solid var(--bau-rule);
+    }
+}
+
+/* refresh-master-data icon button */
+.entry-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.entry-section__header .bau-eyebrow { margin-bottom: 0; }
+
+/* The printed free-text block: also the read-only rendering (InvoiceOverviewPanel). */
+.lt-ft {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--lt-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.lt-ft:empty { display: none; }
+
+/* Hanging indent: a wrapped list item continues under its text, not under its mark. */
+.lt-ft-l0 { padding-left: 1.8rem; text-indent: -1.8rem; }
+
+.lt-ft-l1 { padding-left: 3.3rem; text-indent: -1.8rem; }
+
+.lt-ft-l2 { padding-left: 4.8rem; text-indent: -1.8rem; }
+
+/* An indented plain line has no mark to hang under: plain block indent instead. */
+.lt-ft-plain.lt-ft-l1 { padding-left: 1.5rem; text-indent: 0; }
+
+.lt-ft-plain.lt-ft-l2 { padding-left: 3rem; text-indent: 0; }
+
+/* toHtml emits the mark directly followed by the text; the gap is made here. */
+.lt-ft-mark {
+  display: inline-block;
+  min-width: 1.5rem;
+  margin-inline-end: 0.3rem;
+  text-indent: 0;
+  color: var(--lt-text-secondary);
+}
+
+/* Offer editor: the caption names the chip row so it reads as part of the editor below it, and
+   the blocks keep their distance from the neighbouring form fields. */
+.lt-freetext-block {
+  margin-top: 1rem;
+}
+
+/* Offer detail, overview tab: customer and offer as two calm blocks side by side, one column on
+   a narrow screen. Labels and values reuse the cockpit field classes of the invoice. */
+.overview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--lumo-space-l);
+  width: 100%;
+}
+
+.overview-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--lumo-space-m) var(--lumo-space-l);
+}
+
+.overview-field--wide {
+  grid-column: 1 / -1;
+}
+
+.overview-field__lead {
+  display: block;
+  font-size: var(--lumo-font-size-xl);
+  font-weight: 600;
+  color: var(--lumo-header-text-color);
+}
+
+.overview-field__address {
+  margin: var(--lumo-space-xs) 0 var(--lumo-space-m);
+  color: var(--lumo-secondary-text-color);
+}
+
+/* Invoice overview: recipient card on top, the folded sender below it. */
+.overview-party-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-m);
+  width: 100%;
+}
+
+/* Grid cells may shrink below their content, and long values such as e-mail addresses wrap
+   instead of running into the neighbouring field. */
+.overview-fields > .cockpit-field {
+  min-width: 0;
+}
+
+.overview-fields .cockpit-field-value {
+  overflow-wrap: anywhere;
+}
+
+/* ==========================================================================
+   View: Journal
+   ========================================================================== */
+
+/* Änderungsprotokoll
+   The journal used to render one row per event and then spend that row on the
+   payload: an INSERT carries every column of a ~50-column table, so the cell
+   showed a clipped fragment and the list read as "changes, no entries". The
+   row now answers when / who / what happened / how much changed, and the
+   payload lives in .journal-dialog.
+
+   Bauhaus geometry (square tiles, 4px colour edges, no decorative radius) on
+   the Material palette already in :root — every colour below is a token, so
+   dark mode and the contrast checks it was vetted for come along unchanged.
+   Symbols never carry meaning alone: each one sits next to its own label or
+   a title/aria-label. */
+.journal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ino-spacing-sm);
+  width: 100%;
+  margin-bottom: var(--ino-spacing-sm);
+}
+
+.journal-header__title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.journal-header__title h3 { margin: 0; }
+
+.journal-header__icon {
+  width: 20px;
+  height: 20px;
+  color: var(--lt-accent);
+}
+
+/* Result count sits in the header as a plain neutral chip — the journal is
+   append-only, so "how many" is the only number a row list can offer. */
+.journal-count {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.journal-toolbar { flex-wrap: wrap; }
+
+/* Zeitpunkt aligns like a ledger column once it's sortable. */
+.journal-occurred-at { font-variant-numeric: tabular-nums; }
+
+/* the per-invoice card's double frame: the grid now runs edge to edge inside the
+   .ino-card border instead of sitting in its own padded box. Padding moves onto the
+   empty-state band alone. */
+.journal-invoice-card { padding: 0; }
+
+.journal-invoice-card__empty { padding: 0 1.3rem 1.3rem; }
+
+/* the card is a flex column filling the window down to its bottom edge: grid (takes
+   the rest, scrolls inside), empty state. --journal-card-height is measured client-side by
+   InvoiceJournalPanel; without it (or below the floor) the card is 24rem high. */
+.journal-invoice-card--fill {
+  display: flex;
+  flex-direction: column;
+  height: var(--journal-card-height, 24rem);
+  min-height: 24rem;
+}
+
+.journal-invoice-card--fill > .journal-invoice-card__empty { flex: 0 0 auto; }
+
+.journal-invoice-card--fill > .journal-grid { flex: 1 1 0; min-height: 0; }
+
+.journal-band {
+  --journal-band-inset: 1rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 calc(var(--journal-band-inset) + 4px) 0 var(--journal-band-inset);
+}
+
+.journal-band__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.journal-band__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--lt-accent);
+}
+
+.journal-band__title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--lt-font-size-body);
+  font-weight: 600;
+  color: var(--lt-text-primary);
+}
+
+.journal-band__count {
+  flex: none;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--lt-text-secondary);
+}
+
+.journal-band__count-num {
+  font-size: var(--lt-font-size-body);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--lt-text-primary);
+}
+
+.journal-band__count-word { font-weight: 400; }
+
+/* Bauhaus primitive: the affected object as a filled square, tinted by the
+   same verb colour the event chip carries, so a row reads the same from its
+   far left and its middle. */
+.journal-tile {
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  box-sizing: border-box;
+  border-radius: var(--lt-radius-card);
+}
+
+.journal-tile--success { background: var(--ino-status-success-bg); color: var(--ino-status-success); }
+
+.journal-tile--warning { background: var(--ino-status-warning-bg); color: var(--ino-status-warning); }
+
+.journal-tile--cancelled { background: var(--ino-status-storno-bg); color: var(--ino-status-storno); }
+
+.journal-invoice {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.journal-invoice__number { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.journal-invoice__entity {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lt-text-secondary);
+}
+
+/* Two lines instead of a JSON dump: how much changed, then which fields by
+   name. Overrides the grid's global nowrap — this is the one cell that is
+   meant to wrap rather than ellipsise. */
+.journal-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  white-space: normal;
+  line-height: 1.35;
+  padding: 0.25rem 0;
+}
+
+.journal-summary__count { font-weight: 600; font-size: 0.85rem; }
+
+.journal-summary__fields {
+  font-size: 0.8rem;
+  color: var(--lt-text-secondary);
+}
+
+.journal-meta { display: flex; align-items: flex-start; gap: 0.5rem; min-width: 0; }
+
+.journal-meta__icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 0.15rem;
+  color: var(--lt-text-secondary);
+  flex: none;
+}
+
+.journal-meta__text { display: flex; flex-direction: column; min-width: 0; }
+
+.journal-meta__label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lt-text-secondary);
+}
+
+.journal-meta__value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.journal-lines { display: flex; flex-direction: column; }
+
+.journal-lines__empty { color: var(--lt-text-secondary); padding: 0.75rem 0; }
+
+.journal-line {
+  display: grid;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--lt-rule);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.journal-line:nth-child(even) { background: var(--lt-surface-raised); }
+
+.journal-line--change { grid-template-columns: minmax(7rem, 13rem) 1fr 1.25rem 1fr; }
+
+.journal-line--snapshot { grid-template-columns: minmax(7rem, 13rem) 1fr; }
+
+.journal-line__label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+/* Old and new are told apart by tint AND position (left of / right of the
+   arrow), never by colour alone. */
+.journal-line__old {
+  font-size: 0.88rem;
+  color: var(--lt-text-secondary);
+  background: var(--ino-status-storno-bg);
+  padding: 0.1rem 0.4rem;
+}
+
+.journal-line__new {
+  font-size: 0.88rem;
+  font-weight: 600;
+  background: var(--ino-status-success-bg);
+  color: var(--ino-status-success);
+  padding: 0.1rem 0.4rem;
+}
+
+.journal-line__arrow { width: 14px; height: 14px; color: var(--lt-text-secondary); }
+
+.journal-line__value { font-size: 0.88rem; }
+
+/* The entry's hash — why this journal is evidence rather than a log. Quiet by
+   default, full value on hover. */
+.journal-hash {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--lt-text-secondary);
+}
+
+.journal-hash__icon { width: 14px; height: 14px; }
+
+.journal-hash__label { text-transform: uppercase; letter-spacing: 0.08em; }
+
+.journal-hash__value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.journal-action-label--warning { color: var(--ino-status-warning); font-weight: 600; }
+
+.journal-what { font-size: 0.92rem; }
+
+/* Right-aligned via the column's own ColumnTextAlign.END; tabular-nums keeps signed amounts from
+   one row to the next lined up like a ledger, same idiom as .journal-occurred-at. */
+.journal-gross-delta { font-variant-numeric: tabular-nums; }
+
+/* The technical rows of one action, inside the Grid's own item-details expansion — the earlier
+   flat grid's look, one level down. */
+.journal-technical-rows { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 1rem; }
+
+.journal-technical-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--lt-border-subtle);
+}
+
+.journal-technical-row:last-child { border-bottom: none; }
+
+.journal-technical-row__summary { min-width: 0; }
+
+.journal-technical-row__seq { font-variant-numeric: tabular-nums; color: var(--lt-text-secondary); }
+
+.journal-technical-row__hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--lt-text-secondary);
+}
+
+@media (width <= 800px) {
+  .journal-technical-row { grid-template-columns: auto auto 1fr; }
+  .journal-technical-row__seq, .journal-technical-row__hash { display: none; }
+  .journal-line--change { grid-template-columns: 1fr; }
+  .journal-line__arrow { display: none; }
+}
+
+/* ==========================================================================
+   View: Mail
+   ========================================================================== */
+
+/* Mail preview frame: mail clients show no dark mode, so the frame re-pins the theme text colours
+   that the free-text block (.lt-ft) reads, otherwise it paints light grey text on the white frame. */
+.mail-preview-frame {
+  color-scheme: light;
+
+  --lt-text-primary: #222;
+  --lt-text-secondary: #555;
+}
+
+/* Template editor header: title with one quiet subtitle line beneath. */
+.mail-template-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.mail-template-title {
+  display: block;
+  font-size: var(--lumo-font-size-xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.mail-template-subtitle {
+  display: block;
+  color: var(--lumo-secondary-text-color);
+  font-size: var(--lumo-font-size-s);
+}
+
+/* The body editor's own label is replaced by a row that also carries the placeholder toggle. */
+.mail-template-body-editor .lt-html-freetext-editor__label {
+  display: none;
+}
+
+.mail-template-body-editor .lt-html-freetext-editor__counter {
+  margin-inline-start: auto;
+}
+
+.mail-template-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: -0.5rem;
+}
+
+.mail-template-field-label,
+.mail-template-section-label {
+  color: var(--lumo-secondary-text-color);
+  font-size: var(--lumo-font-size-s);
+  font-weight: 500;
+}
+
+/* One group per row: fixed label column, chips wrap in the remaining width. */
+.mail-template-group-row {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  align-items: start;
+  column-gap: 0.5rem;
+  width: 100%;
+}
+
+.mail-template-group {
+  color: var(--lumo-secondary-text-color);
+  font-size: 0.8rem;
+  line-height: 1.625rem;
+}
+
+.mail-template-group-row .lt-freetext-chips {
+  margin-bottom: 0;
+}
+
+/* Mail preview card: the mail as the customer gets it. Fixed light colours because mail clients show no
+   dark mode; in the dark app a hairline keeps the white card from floating. */
+.mail-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-s);
+  min-height: 0;
+}
+
+.mail-preview__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lumo-space-m);
+}
+
+/* Preview: the envelope lines read as a mail header above a hairline, all inside the white card. */
+.mail-preview-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.mail-preview-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.mail-preview-subject-label {
+  flex: 0 0 4.5rem;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.mail-preview-row__value {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mail-preview-subject {
+  font-weight: 600;
+}
+
+.mail-preview-total {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+/* The card stays white in both themes, like a mail client; the theme link colour is a light blue in
+   dark mode and nearly vanishes there, so links in the card keep a mail-client blue. */
+.mail-preview-card a {
+  color: #1a56db;
+}
+
+.mail-preview-unresolved {
+  padding: 0 0.125rem;
+  color: #7a4a00;
+  background: #ffe8b3;
+  border-radius: 3px;
+}
+
+/* The sticky send bar overlays the page bottom (~4rem); reserve its height under the form so the last
+   editor line stays reachable at any viewport width, and keep caret scrolling clear of the bar. */
+.mail-compose__form { padding-bottom: 5rem; }
+.mail-compose__form .lt-ft-content { scroll-margin-bottom: 6rem; }
+
+/* Compose view: form on the left, the mail on the right and following the scroll. */
+.mail-compose__preview {
+  position: sticky;
+  top: var(--lumo-space-m);
+  align-self: start;
+  max-height: calc(100vh - 8rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.mail-compose__preview .mail-preview-card {
+  flex: 1;
+}
+
+.mail-compose__preview--tabbed {
+  position: static;
+  max-height: none;
+}
+
+.mail-compose__chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-xs);
+}
+
+.mail-compose__tab-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: var(--lumo-space-xs);
+  border-radius: 50%;
+  background: var(--lumo-warning-color);
+}
+
+/* ==========================================================================
+   View: Quote
+   ========================================================================== */
+
+.quote-placeholder-caption {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--lt-text-secondary);
+  font-size: 0.8rem;
+}
+
+/* Status and outcome chips of the offer header sit side by side with the list's spacing. */
+.quote-status-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  vertical-align: middle;
+}
+
+/* Offer totals: small rows, hairline, then the gross amount in large type. */
+.quote-totals {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-xs);
+  width: 100%;
+  max-width: 24rem;
+  align-self: flex-end;
+  margin-left: auto;
+  margin-top: var(--lumo-space-l);
+  font-variant-numeric: tabular-nums;
+}
+
+.quote-totals__line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--lumo-space-l);
+  font-size: var(--lumo-font-size-s);
+}
+
+.quote-totals__label {
+  color: var(--lumo-secondary-text-color);
+}
+
+.quote-totals__value {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.quote-totals__rule {
+  height: 1px;
+  margin: var(--lumo-space-s) 0;
+  background: var(--lumo-contrast-20pct);
+}
+
+.quote-totals__gross {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--lumo-space-l);
+}
+
+.quote-totals__gross-label {
+  color: var(--lumo-secondary-text-color);
+}
+
+.quote-totals__gross-amount {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.quote-totals__hint {
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lumo-secondary-text-color);
+}
+
+/* Offer items: title above a small grey detail line. */
+.quote-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.quote-item__detail {
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lumo-secondary-text-color);
+}
+
+/* Offer documents: the current copy as a single row. */
+.quote-documents-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-m);
+  padding: var(--lumo-space-s) 0;
+  border-bottom: 1px solid var(--lumo-contrast-10pct);
+}
+
+.quote-documents-row__caption {
+  flex: 1;
+}
+
+/* Offer editor header: a 12-column grid, customer | data above the full-width texts. */
+.quote-form-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--lumo-space-l);
+}
+
+.quote-form-col--customer {
+  grid-column: span 5;
+}
+
+.quote-form-col--data {
+  grid-column: span 7;
+}
+
+.quote-form-col--full {
+  grid-column: span 12;
+}
+
+.quote-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lumo-space-s);
+}
+
+@media (width <= 800px) {
+  .quote-form-col--customer,
+    .quote-form-col--data {
+      grid-column: span 12;
+    }
+}
+
+/* ==========================================================================
+   View: Settings
+   ========================================================================== */
+
+/* Einstellungen: Funktions-Schalter-Karten (Bauhaus, flach + Primärfarben-Rails) */
+.settings-view {
+  max-width: 54rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+.settings-section-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #666;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.settings-rail {
+  width: 6px;
+  height: 100%;
+  flex-shrink: 0;
+}
+
+.settings-rail-perdiem {
+  background-color: #d62b1f;
+}
+
+.settings-rail-email {
+  background-color: #2154a6;
+}
+
+/* --lt-warn (not a one-off hex): this card's own flip carries a real
+   caveat (EXTENDED is not KoSIT-validatable), the same reasoning --lt-warn already draws on
+   elsewhere for "proceed, but be aware". */
+.settings-rail-extendedprofile {
+  background-color: var(--lt-warn);
+}
+
+/* the wording-profile card's rail: --lt-ok (Material Green) rather than a third one-off
+   hex, so this rail (unlike -perdiem/-email above) already adapts in dark mode via --lt-ok's own
+   dark-theme redefinition further down in this file. */
+.settings-rail-wording {
+  background-color: var(--lt-ok);
+}
+
+.settings-rail + vaadin-vertical-layout {
+  margin-left: 1rem;
+}
+
+.settings-wording-switch {
+  margin-top: 0.25rem;
+  margin-bottom: 0.1rem;
+}
+
+.settings-switch {
+  --lumo-border-radius-m: 2px;
+}
+
+@media (width <= 40rem) {
+  .settings-view {
+      width: 100%;
+      padding: 1rem;
+    }
+  .settings-rail {
+      width: 100%;
+      height: 4px;
+      margin-bottom: 0.75rem;
+    }
+  .settings-rail + vaadin-vertical-layout {
+      margin-left: 0;
+    }
+}
+
+/* The quote card's rail: --lt-ok like the wording card, since it is state-free (no toggle). */
+.settings-rail-quote {
+  background-color: var(--lt-ok);
+}
+
+/* ==========================================================================
+   View: System
+   ========================================================================== */
+
+/* The compound selectors outrank the older single-class rules for the same elements. */
+.system-info-card.lt-sys-card,
+.system-pipeline-card.lt-sys-card {
+  padding: 1rem;
+  background: var(--lt-surface);
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.system-pipeline-card.lt-sys-card { min-width: 200px; flex: 1 1 220px; }
+
+.lt-sys-info-value { font-weight: 600; }
+
+.system-section-header.lt-sys-section-header { margin: 2rem 0 1rem 0; font-weight: 400; }
+
+.system-service-card.lt-sys-service {
+  background: var(--lt-surface);
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: 4px;
+}
+
+.system-service-card-content.lt-sys-service-content { gap: 0; padding: 1rem; }
+
+.lt-sys-service-name {
+  font-weight: 500;
+  flex-grow: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-sys-service-status { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; }
+
+.lt-sys-service-description {
+  font-size: var(--lumo-font-size-xs);
+  color: var(--lumo-secondary-text-color);
+  margin: 0.5rem 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.lt-sys-service-detail {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--lumo-tertiary-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.system-pipeline-row { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0; }
+
+.lt-pipeline-stages { gap: 1rem; }
+
+.lt-pipeline-value { font-weight: 700; font-size: var(--lumo-font-size-xxl); }
+
+.lt-pipeline-subline { font-size: var(--lumo-font-size-xs); color: var(--lumo-secondary-text-color); }
+
+.system-pipeline-transport {
+  font-size: var(--lumo-font-size-s);
+  color: var(--lumo-secondary-text-color);
+  padding: 0.5rem 0;
+}
+
+.lt-pipeline-transport-values { flex-wrap: wrap; gap: 1.5rem; }
+
+.system-pipeline-duplicates { gap: 0.35rem; }
+
+.lt-pipeline-duplicates-text { color: var(--lt-error); font-weight: 700; }
+
+.lt-nats-hero {
+  background: var(--lt-surface);
+  border-radius: 4px;
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--lumo-contrast-10pct);
+}
+
+.lt-nats-hero__title { margin: 0; }
+
+.lt-nats-hero__status { font-weight: 700; }
+
+.lt-nats-hero__server { font-size: var(--lumo-font-size-s); color: var(--lumo-secondary-text-color); }
+
+.lt-nats-lag { font-weight: 700; text-align: right; display: block; width: 100%; }
+
+.lt-nats-error {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--lumo-error-color-50pct);
+  border-radius: 4px;
+  background: var(--lumo-error-color-10pct);
+  color: var(--lumo-error-text-color);
+}
+
+.lt-cache-header { background: var(--lt-accent-solid); color: var(--lt-on-accent-solid); padding: 0.6rem 1rem; }
+
+.lt-cache-header__title { margin: 0; color: var(--lt-on-accent-solid); }
+
+.lt-cache-hint { color: var(--lumo-secondary-text-color); font-size: var(--lumo-font-size-xs); margin-top: 0.5rem; display: block; }
+
+.lt-job-summary { padding: 0.4rem 0 0.6rem; border-bottom: 1px solid var(--lumo-contrast-10pct); margin-bottom: 0.6rem; }
+
+.lt-job-summary__title { margin: 0 0 0.4rem; }
+
+.lt-job-note { font-size: 0.75rem; color: var(--lumo-secondary-text-color); display: block; }
+
+.lt-system-meta-grid { gap: 1rem; margin-bottom: 2rem; }
+
+.lt-job-date { font-size: 0.875rem; display: block; }
+
+.lt-job-time { color: var(--lumo-secondary-text-color); font-size: 0.78rem; display: block; }
+
+.lt-job-datetime { line-height: 1.4; }
+
+.lt-job-duration { color: var(--lumo-secondary-text-color); font-size: 0.78rem; }
+
+.lt-job-format { color: var(--lumo-secondary-text-color); font-size: 0.72rem; }
+
+
+.lt-job-id { color: var(--lumo-secondary-text-color); }
+
+@media (width <= 768px) {
+  .system-service-card {
+      min-width: calc(50% - 0.5rem);
+    }
+}
+
+.system-service-card span {
+  display: block;
+}
+
+.system-service-card:hover {
+  border-left-color: var(--lt-ok);
+  cursor: pointer;
+}
+
+.system-hero-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  min-height: 5.2rem;
+  padding: 1.15rem;
+  border-radius: var(--lt-radius-card);
+  background: var(--sys-paper);
+  border: 1px solid var(--sys-line);
+  margin-bottom: 1.2rem;
+  overflow: hidden;
+}
+
+.system-hero-banner > * {
+  min-width: 0;
+}
+
+.system-hero-title,
+.system-hero-summary {
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+.system-hero-title {
+  margin: 0;
+  font-size: 1.02rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--sys-charcoal);
+  font-weight: 800;
+}
+
+.system-health-ok,
+.system-health-bad {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--lt-radius-card);
+  font-size: 0.76rem;
+  letter-spacing: 0.05em;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-top: 0.25rem;
+}
+
+.system-health-ok {
+  color: var(--lt-ok);
+  background: var(--lt-system-health-ok-background, color-mix(in srgb, var(--lt-ok) 13%, transparent));
+}
+
+.system-health-bad {
+  color: var(--lt-error);
+  background: var(--lt-system-health-bad-background, color-mix(in srgb, var(--lt-error) 14%, transparent));
+}
+
+.system-hero-summary {
+  margin-top: 0.45rem;
+  font-size: 0.86rem;
+  color: var(--lt-text-secondary);
+}
+
+.system-hero-rail {
+  margin-left: auto;
+  align-self: center;
+  max-width: 100%;
+}
+
+.system-info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 180px;
+  border-radius: var(--lt-radius-card);
+  border: 1px solid var(--sys-line);
+  padding: 0.78rem;
+  background: var(--sys-paper);
+}
+
+.system-info-card span:first-child {
+  font-size: 0.7rem;
+  color: var(--lt-text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.system-info-card span:last-child {
+  font-size: 1.01rem;
+  color: var(--lt-text-primary);
+  font-weight: 800;
+}
+
+.system-summary-line {
+  margin: 0.25rem 0 0.95rem;
+  font-size: 0.84rem;
+  color: var(--lt-text-secondary);
+}
+
+.system-section-header {
+  margin: 0.8rem 0 0.55rem;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: var(--lt-text-primary);
+}
+
+.system-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.system-service-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.system-service-card {
+  border: 1px solid var(--sys-line);
+  border-radius: var(--lt-radius-card);
+  background: var(--sys-paper);
+  padding: 1rem 1.1rem;
+  min-width: 230px;
+  flex: 1 1 220px;
+  max-width: 290px;
+  border-left: 6px solid var(--lumo-primary-color);
+  transition: border-left-color 0.15s ease;
+  width: 100%;
+}
+
+.system-service-card-content {
+  padding: 0.9rem;
+}
+
+.system-sbom-panel {
+  min-height: 0;
+}
+
+@media (width <= 900px) {
+  .system-hero-banner {
+      grid-template-columns: 1fr;
+      align-items: flex-start;
+    }
+  .system-hero-rail {
+      margin-left: 0;
+      align-items: flex-start;
+    }
+}
+
+/* system view: the scoped --sys-* tokens are redefined once here so every
+   rule that already consumes them (hero banner, info cards, service cards, persona chips,
+   refresh/db buttons) flips for free; only the remaining literal fills/borders below need
+   their own overrides. */
+html[theme~="dark"] .system-view {
+  
+  
+  --sys-charcoal: var(--lt-text-primary);
+  
+  
+}
+
+/* Stammdaten-Views */
+/* System-Tab */
+/* D.6a: Systemstatus bleibt innerhalb des Bereichs — kein horizontaler
+   Scrollbalken am <body>. Grids dürfen nicht über den Container wachsen,
+   lange Werte (Container-ID, URL) brechen um statt zu überlaufen. */
+.system-view {
+  --sys-blue: var(--lt-system-view-sys-blue, #0057b8);
+  --sys-blue-soft: var(--lt-system-view-sys-blue-soft, #e8f1ff);
+  --sys-red: var(--lt-system-view-sys-red, #d12d2d);
+  --sys-yellow: var(--lt-system-view-sys-yellow, #f2c94c);
+  --sys-charcoal: #101820;
+  --sys-line: var(--lt-system-view-sys-line, rgb(16 24 32 / 12%));
+  --sys-paper: var(--lt-system-view-sys-paper, #fffdfa);
+
+  /* the flex/height link this view's own chain was missing: MainLayout's routed content
+     area already resolves to the viewport height, so a definite height:100% here (plus display:
+     flex so a child can carry flex: 1 1 auto, see .system-journal-panel) is enough for the
+     Journal tab to fill the remaining viewport without a calc(100vh - Npx) constant. Every other
+     tab keeps its natural content height; nothing here forces them to stretch. */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--lt-system-view-background, #f7f9fc);
+  border: 1px solid var(--sys-line);
+  border-radius: 0;
+  padding: 1rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.system-view vaadin-tabs {
+  max-width: 100%;
+}
+
+.system-meta-grid,
+.system-service-grid {
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.system-service-card,
+.system-info-card {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.system-info-card span:last-child {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* the global panel's own flex/height link: SystemView.system-view resolves height:100%
+   further up the chain, this is the child that actually grows into it. Header and toolbar above
+   keep their natural height (no flex properties of their own); .sp-grid-wrapper below is the
+   flex: 1 1 auto / min-height: 0 child that absorbs the rest, exactly the pattern
+   .b2b-editor-scroll-area already uses for a dialog's own scroll area. Scoped to this class (not
+   a blanket .sp-grid-wrapper rule) because that wrapper is shared with many non-full-height views,
+   including the per-invoice journal panel right below. */
+.system-journal-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.system-journal-panel .sp-grid-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+/* ==========================================================================
+   View: Reference data
+   ========================================================================== */
+
+/* Lumo's stock disabled-button colour (--lumo-disabled-text-color, a 26%/32% shade/tint wash)
+   reads as barely-there next to a small chevron glyph: ~1.6:1 against a white dialog in light
+   mode. Scoping the token down to the muted-but-readable secondary text colour keeps the
+   disabled arrow legibly "there but inactive" instead of effectively invisible, in both themes
+   (light ~3.5:1, dark ~5.2:1 against the dialog surface) while leaving the enabled arrow's own
+   colour — already >4.5:1 in both themes — untouched. */
+.trip-expense-reorder {
+  --lumo-disabled-text-color: color-mix(in srgb, var(--lt-text-secondary) 75%, transparent);
+}
+
+@media (width <= 640px) {
+  .reference-data-subtabs {
+      display: none;
+    }
+}
+

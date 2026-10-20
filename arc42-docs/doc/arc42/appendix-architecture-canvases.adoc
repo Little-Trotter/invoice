@@ -1,0 +1,9 @@
+Direct HTML access to both architecture canvases.
+
+== Architecture Inception Canvas
+
+*Open HTML:* link:architecture-inception-canvas.html[Architecture Inception Canvas]
+
+== Architecture Communication Canvas
+
+*Open HTML:* link:architecture-communication-canvas.html[Architecture Communication Canvas]

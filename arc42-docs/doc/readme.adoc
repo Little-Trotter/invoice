@@ -1,0 +1,201 @@
+= Little Trotter X-Invoice — Übersicht & Schnellstart
+:author: Projektinitiator (https://github.com/eifel42[eifel42])
+:revnumber: 0.9.59-SNAPSHOT
+:revdate: {docdate}
+:description: Projektübersicht, 30-Sekunden-Überblick, Architektur und lokaler Schnellstart mit Docker Compose
+:doctype: book
+:toclevels: 3
+:sectanchors:
+:sectlinks:
+:sectnums:
+:sectnumlevels: 4
+:toc: left
+:docinfodir: docinfo
+:stylesdir: css
+:stylesheet: arc42-docs.css
+:linkcss:
+:experimental:
+:docinfo: shared-head
+:icons!:
+:source-highlighter!:
+:imagesdir: images
+:title-logo-image: image:little-trotter-horse.png[Little Trotter Logo: stilisiertes Pferd,300,align="center"]
+:lang: de
+:toc-title: Inhaltsverzeichnis
+:chapter-label: Kapitel
+:section-refsig: Abschnitt
+:figure-caption: Abbildung
+:table-caption: Tabelle
+:example-caption: Beispiel
+:note-caption: Hinweis
+:project-name: Little Trotter X-Invoice
+:project-version: 0.9.59-SNAPSHOT
+
+[abstract]
+Little Trotter ist die modulare Open-Source-Lösung für E-Rechnungen (EN 16931, ZUGFeRD / Factur-X, XRechnung) und Angebote in Handwerksbetrieben und mittelständischen Unternehmen. Die Software verursacht weder wiederkehrende Lizenz- noch transaktionsabhängige Netzwerkgebühren und schützt vor proprietärem Vendor-Lock-in. Durch ergonomische Tastaturführung, automatische Vorbelegung und integrierte KoSIT- und PDF/A-3-Validierung werden Rechnungen normkonform und fehlerfrei erstellt. Die Architektur ist für kosteneffiziente Standard-Bürorechner ausgelegt und arbeitet mit vollständiger lokaler Datenhoheit (*Local-First*).
+
+[NOTE]
+====
+.Hinweise zu Transparenz, Testdaten und Compliance
+
+Transparenz und KI-Assistenz::
+Diese Dokumentation und ihre Architekturartefakte wurden mithilfe fortschrittlicher KI-Assistenzsysteme erstellt, strukturiert und redaktionell gepflegt.
+
+Synthetische Testdaten (`datagen`)::
+Sämtliche in dieser Dokumentation und in Bildschirmabbildungen genannten Firmen, Personen, Adressen und Beträge beruhen auf rein zufällig erzeugten synthetischen Testdaten (`datagen`) und stellen keine realen Unternehmen oder Personen dar.
+
+Rechtliche und steuerliche Einordnung::
+Little Trotter X-Invoice ist eine technische Softwarelösung zur strukturierten Erstellung und Validierung elektronischer Rechnungsdaten. Die Anwendung erbringt keine Steuerberatung und keine Rechtsberatung. Für die individuelle steuerliche Beurteilung von Geschäftsvorfällen, die ordnungsmäßige Buchführung sowie die Einhaltung kaufmännischer Aufbewahrungspflichten (z. B. GoBD) sind die Betriebe in Abstimmung mit ihrer Steuerberatung eigenverantwortlich zuständig.
+
+Betriebssicherheit und Entwicklungsstand::
+Little Trotter ist eine Open-Source-Lösung im Beta-Entwicklungsstand. Der lokale Entwicklungsstack (`make dev`) dient der technischen Erprobung und Evaluation; für den Produktivbetrieb ist eine gehärtete Infrastruktur mit professioneller Administration erforderlich.
+
+Rechts- und Normterminologie::
+Feststehende Begriffe aus dem Umsatzsteuergesetz (z. B. „Leistungsempfänger“) und der E-Rechnungsnorm EN 16931 (z. B. „Käufer“, „Verkäufer“) werden aus Gründen der formalen Rechtssicherheit und technischen Konformität unverändert verwendet.
+====
+
+== 30-Sekunden-Überblick: Der Belegablauf
+
+[cols="1,3", options="header"]
+|===
+|Kaufmännische Aktion |Verarbeitung im System
+
+|*Angebot schreiben*
+|Formelle Angebotserstellung, Strukturierung des Leistungsumfangs und 1-Klick-Übernahme freigegebener Angebote direkt in Rechnungsentwürfe.
+
+|*Rechnung erfassen*
+|Automatische Anwendung steuerlicher Regeln (Inland, EU-Steuerschuldumkehr / Reverse Charge), Berechnung von Reisekosten und Tagespauschalen sowie formale Vorprüfung vor dem Abschluss.
+
+|*Fertigstellen und Festschreiben*
+|Vergibt die Rechnungsnummer, sperrt den Beleg gegen nachträgliche Änderungen, generiert PDF/A-3 mit eingebetteter XRechnung/Factur-X-XML, validiert über den amtlichen KoSIT-Prüfer und versiegelt das Dokument mit einer Prüfsumme.
+
+|*Belege anheften*
+|Hotelrechnungen, Tickets oder Lieferscheine werden im Belegpool auf Duplikate (SHA-256) geprüft und unter Einhaltung eines festen Größenbudgets in den PDF-Anhang und den XML-Container eingebettet.
+
+|*Korrigieren (Storno)*
+|Erzeugt einen normgerechten Stornobeleg (Rechnungstyp 384) neben dem Originalbeleg mit Vorzeichenumkehr; keine Datensätze werden überschrieben oder gelöscht.
+
+|*Kaufmännischer Excel-Export*
+|Erstellt eine strukturierte Excel-Arbeitsmappe je Rechnung oder Abrechnungszeitraum mit typisierten Zellen, dynamischen Kontrollformeln für interne Summenprüfungen und Journalblatt.
+|===
+
+== Kaufmännische und technische Leitlinien
+
+=== Normkonformität durch Architektur
+* *Standards für den elektronischen Geschäftsverkehr*: Vollständige Unterstützung von Factur-X / ZUGFeRD 2.x und XRechnung 3.0.x gemäß europäischer Norm EN 16931.
+* *Integrierte Validierungsstufen*: Prüfung gegen das amtliche KoSIT-Schematron-Regelwerk und veraPDF-Konformitätsläufe für PDF/A-3 vor der endgültigen Belegfestschreibung.
+* *Unveränderbarkeit und Nachvollziehbarkeit*: Append-only Protokollierung im Datenbank-Audit-Journal über zustandsbasierte Sperren und kryptografische Prüfsummen.
+
+=== Praxisnahe Anforderungen für Handwerk und B2B
+* *Empfängerspezifische B2B-Profile*: Hinterlegung kundenspezifischer Pflichtangaben wie Leitweg-ID (`BT-10`), Bestellnummer (`BT-13`) oder Projektnummer (`BT-11`).
+* *Kunden-Artikelnummern*: Abbildung von kaufmännischen Artikelreferenzen der Kundschaft auf interne Artikelkataloge.
+* *Internationale Steuerkennungen*: Unterstützung mehrerer USt-IdNr.-Registrierungen des ausstellenden Betriebs (z. B. DE und LU) für grenzüberschreitende Einsätze im europäischen Binnenmarkt.
+* *Hinweise für Privathaushalte (Handwerk)*: Automatisierte Aufbewahrungs- und Steuerhinweise (zweijährige Aufbewahrungspflicht bei Arbeiten an Gebäuden/Grundstücken sowie Ausweisung von Arbeits-, Maschinen- und Fahrtkosten) bei Rechnungen an Privatpersonen (B2C).
+
+=== Wirtschaftlichkeit und digitale Souveränität
+* *Keine Lizenz- oder Transaktionskosten*: Open-Source-Modell ohne wiederkehrende Lizenzgebühren pro Arbeitsplatz oder Gebühren je versandter Rechnung.
+* *Geringe Hardware-Anforderungen*: Minimaler Ressourcenbedarf für den energieeffizienten Dauerbetrieb oder zeitgesteuerten Nacht-Shutdown auf Standard-Hardware (Mini-PC).
+* *Vollständige Datenhoheit (Local-First)*: Lokale Speicherung aller Belege, Dokumente und Datenbankeinträge. Kein Datentransfer an externe Cloud-Anbieter ohne expliziten Belegversand.
+
+== Systemarchitektur im Überblick
+
+Die Software basiert auf einer hexagonalen Architektur mit Domain-Driven Design (DDD) und strikter Trennung von Fachdomäne und Infrastruktur über schmale Rollen-Ports:
+
+* *Webanwendung (`kotlin-invoice`)*: Backend auf Basis von Kotlin 2.x und Quarkus 3.x mit ergonomischer, tastaturfreundlicher Benutzeroberfläche in Vaadin Flow.
+* *Dokumenten-Engine (`kotlin-xpdf`)*: Entkoppelte Generierung von DIN 5008 PDF/A-3 Dokumenten mit Typst, Mustang (ZUGFeRD/Factur-X) und Apache PDFBox.
+* *Angebotsmodul (`kotlin-quote`)*: Eigenständiges SCS für Angebote mit UBL Quotation XML und Übernahme in Rechnungen.
+* *E-Mail-Dienst (`kotlin-email`)*: Entkoppeltes SCS für gesicherten B2B-Rechnungsversand (SMTP/TLS, Ed25519-Signaturpakete) über NATS JetStream.
+* *Infrastrukturdienste*: PostgreSQL (transaktionaler Primärspeicher), Valkey (In-Memory-Cache), RustFS (S3-kompatibler Objektspeicher) und NATS JetStream (asynchroner Event- und Job-Backbone).
+
+=== Technologieentscheidungen: Kotlin, Vaadin, Typst, geringer Ressourcenbedarf
+
+* *Kotlin und Vaadin Flow*: Die Oberfläche wird serverseitig im selben Artefakt wie das Backend ausgeliefert; ein separater Single-Page-Client und eine eigene REST-Schicht für die Oberfläche entfallen.
+* *Quarkus, Jakarta EE, Hibernate*: Standard-JVM-Stack; Betrieb im eigenen Haus oder in einer vorhandenen Unternehmensinfrastruktur.
+* *Typst (Rust) für PDF*: ersetzt eine JVM-Report-Engine wie JasperReports (ADR-030); deterministische PDF/A-3-Ausgabe im DIN-5008-Layout.
+* *Geringer Ressourcenbedarf*: Der Stack läuft auf sparsamer Hardware oder einer kleinen Server-Instanz und lässt sich nachts abschalten.
+
+== Schnellstart mit Docker Compose
+
+Für die lokale Erprobung und Entwicklung werden Docker (Compose v2) und `make` benötigt:
+
+Hinweis: Der Schnellstart dient nur der Erprobung. Für den regulären Betrieb richtet ein IT-Fachbetrieb oder die eigene IT-Abteilung einen Server ein (siehe Kapitel „Deployment View“ der Architekturdokumentation).
+
+[source,bash]
+----
+# Erster Lauf: erzeugt sichere Zufallszugangsdaten in .env, baut die Images, startet alle
+# 8 Container lokal und führt die Datenbank-Migrationen aus. Spätere Läufe starten nur den Stack.
+make dev
+----
+
+Nach erfolgreichem Start ist die Anwendung unter **http://localhost:8080** erreichbar. Mit `make dev-down` wird der Stack gestoppt; die Daten im PostgreSQL-Volume und Objektspeicher bleiben dabei vollständig erhalten.
+
+== Qualitätssicherung und Prüfgates
+
+[cols="1,2", options="header"]
+|===
+|Qualitätsstufe |Garantierte Eigenschaft
+
+|*Vierstufige Testpyramide (Stand heute: > 16.000 automatisierte Tests in 2.250+ Suiten)*
+a|Lückenlose Testabdeckung auf allen Architekturebenen:
+
+* *Unit-Tests*: 1.859 Testklassen mit isolierten Mocks (`*Test.kt`), keine Netzwerk- oder Datenbankabhängigkeit (> 14.000 Einzelprüfungen).
+* *Integrationstests (IT)*: 299 Testklassen (`*IT.kt`) gegen echte Container (PostgreSQL, NATS JetStream, RustFS S3) via Testcontainers (> 2.000 Einzelprüfungen).
+* *End-to-End-Pipeline (E2E)*: 99 modulgreifende Integrationsläufe (`kotlin-e2e-tests`) über die reale Verarbeitungskette.
+* *E2E-Browsertests*: Teil der Administrations- und Betriebswerkzeuge (`little-trotter-admin-tools/e2e-test-playwright`, Playwright mit 70+ Test-Suiten und > 250 browserbasierten Interaktionsprüfungen auf dem laufenden Stack; Veröffentlichung frühestens Q4/2027).
+
+|*90/90 Abdeckungs-Gate*
+|Mindestens 90 % Zeilen- und 90 % Zweigabdeckung im aggregierten Gesamtbericht (`make test`); keine Ausnahmen oder Testunterdrückungen.
+
+|*Statische Code-Analyse*
+|ktlint, detekt (Ratchet-Prinzip ohne Baseline-Ausweitung), sqlfluff für DDL-Migrationen und Qodana-Inspektionen.
+
+|*Lieferkettensicherheit*
+|Lückenlose Absicherung entlang des Entwicklungsprozesses: Vor jedem Commit verhindert Gitleaks das Einchecken von Geheimnissen (Pre-Commit-Gate). Im Build analysiert OWASP Dependency-Check Abhängigkeiten auf bekannte Schwachstellen (CVEs) und CycloneDX generiert modulare sowie aggregierte Software-Stücklisten (SBOM). Beim Packaging prüfen Trivy-Containerscans Basis-Images und fertige Container vor der Freigabe.
+
+|*Normkonforme Validierung*
+|Amtliche KoSIT-Prüfszenarien für XRechnung und veraPDF-Konformitätsläufe für PDF/A-3.
+|===
+
+== Roadmap und Philosophie
+
+Little Trotter orientiert sich am genossenschaftlichen Leitgedanken von **Friedrich Wilhelm Raiffeisen**:
+
+[quote]
+____
+„Was dem Einzelnen nicht möglich ist, das vermögen viele.“
+____
+
+Kleine und mittlere Unternehmen bis hin zum größeren Mittelstand stehen vor denselben gesetzlichen und technischen Herausforderungen bei der elektronischen Fakturierung. Offene, gemeinschaftlich entwickelte Software sichert digitale Unabhängigkeit gegenüber kostenintensiven Cloud-Monopolen.
+
+=== Namensursprung: ZUGFeRD, Zugpferd und Little Trotter
+
+Der Projektname und die Versionierung knüpfen unmittelbar an die Entstehung und Metaphorik des E-Rechnungsstandards an:
+
+* *ZUGFeRD* steht als Akronym für _Zentraler User Guide des Forums elektronische Rechnung Deutschland_. Phonetisch und symbolisch ist der Name an das *Zugpferd* angelehnt – die verlässliche Produktivkraft, die schwere kaufmännische Lasten bewegt.
+* *Little Trotter* (kleiner Traber) greift dieses Bild auf: Der kompakte Belegprozessor für mittelständische Unternehmen und Handwerksbetriebe. Die Software verursacht keine laufenden Lizenz- oder Transaktionskosten, schützt vor Vendor-Lock-in und entlastet Mitarbeitende in der Verwaltung spürbar. E-Rechnungen werden mit dem KoSIT-Check in wenigen Sekunden geprüft.
+
+=== Bedeutung der Release-Namen
+
+Die Hauptversionen tragen Namen bewährter Arbeits-, Zug- und Botenpferderassen. Sie versinnbildlichen den kaufmännischen Schwerpunkt und Charakter des jeweiligen Entwicklungsabschnitts:
+
+* *Haflinger (Rechnungs- und Belegkern)* +
+_Namenspate_: Ein trittsicheres, robustes und genügsames Arbeitspferd des Alpenraums. +
+_Kaufmännischer Nutzen_: Rechnungen nach EN 16931, ZUGFeRD 2.x und XRechnung werden vor dem Versand geprüft, damit Rechnungsempfangende sie nicht aus formalen Gründen zurückweisen. Dazu kommen Duplikaterkennung im Belegpool (SHA-256), Storno als Rechnungskorrektur (Typ 384) und ein Änderungsprotokoll in der Datenbank.
+
+* *Andalusier (B2B-Belegversand)* +
+_Namenspate_: Die traditionsreiche iberische Rasse (_Pura Raza Española_), historisch für zuverlässige Botendienste und wendigen Transport geschätzt. +
+_Kaufmännischer Nutzen_: Cashflow-Beschleunigung. Unmittelbare, manipulationssicher signierte Dokumentenzustellung (Ed25519-Signaturen, SMTP/TLS) über entkoppelte NATS-JetStream-Warteschlangen; senkt die Außenstandsdauer (DSO) ohne Gebühren für externe Rechnungsnetzwerke.
+
+* *Schwarzwälder Fuchs (Angebote)* +
+_Namenspate_: Das Schwarzwälder Kaltblut, ein drahtiges, zugstarkes Arbeitspferd für die Steillagen der Land- und Forstwirtschaft. Die Namensgebung ist zugleich eine Hommage an familiäre Wurzeln in Landwirtschaft, Waldarbeit und Schiefertransport. +
+_Kaufmännischer Nutzen_: Prozesseffizienz im Vertrieb. Lückenlose Vorstufen-Integration vom Angebot (`kotlin-quote`, UBL Quotation XML) bis zur Rechnungsstellung; verhindert Medienbrüche und reduziert Erfassungsaufwände durch 1-Klick-Übernahme.
+
+== Glossar und Begriffsbestimmungen
+
+Begriffsdefinitionen zu E-Rechnungsstandards (EN 16931, ZUGFeRD, XRechnung), rechtlichen Rahmenbedingungen (GoBD, UStG) und Architekturkonzepten sind im zentralen link:glossar.html[Fachglossar & Recht] sowie im link:architecture-glossary.html[Architecture Glossary] dokumentiert.
+
+== Lizenz und Urheberschaft
+
+* *Software*: link:LICENSE[Apache License 2.0].
+* *Konzept & Dokumentation*: Creative Commons link:https://creativecommons.org/licenses/by/4.0/[CC BY 4.0] mit Namensnennung (*Little Trotter*).
+* *Projektinitiator*: Stefan Zils (Eifel42).

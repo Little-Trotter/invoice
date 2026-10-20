@@ -1,0 +1,13 @@
+package specimen
+
+// Source text the rules accept: classes, data-driven custom properties, no colour literals.
+fun clean(bar: Div, card: Div) {
+    card.addClassName("lt-kpi-card")
+    bar.style.set("--lt-bar-h", "42%")
+    bar.element.style.set(
+        "--lt-bar-w",
+        "10%",
+    )
+    // Anchors and issue references such as Foo#bar or #1 are not colours.
+    val rank = "#${1}"
+}
